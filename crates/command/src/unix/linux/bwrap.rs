@@ -67,11 +67,16 @@ const SYSTEM_FILES_RO: &[&str] = &[
     "/sys/class/hwmon",
     "/sys/class/thermal",
     "/sys/class/drm",
+<<<<<<< HEAD
     // NVIDIA kernel module state (needed for driver init in user ns)
     "/sys/module/nvidia",
     "/sys/module/nvidia_drm",
     "/sys/module/nvidia_modeset",
     "/sys/module/nvidia_uvm",
+    // NixOS
+    "/nix/store",
+    "/run/opengl-driver",
+    "/run/opengl-driver-32",
 ];
 
 static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| {
@@ -89,6 +94,7 @@ static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| 
         "XAUTHORITY",
         "WAYLAND_DISPLAY",
         "PULSE_SERVER",
+        "LD_LIBRARY_PATH",
     ]
     .iter()
     .map(OsStr::new)
