@@ -1390,6 +1390,7 @@ impl Render for InstanceSettingsSubpage {
             .child(
                 Button::new("shortcut")
                     .label(t::instance::create_shortcut())
+                    .icon(PandoraIcon::ExternalLink)
                     .overflow_x_hidden()
                     .success()
                     .on_click({
@@ -1401,9 +1402,9 @@ impl Render for InstanceSettingsSubpage {
                                 .as_ref()
                                 .and_then(directories::UserDirs::desktop_dir)
                                 .unwrap_or(Path::new("."));
-                            let instance = instance.read(cx);
-                            let id = instance.id;
-                            let name = instance.name.clone();
+                    let instance = instance.read(cx);
+                    let id = instance.id;
+                    let name = instance.name.clone();
 
                             #[cfg(target_os = "linux")]
                             let suggested_name = format!("{name}.desktop");
@@ -1458,7 +1459,7 @@ impl Render for InstanceSettingsSubpage {
                         }
                     }),
             )
-            .child(Button::new("delete").label(t::instance::delete()).overflow_x_hidden().danger().on_click({
+            .child(Button::new("delete").label(t::instance::delete()).icon(PandoraIcon::Trash2).overflow_x_hidden().danger().on_click({
                 let instance = self.instance.clone();
                 let backend_handle = self.backend_handle.clone();
                 move |click: &ClickEvent, window, cx| {
