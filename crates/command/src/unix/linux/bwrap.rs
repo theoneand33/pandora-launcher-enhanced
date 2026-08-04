@@ -67,7 +67,6 @@ const SYSTEM_FILES_RO: &[&str] = &[
     "/sys/class/hwmon",
     "/sys/class/thermal",
     "/sys/class/drm",
-<<<<<<< HEAD
     // NVIDIA kernel module state (needed for driver init in user ns)
     "/sys/module/nvidia",
     "/sys/module/nvidia_drm",
