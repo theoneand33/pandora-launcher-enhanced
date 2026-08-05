@@ -192,7 +192,6 @@ impl Render for SyncingPage {
             .p_3()
             .gap_3()
             .child(t::instance::sync::description())
-<<<<<<< HEAD
             .child(
                 Button::new("open")
                     .info()
