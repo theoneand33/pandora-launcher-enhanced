@@ -13,7 +13,9 @@ version = "5.3.1"
 [profile.dev]
 opt-level = 0
 debug = 1
-# 256 = max parallelism (16c machine, ~17m user -> ~2m wall). Uses more RAM; use 64 on 4c laptops.
+# 256 = max parallelism. On 16c 32 GiB this is ~17m user -> ~2m wall.
+# Uses ~2-3x more RAM than the default 16. On 4c or 8 GiB use 64.
+# Override without editing: CARGO_BUILD_CODEGEN_UNITS=64 cargo build
 codegen-units = 256
 incremental = true
 lto = false

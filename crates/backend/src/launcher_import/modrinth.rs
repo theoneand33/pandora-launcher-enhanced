@@ -136,6 +136,8 @@ pub fn import_instances_from_modrinth(
                         if image.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
                             _ = crate::write_safe(&to_import.pandora_path.join("icon.png"), &png_bytes);
                         }
+                    } else {
+                        log::warn!("modrinth icon format {:?} not enabled, icon dropped", format);
                     }
                 }
             }

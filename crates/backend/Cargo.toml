@@ -63,10 +63,12 @@ command.workspace = true
 junction.workspace = true
 mslnk.workspace = true
 windows.workspace = true
-# Bundled sqlite only on Windows (no system sqlite guaranteed). Linux/macOS use system sqlite for faster builds.
+# Bundled sqlite only on Windows (no system sqlite guaranteed). Linux/macOS use system sqlite.
+# This cfg is exclusive with the next one, so bundled does not leak to Linux builds.
 rusqlite = { workspace = true, features = ["bundled"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
+# System sqlite via pkg-config (requires libsqlite3-dev). No bundled feature.
 rusqlite.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
