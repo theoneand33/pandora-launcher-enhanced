@@ -15,7 +15,7 @@ A fork of [Pandora Launcher](https://github.com/Moulberry/PandoraLauncher) with 
 ## Features unique to this fork
 - Custom skins for offline accounts via a local skin server using [authlib-injector](https://github.com/yushijinhun/authlib-injector).
 - Extended instance export options, allowing for inclusion of shaders, screenshots, and backups.
-- Improve UX.
+- Improved UX.
 
 ## FAQ
 
