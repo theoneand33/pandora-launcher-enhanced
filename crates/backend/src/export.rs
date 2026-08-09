@@ -468,11 +468,14 @@ fn should_skip(rel: &SafePath, rel_to_dot_minecraft: Option<&SafePath>, options:
 
     match name {
         "logs" | "crash-reports" => !options.include_logs,
-        ".cache" | "downloads" => !options.include_cache,
+        ".cache" | "downloads" | ".fabric" => !options.include_cache,
         "saves" => !options.include_saves,
         "mods" => !options.include_mods,
         "resourcepacks" => !options.include_resourcepacks,
+        "shaderpacks" => !options.include_shaders,
         "config" => !options.include_configs,
+        "screenshots" => !options.include_screenshots,
+        "backups" => !options.include_backups,
         _ => false,
     }
 }
@@ -503,7 +506,7 @@ fn ends_with_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
         return false;
     }
     let start = haystack.len() - needle.len();
-    haystack[start..].eq_ignore_ascii_case(needle)
+    haystack.as_bytes()[start..].eq_ignore_ascii_case(needle.as_bytes())
 }
 
 async fn resolve_modrinth_files(
@@ -521,6 +524,10 @@ async fn resolve_modrinth_files(
             continue;
         }
         if is_resourcepack_file(&file.rel) && options.include_resourcepacks {
+            candidates.push(file);
+            continue;
+        }
+        if is_shaderpack_file(&file.rel) && options.include_shaders {
             candidates.push(file);
         }
     }
@@ -649,6 +656,10 @@ async fn resolve_curseforge_files(
             continue;
         }
         if is_resourcepack_file(&file.rel) && options.include_resourcepacks {
+            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled, false));
+            continue;
+        }
+        if is_shaderpack_file(&file.rel) && options.include_shaders {
             candidates.push((file.rel.clone(), file.abs.clone(), file.enabled, false));
         }
     }
@@ -1000,6 +1011,18 @@ fn is_mod_file(path: &SafePath) -> bool {
 
 fn is_resourcepack_file(path: &SafePath) -> bool {
     if !path.starts_with("resourcepacks") {
+        return false;
+    }
+
+    let Some(filename) = path.file_name() else {
+        return false;
+    };
+
+    filename.ends_with(".zip") || filename.ends_with(".zip.disabled")
+}
+
+fn is_shaderpack_file(path: &SafePath) -> bool {
+    if !path.starts_with("shaderpacks") {
         return false;
     }
 

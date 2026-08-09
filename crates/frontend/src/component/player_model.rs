@@ -220,6 +220,7 @@ impl Element for PlayerModel {
                         size: Size::new(px(element_width), px(element_height)),
                     },
                     Default::default(),
+                    Default::default(),
                     rendered.image.clone(),
                     0,
                     false,
