@@ -1,11 +1,27 @@
 name: build
 on:
   pull_request:
+    paths:
+      - ".github/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+      - "wrapper/**"
+      - "scripts/**"
+      - "**/*.rs"
   push:
     branches:
       - "**"
     tags-ignore:
       - "**"
+    paths:
+      - ".github/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+      - "wrapper/**"
+      - "scripts/**"
+      - "**/*.rs"
 
 jobs:
   build:
