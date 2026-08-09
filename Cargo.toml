@@ -13,16 +13,12 @@ version = "3.0.8"
 [profile.dev]
 opt-level = 0
 debug = 1
-# 256 = max parallelism for codegen; default 16 is slower on 16-core machines
+# 256 = max parallelism (16c machine, ~17m user -> ~2m wall). Uses more RAM; use 64 on 4c laptops.
 codegen-units = 256
 incremental = true
 lto = false
-# unpacked = faster link on Linux, keeps debuginfo separate
+# unpacked = faster link on Linux/macOS (Windows ignores)
 split-debuginfo = "unpacked"
-
-[profile.dev.build-override]
-opt-level = 0
-codegen-units = 256
 
 [profile.dev.package."*"]
 # Previously opt-level = 3 forced every dep to optimize fully in dev mode,
@@ -38,6 +34,7 @@ incremental = true
 [profile.release]
 debug = "limited"
 lto = "thin"
+# 16 codegen units in main crate for faster link; deps use 1 for ~1-2% runtime gain (not zero-cost)
 codegen-units = 16
 incremental = false
 # Enable for more accurate flamegraphs
@@ -78,6 +75,9 @@ hex = { version = "0.4.3", features = ["serde"] }
 # Only png/jpeg are hot paths (all skin/icon loads are ImageFormat::Png). Default pulls
 # avif/rav1e (C+rust, ~90 crates), exr, tiff. Keep png+jpeg+bmp+gif+webp (cheap) and
 # drop heavy avif/exr/tiff/qoi/dds/hdr. Saves ~30-40% image compile time.
+# Breaking: avif/tiff/qoi icons will now error on load (guess_format succeeds but
+# load fails with Unsupported). Previously any format was re-encoded to PNG for
+# mod icons (modrinth.rs, mod_metadata.rs). Add "avif" etc. to features if needed.
 image = { version = "0.25.8", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp"] }
 indexmap = { version = "2.12.0", features = ["serde"] }
 lexical-sort = "0.3.1"
@@ -136,6 +136,9 @@ humantime = "2.3.0"
 minisign-verify = "0.2.4"
 tar = "0.4.44"
 runas = "1.2.0"
+# System sqlite on Linux/macOS for faster builds (requires libsqlite3-dev / pkg-config).
+# Windows uses bundled (see crates/backend/Cargo.toml). Install libsqlite3-dev locally
+# or set rusqlite features = ["bundled"] if system sqlite is missing.
 rusqlite = { version = "0.38.0", features = [] }
 fs_extra = "1.3.0"
 walkdir = "2.5.0"

@@ -64,7 +64,7 @@ junction.workspace = true
 mslnk.workspace = true
 windows.workspace = true
 # Bundled sqlite only on Windows (no system sqlite guaranteed). Linux/macOS use system sqlite for faster builds.
-rusqlite = { version = "0.38.0", features = ["bundled"] }
+rusqlite = { workspace = true, features = ["bundled"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 rusqlite.workspace = true

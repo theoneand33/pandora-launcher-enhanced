@@ -1118,6 +1118,8 @@ fn load_icon<R: rc_zip_sync::HasCursor>(icon_file: rc_zip_sync::EntryHandle<R>) 
 }
 
 fn load_icon_bytes(icon_bytes: &[u8]) -> Option<UniqueBytes> {
+    // image crate is trimmed to png/jpeg/bmp/gif/webp (see Cargo.toml). Avif/exr/tiff/qoi
+    // will fail here with Unsupported and the icon is dropped. Add those features if needed.
     let Ok(mut image) = image::load_from_memory(&icon_bytes) else {
         return None;
     };
