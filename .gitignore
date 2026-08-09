@@ -6,7 +6,7 @@ flamegraph.svg
 heaptrack*
 .DS_Store
 rustup-init.exe
-config.toml
+/config.toml
 build_windows.ps1
 minisign.pub
 .idea/
