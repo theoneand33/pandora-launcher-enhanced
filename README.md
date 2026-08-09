@@ -13,7 +13,7 @@ A fork of [Pandora Launcher](https://github.com/Moulberry/PandoraLauncher) with 
 - Unique approach to modpack management (https://youtu.be/cdRVqd7b2BQ)
 
 ## Features unique to this fork
-- Custom skins for offline accounts via a local skin server using [authlib-injector](https://github.com/yushijinhun/authlib-injector).
+- Offline/cracked Minecraft accounts with custom skin support via a local skin server using [authlib-injector](https://github.com/yushijinhun/authlib-injector).
 - Extended instance export options, allowing for inclusion of shaders, screenshots, and backups.
 - Improved UX.
 
