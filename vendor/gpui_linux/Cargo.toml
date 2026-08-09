@@ -133,24 +133,8 @@ path = "../http_client"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.image]
 version = "0.25.1"
-features = [
-    "bmp",
-    "dds",
-    "exr",
-    "ff",
-    "gif",
-    "hdr",
-    "ico",
-    "jpeg",
-    "png",
-    "pnm",
-    "qoi",
-    "rayon",
-    "tga",
-    "tiff",
-    "webp",
-]
 default-features = false
+features = ["png", "jpeg", "bmp", "gif", "webp"]
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.itertools]
 version = "0.14.0"

@@ -71,6 +71,12 @@ jobs:
         run: ./vendor.sh
         shell: bash
 
+      - name: Install system SQLite (Linux)
+        if: runner.os == 'Linux'
+        # System sqlite for faster builds (avoids cc compiling 200k LOC). pkg-config is preinstalled.
+        # macOS runners ship with sqlite, Windows uses bundled sqlite (see crates/backend/Cargo.toml).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+
       - name: Install mold linker
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
