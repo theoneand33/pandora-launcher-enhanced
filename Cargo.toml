@@ -6,7 +6,7 @@ default-members = ["crates/pandora_launcher"]
 
 [workspace.package]
 edition = "2024"
-version = "3.0.8"
+version = "5.3.1"
 
 # Fast dev builds: no LTO, many codegen units, incremental, no heavy opt.
 # Release keeps thin LTO but uses more codegen units in dependencies where profitable.
@@ -44,6 +44,10 @@ incremental = false
 opt-level = 3
 codegen-units = 1
 
+[patch.crates-io]
+zbus-lockstep = { path = "patches/zbus-lockstep" }
+zbus-lockstep-macros = { path = "patches/zbus-lockstep-macros" }
+
 [workspace.dependencies]
 auth = { path = "crates/auth" }
 backend = { path = "crates/backend" }
@@ -69,8 +73,8 @@ ftree = { path = "crates/ftree"}
 futures = "0.3.31"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component.git", rev = "2f7c7445d8c55e4af95c2a22695184ea8df35a32" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component.git", rev = "2f7c7445d8c55e4af95c2a22695184ea8df35a32" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component.git", rev = "bbf7650abae59e3a984d48bd120a6f9094fed1f2" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component.git", rev = "bbf7650abae59e3a984d48bd120a6f9094fed1f2" }
 hex = { version = "0.4.3", features = ["serde"] }
 # Only png/jpeg are hot paths (all skin/icon loads are ImageFormat::Png). Default pulls
 # avif/rav1e (C+rust, ~90 crates), exr, tiff. Keep png+jpeg+bmp+gif+webp (cheap) and
@@ -128,6 +132,7 @@ memchr = "2.7.6"
 toml = "0.9.11"
 clap = { version = "4.5.54", features = ["derive"] }
 open = "5.2.0"
+sys-locale = "0.3.2"
 native-dialog = "0.9.4"
 fern = { version = "0.7.1", features = ["colored"] }
 mslnk = "0.1.8"

@@ -1014,7 +1014,7 @@ impl GameOutputRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let InputEvent::PressEnter { secondary: false } = event else {
+        let InputEvent::PressEnter { secondary: false, shift: _ } = event else {
             return;
         };
 
