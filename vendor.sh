@@ -41,21 +41,25 @@ for cargo_path_str in targets:
     cargo_toml = pathlib.Path(cargo_path_str)
     if not cargo_toml.exists():
         continue
-    text = cargo_toml.read_text(newline="\n")
+    with open(cargo_toml, encoding="utf-8", newline="\n") as f:
+        text = f.read()
     new_text, n = re.subn(pattern, repl, text, flags=re.DOTALL)
     if new_text != text:
-        cargo_toml.write_text(new_text, newline="\n")
+        with open(cargo_toml, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new_text)
         # Update checksum so cargo does not error on vendored Cargo.toml mismatch.
         # Write/read with explicit newline="\n" so the hash covers the exact bytes on
         # disk on Windows too (Path default would emit \r\n but hash the \n content).
         checksum_name = cargo_toml.parent.name  # gpui, gpui_linux, etc.
         checksum_path = cargo_toml.parent / ".cargo-checksum.json"
         if checksum_path.exists():
-            data = json.loads(checksum_path.read_text())
+            with open(checksum_path) as f:
+                data = json.load(f)
             sha = hashlib.sha256(new_text.encode()).hexdigest()
             if data["files"].get("Cargo.toml") != sha:
                 data["files"]["Cargo.toml"] = sha
-                checksum_path.write_text(json.dumps(data, indent=2) + "\n", newline="\n")
+                with open(checksum_path, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(json.dumps(data, indent=2) + "\n")
                 print(f"patched {cargo_path_str} ({n} table(s))")
 
 PY
