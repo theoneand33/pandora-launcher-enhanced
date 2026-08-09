@@ -51,7 +51,6 @@ log.workspace = true
 minisign-verify.workspace = true
 tar.workspace = true
 runas.workspace = true
-rusqlite.workspace = true
 walkdir.workspace = true
 zip.workspace = true
 url.workspace = true
@@ -60,10 +59,19 @@ scopeguard.workspace = true
 hickory-resolver.workspace = true
 command.workspace = true
 
+# Windows-only deps: junction/mslnk/windows are only used under cfg(windows)
+# (see syncing.rs, shortcut.rs, update.rs). Keep them here to avoid building on Linux/macOS.
 [target.'cfg(target_os = "windows")'.dependencies]
 junction.workspace = true
 mslnk.workspace = true
 windows.workspace = true
+# Bundled sqlite only on Windows (no system sqlite guaranteed). Linux/macOS use system sqlite.
+# This cfg is exclusive with the next one, so bundled does not leak to Linux builds.
+rusqlite = { workspace = true, features = ["bundled"] }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+# System sqlite via pkg-config (requires libsqlite3-dev). No bundled feature.
+rusqlite.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libseccomp.workspace = true

@@ -125,6 +125,8 @@ pub fn import_instances_from_modrinth(
             let icon_path = Path::new(&icon_path);
 
             if let Ok(icon_bytes) = std::fs::read(icon_path) {
+                // guess_format succeeds for avif/tiff etc. but load will error with
+                // Unsupported when image is trimmed to png/jpeg/bmp/gif/webp - icon is dropped.
                 if let Ok(format) = image::guess_format(&icon_bytes) {
                     if format == ImageFormat::Png {
                         _ = crate::write_safe(&to_import.pandora_path.join("icon.png"), &icon_bytes);
@@ -134,6 +136,8 @@ pub fn import_instances_from_modrinth(
                         if image.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
                             _ = crate::write_safe(&to_import.pandora_path.join("icon.png"), &png_bytes);
                         }
+                    } else {
+                        log::warn!("modrinth icon format {:?} not enabled, icon dropped", format);
                     }
                 }
             }

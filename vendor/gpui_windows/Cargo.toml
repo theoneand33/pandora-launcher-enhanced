@@ -71,24 +71,8 @@ path = "../gpui_util"
 
 [target.'cfg(target_os = "windows")'.dependencies.image]
 version = "0.25.1"
-features = [
-    "bmp",
-    "dds",
-    "exr",
-    "ff",
-    "gif",
-    "hdr",
-    "ico",
-    "jpeg",
-    "png",
-    "pnm",
-    "qoi",
-    "rayon",
-    "tga",
-    "tiff",
-    "webp",
-]
 default-features = false
+features = ["png", "jpeg", "bmp", "gif", "webp"]
 
 [target.'cfg(target_os = "windows")'.dependencies.itertools]
 version = "0.14.0"

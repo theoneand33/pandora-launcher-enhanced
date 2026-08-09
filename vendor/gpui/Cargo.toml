@@ -334,24 +334,8 @@ path = "../http_client"
 
 [dependencies.image]
 version = "0.25.1"
-features = [
-    "bmp",
-    "dds",
-    "exr",
-    "ff",
-    "gif",
-    "hdr",
-    "ico",
-    "jpeg",
-    "png",
-    "pnm",
-    "qoi",
-    "rayon",
-    "tga",
-    "tiff",
-    "webp",
-]
 default-features = false
+features = ["png", "jpeg", "bmp", "gif", "webp"]
 
 [dependencies.inventory]
 version = "0.3.19"

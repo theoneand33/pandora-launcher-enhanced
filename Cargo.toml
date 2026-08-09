@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/backend", "crates/bridge", "crates/reqwest_client", "crates/frontend", "crates/pandora_launcher", "crates/nbt", "crates/schema", "crates/auth"]
+members = ["crates/backend", "crates/bridge", "crates/reqwest_client", "crates/frontend", "crates/pandora_launcher", "crates/nbt", "crates/schema", "crates/auth", "crates/command", "crates/t", "crates/ftree"]
 
 default-members = ["crates/pandora_launcher"]
 
@@ -8,15 +8,42 @@ default-members = ["crates/pandora_launcher"]
 edition = "2024"
 version = "5.3.1"
 
+# Fast dev builds: no LTO, many codegen units, incremental, no heavy opt.
+# Release keeps thin LTO but uses more codegen units in dependencies where profitable.
+[profile.dev]
+opt-level = 0
+debug = 1
+# 64 is safe for 4c/8 GiB. On 16c 32 GiB use 256 for max parallelism (~17m user -> ~2m wall, but 2-3x RAM).
+# Override without editing: cargo build --config profile.dev.codegen-units=256
+codegen-units = 64
+incremental = true
+lto = false
+# unpacked = faster link on Linux/macOS (Windows ignores)
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+# Previously opt-level = 3 forced every dep to optimize fully in dev mode,
+# which roughly doubles clean build time. Keep debug deps unoptimized.
+# If you need optimized deps locally, run `cargo build --profile dev-opt`.
+opt-level = 0
+
+[profile.dev-opt]
+inherits = "dev"
+opt-level = 2
+incremental = true
+
 [profile.release]
 debug = "limited"
 lto = "thin"
-codegen-units = 1
+# 16 codegen units in main crate for faster link; deps use 1 for ~1-2% runtime gain (not zero-cost)
+codegen-units = 16
+incremental = false
 # Enable for more accurate flamegraphs
 # debug = true
 
-[profile.dev.package."*"]
+[profile.release.package."*"]
 opt-level = 3
+codegen-units = 1
 
 [patch.crates-io]
 zbus-lockstep = { path = "patches/zbus-lockstep" }
@@ -50,7 +77,13 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["fo
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git", rev = "bbf7650abae59e3a984d48bd120a6f9094fed1f2" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component.git", rev = "bbf7650abae59e3a984d48bd120a6f9094fed1f2" }
 hex = { version = "0.4.3", features = ["serde"] }
-image = "0.25.8"
+# Only png/jpeg are hot paths (all skin/icon loads are ImageFormat::Png). Default pulls
+# avif/rav1e (C+rust, ~90 crates), exr, tiff. Keep png+jpeg+bmp+gif+webp (cheap) and
+# drop heavy avif/exr/tiff/qoi/dds/hdr. Saves ~30-40% image compile time.
+# Breaking: avif/tiff/qoi icons will now error on load (guess_format succeeds but
+# load fails with Unsupported). Previously any format was re-encoded to PNG for
+# mod icons (modrinth.rs, mod_metadata.rs). Add "avif" etc. to features if needed.
+image = { version = "0.25.8", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp"] }
 indexmap = { version = "2.12.0", features = ["serde"] }
 lexical-sort = "0.3.1"
 lru = "0.16.2"
@@ -109,7 +142,10 @@ humantime = "2.3.0"
 minisign-verify = "0.2.4"
 tar = "0.4.44"
 runas = "1.2.0"
-rusqlite = { version = "0.38.0", features = ["bundled"] }
+# System sqlite on Linux/macOS for faster builds (requires libsqlite3-dev / pkg-config).
+# Windows uses bundled (see crates/backend/Cargo.toml). Install libsqlite3-dev locally
+# or set rusqlite features = ["bundled"] if system sqlite is missing.
+rusqlite = { version = "0.38.0", features = [] }
 walkdir = "2.5.0"
 urlencoding = "2.1.3"
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_System_JobObjects", "Win32_System_Registry", "Win32_System_Console", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_StationsAndDesktops", "Wdk_System_SystemServices", "Win32_System_SystemServices", "Win32_System_SystemInformation", "Win32_System_WindowsProgramming", "Win32_Security", "Win32_Security_Isolation", "Win32_Security_Credentials", "Win32_Security_Authorization"] }
