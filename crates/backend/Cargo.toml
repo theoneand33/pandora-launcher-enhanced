@@ -59,6 +59,8 @@ scopeguard.workspace = true
 hickory-resolver.workspace = true
 command.workspace = true
 
+# Windows-only deps: junction/mslnk/windows are only used under cfg(windows)
+# (see syncing.rs, shortcut.rs, update.rs). Keep them here to avoid building on Linux/macOS.
 [target.'cfg(target_os = "windows")'.dependencies]
 junction.workspace = true
 mslnk.workspace = true
