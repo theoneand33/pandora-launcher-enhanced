@@ -142,7 +142,14 @@ pub struct ModrinthProjectVersion {
     pub files: Arc<[ModrinthFile]>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl PartialEq for ModrinthProjectVersion {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for ModrinthProjectVersion {}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ModrinthDependency {
     pub version_id: Option<Arc<str>>,
     pub project_id: Option<Arc<str>>,
@@ -270,7 +277,7 @@ pub enum ModrinthVersionStatus {
     Unknown,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ModrinthFile {
     pub hashes: ModrinthHashes,
     pub url: Arc<str>,
@@ -279,7 +286,7 @@ pub struct ModrinthFile {
     pub size: usize,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ModrinthHashes {
     pub sha1: Arc<str>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -599,7 +599,7 @@ impl ModrinthSearchPage {
                 let Some(hit) = self.hits.get(index) else {
                     if let Some(search_error) = self.search_error.clone() {
                         return div().pl_3().pt_3().child(ErrorAlert::new(
-                            t::instance::content::requesting_from_modrinth_error().into(),
+                            t::instance::content::requesting_from_error("Modrinth").into(),
                             search_error,
                         ));
                     } else {
@@ -839,7 +839,7 @@ impl ModrinthSearchPage {
                         v_flex()
                             .id(("open-project", index))
                             .h(px(104.0))
-                            .flex_grow()
+                            .flex_grow_1()
                             .gap_1()
                             .overflow_hidden()
                             .cursor_pointer()

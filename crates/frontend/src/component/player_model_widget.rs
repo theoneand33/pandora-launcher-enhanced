@@ -99,7 +99,9 @@ impl PlayerModelWidget {
     }
 
     fn on_yaw_changed(&mut self, _: Entity<SliderState>, event: &SliderEvent, cx: &mut Context<Self>) {
-        let SliderEvent::Change(change) = event;
+        let change = match event {
+            SliderEvent::Change(c) | SliderEvent::Release(c) => c,
+        };
         self.animating_yaw = false;
         self.player_model_state.update(cx, |state, cx| {
             state.yaw = change.start() as f64;
@@ -108,7 +110,9 @@ impl PlayerModelWidget {
     }
 
     fn on_pitch_changed(&mut self, _: Entity<SliderState>, event: &SliderEvent, cx: &mut Context<Self>) {
-        let SliderEvent::Change(change) = event;
+        let change = match event {
+            SliderEvent::Change(c) | SliderEvent::Release(c) => c,
+        };
         self.animating_pitch = false;
         self.player_model_state.update(cx, |state, cx| {
             state.pitch = change.start() as f64;
@@ -117,7 +121,9 @@ impl PlayerModelWidget {
     }
 
     fn on_animation_changed(&mut self, _: Entity<SliderState>, event: &SliderEvent, cx: &mut Context<Self>) {
-        let SliderEvent::Change(change) = event;
+        let change = match event {
+            SliderEvent::Change(c) | SliderEvent::Release(c) => c,
+        };
         self.animating_animation = false;
         self.player_model_state.update(cx, |state, cx| {
             state.animation = change.start() as f64;

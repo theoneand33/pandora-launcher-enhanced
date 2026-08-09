@@ -155,7 +155,14 @@ pub struct CurseforgeFile {
     pub dependencies: Arc<[CurseforgeFileDependency]>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+impl PartialEq for CurseforgeFile {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for CurseforgeFile {}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CurseforgeFileDependency {
     pub mod_id: u32,
@@ -164,7 +171,7 @@ pub struct CurseforgeFileDependency {
 
 pub const CURSEFORGE_RELATION_TYPE_REQUIRED_DEPENDENCY: u32 = 3;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CurseforgeFileHash {
     pub value: Arc<str>,

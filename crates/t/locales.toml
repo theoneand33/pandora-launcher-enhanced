@@ -785,6 +785,12 @@ ru = "Значок"
 [common.custom_icon]
 en = "Custom icon"
 ru = "Свой значок"
+[common.custom]
+en = "Custom"
+de = "Benutzerdefiniert"
+hu = "Egyedi"
+sv = "Anpassad"
+ru = "Свой"
 [common.apply_changes]
 en = "Apply Changes"
 de = "Änderungen übernehmen"
@@ -1724,6 +1730,12 @@ de = "Suche Shader..."
 hu = "Shaderek keresése..."
 sv = "Sök shaders..."
 ru = "Поиск шейдеров..."
+[instance.content.search.file]
+en = "Search files..."
+de = "Suche Dateien..."
+hu = "Fájlok keresése..."
+sv = "Sök filer..."
+ru = "Поиск файлов..."
 [instance.content.requesting_from_error]
 en = "Error requesting from ${service: &str}"
 de = "Fehler beim Abrufen von ${service: &str}"
@@ -2575,6 +2587,19 @@ de = "Passwort"
 hu = "Jelszó"
 sv = "Lösenord"
 ru = "Пароль"
+[settings.modification.title]
+en = "Modification"
+de = "Modifikation"
+hu = "Módosítás"
+sv = "Ändring"
+ru = "Модификация"
+[settings.modification.allow_modify_while_running]
+en = "Allow modifying while running"
+de = "Änderungen während des Betriebs erlauben"
+hu = "Módosítás engedélyezése futás közben"
+sv = "Tillåt ändring medan spelet körs"
+ru = "Разрешить изменения во время работы"
+
 [settings.proxy.launcher_only_note]
 en = "Note - Proxy settings only apply to the launcher, not the game itself"
 de = "Achtung - Proxyeinstellungen sind nur für Pandora, nicht für Minecraft"
@@ -2612,6 +2637,12 @@ de = "Lade ${username: &str}s Skin..."
 hu = "${username: &str} kinézeteinek betöltése..."
 sv = "Laddar ${username: &str}s skinn..."
 ru = "Загрузка скина ${username: &str}..."
+[skins.offline_note]
+en = "Offline — skins unavailable"
+de = "Offline — Skins nicht verfügbar"
+hu = "Offline — kinézetek nem elérhetők"
+sv = "Offline — skins ej tillgängliga"
+ru = "Автономный режим — скины недоступны"
 [skins.no_offline]
 en = "Skins cannot be applied to offline accounts"
 de = "Skins können nicht auf Offline-Konten angewant werden"

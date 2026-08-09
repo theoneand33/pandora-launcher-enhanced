@@ -148,7 +148,7 @@ impl SelectDelegate for VersionList {
         None
     }
 
-    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut Context<SelectState<Self>>) -> Task<()> {
+    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
         let lower_query = query.to_lowercase();
 
         self.matched_versions = self

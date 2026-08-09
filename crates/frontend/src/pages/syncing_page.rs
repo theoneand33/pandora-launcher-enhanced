@@ -127,7 +127,7 @@ impl SyncingPage {
                 base = base.child(
                     h_flex()
                         .gap_1()
-                        .flex_shrink()
+                        .flex_shrink_1()
                         .text_color(info)
                         .child(t::instance::sync::folders_count(synced_count, sync_state.total_count)),
                 );

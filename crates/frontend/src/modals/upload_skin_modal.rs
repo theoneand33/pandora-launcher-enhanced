@@ -63,7 +63,7 @@ impl UploadSkinModal {
                                 move |_, _, _| (),
                                 move |bounds, _, window, _| {
                                     let _ =
-                                        window.paint_image(bounds, gpui::Corners::default(), image.clone(), 0, false);
+                                        window.paint_image(bounds, bounds, gpui::Corners::default(), image.clone(), 0, false);
                                 },
                             )
                             .size(px(168.0))
