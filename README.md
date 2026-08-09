@@ -1,6 +1,6 @@
-# Pandora Launcher
+# Pandora Launcher (Enhanced)
 
-Work in progress
+A fork of [Pandora Launcher](https://github.com/Moulberry/PandoraLauncher) with additional features. Work in progress.
 
 ## Features
 - Instance management
@@ -11,6 +11,10 @@ Work in progress
 - Mod browser using Modrinth's API
 - Automatic redaction of sensitive information (i.e. access tokens) in logs
 - Unique approach to modpack management (https://youtu.be/cdRVqd7b2BQ)
+
+## Features unique to this fork
+- **Custom skins for offline accounts** via a local skin server. Skins are stored per account, served locally to the game, and exposed through a minimal Yggdrasil API using [authlib-injector](https://github.com/yushijinhun/authlib-injector), so offline accounts can have custom skins (including slim/classic variants) just like online accounts.
+- **Extended instance export options**, allowing for inclusion of shaders, screenshots, and backups (in addition to the existing saves, mods, resource packs, configs, logs, cache, and synced files).
 
 ## FAQ
 
