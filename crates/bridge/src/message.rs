@@ -227,6 +227,11 @@ pub enum MessageToBackend {
         content_id: InstanceContentID,
         modal_action: ModalAction,
     },
+    UpdateContents {
+        instance: InstanceID,
+        content_ids: Vec<InstanceContentID>,
+        modal_action: ModalAction,
+    },
     Sleep5s,
     ReadLog {
         path: Arc<Path>,
