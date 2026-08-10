@@ -7,10 +7,11 @@ use bridge::{
     handle::BackendHandle,
     install::{ContentDownload, ContentInstall, ContentInstallFile, InstallTarget},
     instance::{ContentFolder, InstanceContentSummary, InstanceID},
+    modal_action::ModalAction,
 };
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, IndexPath, Sizable, WindowExt,
+    ActiveTheme as _, Disableable, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
     h_flex,
     input::SelectAll,
@@ -53,6 +54,8 @@ pub struct InstanceContentSubpage {
     // surfaced under their own tab. `None` for the Mods tab.
     mods_content: Option<Entity<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
+    update_check_action: Option<ModalAction>,
+    updating_all: bool,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -287,6 +290,28 @@ impl InstanceContentSubpage {
         )
         .detach();
 
+        // Clear batch-updating flag when content reloads (updates finished).
+        {
+            let c = content.clone();
+            cx.observe(&c, |this: &mut Self, _, cx| {
+                if this.updating_all {
+                    this.updating_all = false;
+                    cx.notify();
+                }
+            })
+            .detach();
+        }
+        if let Some(m) = mods_content.as_ref() {
+            let m = m.clone();
+            cx.observe(&m, |this: &mut Self, _, cx| {
+                if this.updating_all {
+                    this.updating_all = false;
+                    cx.notify();
+                }
+            })
+            .detach();
+        }
+
         Self {
             content_type,
             instance: instance_id,
@@ -299,6 +324,8 @@ impl InstanceContentSubpage {
             content,
             mods_content,
             sort_dropdown,
+            update_check_action: None,
+            updating_all: false,
             _add_from_file_task: None,
         }
     }
@@ -330,13 +357,21 @@ impl InstanceContentSubpage {
 }
 
 impl Render for InstanceContentSubpage {
-    fn render(&mut self, _window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let theme = cx.theme();
 
         self.content_states.observe(self.content_type.content_folder());
         // Non-Mods tabs also surface modpack-bundled content, so make sure the mods folder loads.
         if self.mods_content.is_some() {
             self.content_states.observe(ContentFolder::Mods);
+        }
+
+        // `is_checking` tied to ModalAction completion so it resets on both success and
+        // error (backend_handler sets finished in both branches). Poll via
+        // request_animation_frame until finished.
+        let is_checking = self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
+        if is_checking {
+            window.request_animation_frame();
         }
 
         let combined = combined_content_of(&self.content, self.mods_content.as_ref(), cx);
@@ -355,19 +390,43 @@ impl Render for InstanceContentSubpage {
                     .success()
                     .compact()
                     .small()
-                    .on_click({
-                        let backend_handle = self.backend_handle.clone();
-                        let instance_id = self.instance;
-                        move |_, window, cx| {
-                            crate::root::start_update_check(instance_id, &backend_handle, window, cx);
-                        }
-                    }),
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let action = ModalAction::default();
+                        this.update_check_action = Some(action.clone());
+                        this.updating_all = false;
+                        cx.notify();
+                        crate::root::start_update_check_with_action(
+                            this.instance,
+                            &this.backend_handle,
+                            window,
+                            cx,
+                            action,
+                        );
+                    })),
             )
-            .when(has_updates, |this| {
-                this.child(Button::new("update-all").label("Update All").success().compact().small().on_click(
-                    cx.listener(move |this, _, window, cx| {
-                        for summary in combined_content_of(&this.content, this.mods_content.as_ref(), cx) {
-                            if is_updatable(&summary, this.instance_loader, this.instance_version.as_str()) {
+            .when(has_updates && !is_checking, |this| {
+                this.child(
+                    Button::new("update-all")
+                        .label(t::instance::content::update::all())
+                        .success()
+                        .compact()
+                        .small()
+                        .loading(self.updating_all)
+                        .when(self.updating_all, |b| b.disabled(true))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if this.updating_all {
+                                return;
+                            }
+                            let to_update: Vec<_> = combined_content_of(&this.content, this.mods_content.as_ref(), cx)
+                                .into_iter()
+                                .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
+                                .collect();
+                            if to_update.is_empty() {
+                                return;
+                            }
+                            this.updating_all = true;
+                            cx.notify();
+                            for summary in to_update {
                                 crate::root::update_single_mod(
                                     this.instance,
                                     summary.id,
@@ -376,9 +435,8 @@ impl Render for InstanceContentSubpage {
                                     cx,
                                 );
                             }
-                        }
-                    }),
-                ))
+                        })),
+                )
             })
             .child(
                 Button::new("addmr")

@@ -200,8 +200,16 @@ pub fn start_install(
 }
 
 pub fn start_update_check(instance: InstanceID, backend_handle: &BackendHandle, window: &mut Window, cx: &mut App) {
-    let modal_action = ModalAction::default();
+    start_update_check_with_action(instance, backend_handle, window, cx, ModalAction::default());
+}
 
+pub fn start_update_check_with_action(
+    instance: InstanceID,
+    backend_handle: &BackendHandle,
+    window: &mut Window,
+    cx: &mut App,
+    modal_action: ModalAction,
+) {
     backend_handle.send(MessageToBackend::UpdateCheck {
         instance,
         modal_action: modal_action.clone(),
