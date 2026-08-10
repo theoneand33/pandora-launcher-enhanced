@@ -54,11 +54,6 @@ pub fn get_command_path_cached(command: &OsStr) -> Option<Arc<Path>> {
     path
 }
 
-pub fn get_command_path(command: &OsStr) -> Option<Arc<Path>> {
-    // ponytail: collapse duplicate — cached variant already handles read+write with expiry
-    get_command_path_cached(command)
-}
-
 fn find_command(command: &OsStr) -> Option<PathBuf> {
     for mut path in std::env::split_paths(&std::env::var_os("PATH")?) {
         if !path.is_absolute() {

@@ -23,7 +23,7 @@ pub fn spawn(command: PandoraCommand, context: &mut SpawnContext) -> std::io::Re
             return Err(Error::new(ErrorKind::NotFound, "executable file doesn't exist"));
         };
         path
-    } else if let Some(path) = crate::path_cache::get_command_path(&command.executable.0) {
+    } else if let Some(path) = crate::path_cache::get_command_path_cached(&command.executable.0) {
         path.to_path_buf()
     } else {
         return Err(Error::new(ErrorKind::NotFound, "unable to resolve executable"));

@@ -3,7 +3,7 @@ use std::{ffi::OsStr, io::Error};
 use crate::{PandoraChild, PandoraCommand, spawner::SpawnContext};
 
 pub fn spawn(mut cmd: PandoraCommand, context: &mut SpawnContext) -> std::io::Result<PandoraChild> {
-    let Some(pkexec) = crate::path_cache::get_command_path(OsStr::new("pkexec")) else {
+    let Some(pkexec) = crate::path_cache::get_command_path_cached(OsStr::new("pkexec")) else {
         return Err(Error::new(std::io::ErrorKind::NotFound, "cannot find 'pkexec'"));
     };
 
@@ -11,7 +11,7 @@ pub fn spawn(mut cmd: PandoraCommand, context: &mut SpawnContext) -> std::io::Re
 
     // Replace with absolute path since pkexec won't inherit PATH
     if !executable.0.as_encoded_bytes().contains(&b'/') {
-        let Some(path) = crate::path_cache::get_command_path(&executable.0) else {
+        let Some(path) = crate::path_cache::get_command_path_cached(&executable.0) else {
             return Err(Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("cannot find '{}'", executable.0.to_string_lossy()),

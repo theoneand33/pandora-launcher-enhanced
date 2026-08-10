@@ -466,122 +466,67 @@ pub fn rename_with_fallback_across_devices(from: &Path, to: &Path) -> std::io::R
 
 pub const KNOWN_SHADER_MODS: &[&'static str] = &["iris", "oculus", "optifine"];
 
-pub fn join_windows_shell(args: &[&str]) -> String {
-    let mut string = String::new();
-
-    let mut first = true;
-    for arg in args {
-        let mut backslashes = 0;
-
-        if first {
-            first = false;
-        } else {
-            string.push(' ');
-        }
-
-        if arg.is_empty() {
-            string.push_str("\"\"");
-            continue;
-        }
-
-        let quoted = arg.contains(&[' ', '\t']);
-        if quoted {
-            string.push('"');
-        }
-
-        for char in arg.chars() {
-            if char == '\\' {
-                backslashes += 1;
-            } else if char == '"' {
-                for _ in 0..backslashes {
-                    string.push_str("\\\\");
-                }
-                string.push_str("\\\"");
-                backslashes = 0;
-            } else {
-                for _ in 0..backslashes {
-                    string.push('\\');
-                }
-                backslashes = 0;
-                string.push(char);
+fn append_windows_arg(arg: &[u8], out: &mut Vec<u8>) {
+    if arg.is_empty() {
+        out.extend_from_slice(b"\"\"");
+        return;
+    }
+    let quoted = arg.contains(&b' ') || arg.contains(&b'\t');
+    if quoted {
+        out.push(b'"');
+    }
+    let mut backslashes = 0;
+    for &b in arg {
+        if b == b'\\' {
+            backslashes += 1;
+        } else if b == b'"' {
+            for _ in 0..backslashes * 2 {
+                out.push(b'\\');
             }
-        }
-
-        if quoted {
-            for _ in 0..backslashes {
-                string.push_str("\\\\");
-            }
+            out.push(b'\\');
+            out.push(b'"');
+            backslashes = 0;
         } else {
             for _ in 0..backslashes {
-                string.push('\\');
+                out.push(b'\\');
             }
-        }
-
-        if quoted {
-            string.push('"');
+            backslashes = 0;
+            out.push(b);
         }
     }
+    if quoted {
+        for _ in 0..backslashes * 2 {
+            out.push(b'\\');
+        }
+    } else {
+        for _ in 0..backslashes {
+            out.push(b'\\');
+        }
+    }
+    if quoted {
+        out.push(b'"');
+    }
+}
 
-    string
+pub fn join_windows_shell(args: &[&str]) -> String {
+    let mut out = Vec::new();
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            out.push(b' ');
+        }
+        append_windows_arg(arg.as_bytes(), &mut out);
+    }
+    // ponytail: arg bytes are valid UTF-8, quoting only adds ASCII
+    unsafe { String::from_utf8_unchecked(out) }
 }
 
 pub fn join_windows_shell_os(args: &[&OsStr]) -> OsString {
-    let mut string = Vec::new();
-
-    let mut first = true;
-    for arg in args {
-        let mut backslashes = 0;
-
-        if first {
-            first = false;
-        } else {
-            string.push(b' ');
+    let mut out = Vec::new();
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            out.push(b' ');
         }
-
-        if arg.is_empty() {
-            string.extend(b"\"\"");
-            continue;
-        }
-
-        let arg_raw = arg.as_encoded_bytes();
-        let quoted = arg_raw.contains(&b' ') || arg_raw.contains(&b'\t');
-        if quoted {
-            string.push(b'"');
-        }
-
-        for byte in arg_raw {
-            if *byte == b'\\' {
-                backslashes += 1;
-            } else if *byte == b'"' {
-                for _ in 0..backslashes * 2 {
-                    string.push(b'\\');
-                }
-                string.push(b'\\');
-                string.push(b'"');
-                backslashes = 0;
-            } else {
-                for _ in 0..backslashes {
-                    string.push(b'\\');
-                }
-                backslashes = 0;
-                string.push(*byte);
-            }
-        }
-
-        if quoted {
-            for _ in 0..backslashes * 2 {
-                string.push(b'\\');
-            }
-        } else {
-            for _ in 0..backslashes {
-                string.push(b'\\');
-            }
-        }
-
-        if quoted {
-            string.push(b'"');
-        }
+        append_windows_arg(arg.as_encoded_bytes(), &mut out);
     }
-
-    unsafe { OsString::from_encoded_bytes_unchecked(string) }
+    unsafe { OsString::from_encoded_bytes_unchecked(out) }
 }

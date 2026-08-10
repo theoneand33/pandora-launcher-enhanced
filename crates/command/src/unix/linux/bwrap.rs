@@ -203,13 +203,13 @@ pub fn spawn(
             return Err(Error::new(ErrorKind::NotFound, "executable file doesn't exist"));
         };
         path
-    } else if let Some(path) = crate::path_cache::get_command_path(&command.executable.0) {
+    } else if let Some(path) = crate::path_cache::get_command_path_cached(&command.executable.0) {
         path.to_path_buf()
     } else {
         return Err(Error::new(ErrorKind::NotFound, "unable to resolve executable"));
     };
 
-    let Some(bwrap) = crate::path_cache::get_command_path(OsStr::new("bwrap")) else {
+    let Some(bwrap) = crate::path_cache::get_command_path_cached(OsStr::new("bwrap")) else {
         return Err(Error::new(ErrorKind::NotFound, "unable to find 'bwrap'"));
     };
 
@@ -419,7 +419,7 @@ fn start_dbus_proxy(sandbox_dir: &Path, context: &mut SpawnContext) -> std::io::
             session_bus_proxy: None,
         });
     };
-    let Some(proxy_executable) = crate::path_cache::get_command_path(OsStr::new("xdg-dbus-proxy")) else {
+    let Some(proxy_executable) = crate::path_cache::get_command_path_cached(OsStr::new("xdg-dbus-proxy")) else {
         return Err(Error::new(ErrorKind::NotFound, "unable to find 'xdg-dbus-proxy'"));
     };
 

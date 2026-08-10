@@ -22,7 +22,7 @@ pub fn is_command_available(command: &'static str) -> bool {
 }
 
 pub fn get_command_path(command: &'static str) -> Option<Arc<Path>> {
-    path_cache::get_command_path(OsStr::new(command))
+    path_cache::get_command_path_cached(OsStr::new(command))
 }
 
 #[cfg(windows)]

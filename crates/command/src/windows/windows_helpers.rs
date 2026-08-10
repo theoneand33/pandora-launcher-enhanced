@@ -19,66 +19,57 @@ use windows::Win32::{
     },
 };
 
-pub fn join_windows_shell_arg(args: &[PandoraArg]) -> OsString {
-    let mut string = Vec::new();
-
-    let mut first = true;
-    for arg in args {
-        let arg = &arg.0;
-        let mut backslashes = 0;
-
-        if first {
-            first = false;
-        } else {
-            string.push(b' ');
-        }
-
-        if arg.is_empty() {
-            string.extend(b"\"\"");
-            continue;
-        }
-
-        let arg_raw = arg.as_encoded_bytes();
-        let quoted = arg_raw.contains(&b' ') || arg_raw.contains(&b'\t');
-        if quoted {
-            string.push(b'"');
-        }
-
-        for byte in arg_raw {
-            if *byte == b'\\' {
-                backslashes += 1;
-            } else if *byte == b'"' {
-                for _ in 0..backslashes * 2 {
-                    string.push(b'\\');
-                }
-                string.push(b'\\');
-                string.push(b'"');
-                backslashes = 0;
-            } else {
-                for _ in 0..backslashes {
-                    string.push(b'\\');
-                }
-                backslashes = 0;
-                string.push(*byte);
-            }
-        }
-
-        if quoted {
+fn append_windows_arg(arg: &[u8], out: &mut Vec<u8>) {
+    if arg.is_empty() {
+        out.extend_from_slice(b"\"\"");
+        return;
+    }
+    let quoted = arg.contains(&b' ') || arg.contains(&b'\t');
+    if quoted {
+        out.push(b'"');
+    }
+    let mut backslashes = 0;
+    for &b in arg {
+        if b == b'\\' {
+            backslashes += 1;
+        } else if b == b'"' {
             for _ in 0..backslashes * 2 {
-                string.push(b'\\');
+                out.push(b'\\');
             }
+            out.push(b'\\');
+            out.push(b'"');
+            backslashes = 0;
         } else {
             for _ in 0..backslashes {
-                string.push(b'\\');
+                out.push(b'\\');
             }
-        }
-
-        if quoted {
-            string.push(b'"');
+            backslashes = 0;
+            out.push(b);
         }
     }
+    if quoted {
+        for _ in 0..backslashes * 2 {
+            out.push(b'\\');
+        }
+    } else {
+        for _ in 0..backslashes {
+            out.push(b'\\');
+        }
+    }
+    if quoted {
+        out.push(b'"');
+    }
+}
 
-    unsafe { OsString::from_encoded_bytes_unchecked(string) }
+pub fn join_windows_shell_arg(args: &[PandoraArg]) -> OsString {
+    let mut out = Vec::new();
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            out.push(b' ');
+        }
+        append_windows_arg(arg.0.as_encoded_bytes(), &mut out);
+    }
+    unsafe { OsString::from_encoded_bytes_unchecked(out) }
 }
 
 pub fn create_job_object() -> std::io::Result<HANDLE> {
