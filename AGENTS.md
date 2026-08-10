@@ -19,4 +19,4 @@ The `crates/` folder has these members: `pandora_launcher` (binary), `backend`, 
 - Vendor builds use `./vendor.sh`. Commit the `Cargo.lock` changes.
 
 ## Prohibited
-- Do not use the `gradiants` package. Use native CSS gradients (`linear-gradient()`, `conic-gradient()`).
+- Do not use the any colored gradiants grey-black, etc is allowed.
