@@ -17,6 +17,7 @@ The `crates/` folder has these members: `pandora_launcher` (binary), `backend`, 
 - Do not add new dependencies without need. Use the workspace dependencies in the root `Cargo.toml`.
 - Keep the `image` crate features minimal (`png`, `jpeg`, `bmp`, `gif`, `webp` only).
 - Vendor builds use `./vendor.sh`. Commit the `Cargo.lock` changes.
+- Run `cargo check` after every change.
 
 ## Prohibited
 - Do not use the any colored gradients. Non colored gradients are allowed.
