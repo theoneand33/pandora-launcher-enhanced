@@ -4,8 +4,6 @@ use std::{fmt::Debug, ptr::NonNull, result};
 
 pub mod decode;
 pub mod encode;
-mod pretty;
-pub mod stringified;
 
 mod reference;
 
@@ -41,11 +39,10 @@ impl Default for NBT {
 
 impl Debug for NBT {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            pretty::to_pretty_debug(f, self)
-        } else {
-            stringified::to_snbt(f, self)
-        }
+        f.debug_struct("NBT")
+            .field("root_name", &self.root_name)
+            .field("root", &self.as_reference())
+            .finish()
     }
 }
 

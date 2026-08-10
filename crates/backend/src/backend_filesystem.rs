@@ -101,12 +101,6 @@ impl BackendState {
         path: Arc<Path>,
         after_debounce_effects: &mut AfterDebounceEffects,
     ) {
-        let target = self.file_watching.read().get_target(&path).copied();
-        if let Some(target) = target
-            && self.filesystem_handle_change(target, &path, after_debounce_effects).await
-        {
-            return;
-        }
         let Some(parent_path) = path.parent() else {
             return;
         };
@@ -189,15 +183,6 @@ impl BackendState {
                 }
             },
         }
-    }
-
-    async fn filesystem_handle_change(
-        self: &Arc<Self>,
-        _target: WatchTarget,
-        _path: &Arc<Path>,
-        _after_debounce_effects: &mut AfterDebounceEffects,
-    ) -> bool {
-        false
     }
 
     async fn filesystem_handle_removed(

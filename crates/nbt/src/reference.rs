@@ -1,6 +1,6 @@
 use std::{fmt::Debug, hint::unreachable_unchecked};
 
-use super::{NBT, NBTCompound, NBTNode, TagType, pretty};
+use super::{NBT, NBTCompound, NBTNode, TagType};
 
 #[derive(Copy, Clone, Debug)]
 pub enum NBTRef<'a> {
@@ -158,7 +158,9 @@ pub struct CompoundRef<'a> {
 
 impl<'a> Debug for CompoundRef<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        pretty::to_pretty_debug_compound(f, self)
+        f.debug_map()
+            .entries(self.entries().map(|(k, v)| (k, format!("{:?}", v))))
+            .finish()
     }
 }
 
@@ -354,7 +356,9 @@ pub struct CompoundRefMut<'a> {
 
 impl<'a> Debug for CompoundRefMut<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        pretty::to_pretty_debug_compound_mut(f, self)
+        f.debug_map()
+            .entries(self.entries().map(|(k, v)| (k, format!("{:?}", v))))
+            .finish()
     }
 }
 
@@ -563,7 +567,7 @@ pub struct ListRef<'a> {
 
 impl<'a> Debug for ListRef<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        pretty::to_pretty_debug_list(f, self)
+        f.debug_list().entries(self.iter()).finish()
     }
 }
 
@@ -664,7 +668,12 @@ pub struct ListRefMut<'a> {
 
 impl<'a> Debug for ListRefMut<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        pretty::to_pretty_debug_list_mut(f, self)
+        // ponytail: debug via immutable view, avoids duplicating pretty module
+        let (ty, children) = self.get_self_node();
+        f.debug_struct("ListRefMut")
+            .field("type", &ty.0)
+            .field("len", &children.len())
+            .finish()
     }
 }
 

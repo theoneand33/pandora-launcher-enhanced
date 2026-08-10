@@ -1,42 +1,32 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use tokio::sync::watch;
 
-use tokio::sync::Semaphore;
-
+// ponytail: sticky notify via watch — replaces hand-rolled AtomicBool+Semaphore
 #[derive(Debug, Clone)]
-pub struct NotifySignal(Arc<NotifySignalInner>);
-
-#[derive(Debug)]
-struct NotifySignalInner {
-    value: AtomicBool,
-    notify: Semaphore,
+pub struct NotifySignal {
+    tx: watch::Sender<bool>,
+    rx: watch::Receiver<bool>,
 }
 
 impl NotifySignal {
     pub fn new() -> Self {
-        Self(Arc::new(NotifySignalInner {
-            value: AtomicBool::new(false),
-            notify: Semaphore::new(0),
-        }))
+        let (tx, rx) = watch::channel(false);
+        Self { tx, rx }
     }
 
     pub fn notify(&self) {
-        if !self.0.value.swap(true, Ordering::AcqRel) {
-            self.0.notify.add_permits(Semaphore::MAX_PERMITS);
-        }
+        let _ = self.tx.send(true);
     }
 
     pub fn is_notified(&self) -> bool {
-        self.0.value.load(Ordering::Acquire)
+        *self.rx.borrow()
     }
 
     pub async fn await_notification(&self) {
         if self.is_notified() {
             return;
         }
-        let _ = self.0.notify.acquire().await;
+        let mut rx = self.rx.clone();
+        let _ = rx.wait_for(|v| *v).await;
     }
 }
 
