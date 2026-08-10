@@ -1,6 +1,6 @@
 use std::{cell::RefCell, num::NonZeroUsize, ops::Range, rc::Rc, sync::Arc};
 
-use ftree::FenwickTree;
+use crate::fenwick::FenwickTree;
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Icon, Sizable,
@@ -37,7 +37,7 @@ struct CachedShapedLines {
 pub struct GameOutputItemState {
     items: Vec<GameOutputItem>,
     last_scrolled_item: usize,
-    item_sizes: FenwickTree<usize>,
+    item_sizes: FenwickTree,
     total_line_count: usize,
     cached_shaped_lines: CachedShapedLines,
     search_query: SharedString,
@@ -734,7 +734,7 @@ fn paint_lines<'a, const REVERSE: bool>(
     line_height: Pixels,
     time_column_width: &mut Pixels,
     level_column_width: Pixels,
-    item_sizes: &mut FenwickTree<usize>,
+    item_sizes: &mut FenwickTree,
     total_line_count: &mut usize,
     line_wrapper: &mut LineWrapperHandle,
     cache: &mut CachedShapedLines,
