@@ -55,27 +55,4 @@ impl Lockfile {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn try_create(path: Arc<Path>) -> std::io::Result<Option<Self>> {
-        let semaphore = get_path_semaphore(path.clone());
-
-        let Ok(permit) = semaphore.try_acquire_owned() else {
-            return Ok(None);
-        };
-
-        let handle = open_file(&path)?;
-
-        match handle.try_lock() {
-            Ok(_) => {},
-            Err(TryLockError::Error(err)) => return Err(err),
-            Err(TryLockError::WouldBlock) => {
-                return Ok(None);
-            },
-        }
-
-        Ok(Some(Self {
-            _handle: handle,
-            _permit: permit,
-        }))
-    }
 }

@@ -55,26 +55,8 @@ pub fn get_command_path_cached(command: &OsStr) -> Option<Arc<Path>> {
 }
 
 pub fn get_command_path(command: &OsStr) -> Option<Arc<Path>> {
-    if command.as_encoded_bytes().iter().any(|b| illegal_char(*b)) {
-        return None;
-    }
-
-    let path = find_command(command).map(Into::into);
-    let expiry = if path.is_none() {
-        Instant::now() + Duration::from_secs(5)
-    } else {
-        Instant::now() + Duration::from_secs(60)
-    };
-
-    COMMAND_PATH_CACHE.write().insert(
-        command.into(),
-        CommandPathCacheEntry {
-            expiry,
-            path: path.clone(),
-        },
-    );
-
-    path
+    // ponytail: collapse duplicate — cached variant already handles read+write with expiry
+    get_command_path_cached(command)
 }
 
 fn find_command(command: &OsStr) -> Option<PathBuf> {
