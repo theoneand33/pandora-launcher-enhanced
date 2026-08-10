@@ -242,6 +242,28 @@ pub fn update_single_mod(
     );
 }
 
+pub fn update_multiple_mods(
+    instance: InstanceID,
+    mod_ids: Vec<InstanceContentID>,
+    backend_handle: &BackendHandle,
+    window: &mut Window,
+    cx: &mut App,
+) -> ModalAction {
+    let modal_action = ModalAction::default();
+    backend_handle.send(MessageToBackend::UpdateContents {
+        instance,
+        content_ids: mod_ids,
+        modal_action: modal_action.clone(),
+    });
+    modals::generic::show_notification(
+        window,
+        cx,
+        t::instance::content::update::download::error().into(),
+        modal_action.clone(),
+    );
+    modal_action
+}
+
 pub fn upload_log_file(path: Arc<Path>, backend_handle: &BackendHandle, window: &mut Window, cx: &mut App) {
     let modal_action = ModalAction::default();
 

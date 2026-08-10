@@ -55,7 +55,7 @@ pub struct InstanceContentSubpage {
     mods_content: Option<Entity<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
     update_check_action: Option<ModalAction>,
-    updating_all: bool,
+    update_all_action: Option<ModalAction>,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -290,28 +290,6 @@ impl InstanceContentSubpage {
         )
         .detach();
 
-        // Clear batch-updating flag when content reloads (updates finished).
-        {
-            let c = content.clone();
-            cx.observe(&c, |this: &mut Self, _, cx| {
-                if this.updating_all {
-                    this.updating_all = false;
-                    cx.notify();
-                }
-            })
-            .detach();
-        }
-        if let Some(m) = mods_content.as_ref() {
-            let m = m.clone();
-            cx.observe(&m, |this: &mut Self, _, cx| {
-                if this.updating_all {
-                    this.updating_all = false;
-                    cx.notify();
-                }
-            })
-            .detach();
-        }
-
         Self {
             content_type,
             instance: instance_id,
@@ -325,7 +303,7 @@ impl InstanceContentSubpage {
             mods_content,
             sort_dropdown,
             update_check_action: None,
-            updating_all: false,
+            update_all_action: None,
             _add_from_file_task: None,
         }
     }
@@ -366,18 +344,31 @@ impl Render for InstanceContentSubpage {
             self.content_states.observe(ContentFolder::Mods);
         }
 
-        // `is_checking` tied to ModalAction completion so it resets on both success and
-        // error (backend_handler sets finished in both branches). Poll via
-        // request_animation_frame until finished.
+        // Poll ModalActions so they reset on completion (both success and error) and
+        // drive `request_animation_frame` while active. Tidy up finished actions
+        // instead of holding them forever.
         let is_checking = self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
         if is_checking {
             window.request_animation_frame();
+        } else if self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
+            self.update_check_action = None;
+        }
+
+        let is_updating_all = self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
+        if is_updating_all {
+            window.request_animation_frame();
+        } else if self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
+            self.update_all_action = None;
         }
 
         let combined = combined_content_of(&self.content, self.mods_content.as_ref(), cx);
-        let has_updates = combined
+        // Single source of truth for updatable items — used for both visibility and click handler.
+        let updatable: Vec<InstanceContentSummary> = combined
             .iter()
-            .any(|s| is_updatable(s, self.instance_loader, self.instance_version.as_str()));
+            .filter(|s| is_updatable(s, self.instance_loader, self.instance_version.as_str()))
+            .cloned()
+            .collect();
+        let has_updates = !updatable.is_empty();
 
         let header = h_flex()
             .gap_3()
@@ -393,7 +384,6 @@ impl Render for InstanceContentSubpage {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         let action = ModalAction::default();
                         this.update_check_action = Some(action.clone());
-                        this.updating_all = false;
                         cx.notify();
                         crate::root::start_update_check_with_action(
                             this.instance,
@@ -405,36 +395,37 @@ impl Render for InstanceContentSubpage {
                     })),
             )
             .when(has_updates && !is_checking, |this| {
+                // Capture updatable ids for the handler — source of truth is the precomputed vec.
+                let updatable_ids: Vec<_> = updatable.iter().map(|s| s.id).collect();
                 this.child(
                     Button::new("update-all")
                         .label(t::instance::content::update::all())
                         .success()
                         .compact()
                         .small()
-                        .loading(self.updating_all)
-                        .when(self.updating_all, |b| b.disabled(true))
+                        .loading(is_updating_all)
+                        .when(is_updating_all, |b| b.disabled(true))
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            if this.updating_all {
+                            if this.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
                                 return;
                             }
-                            let to_update: Vec<_> = combined_content_of(&this.content, this.mods_content.as_ref(), cx)
-                                .into_iter()
-                                .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
-                                .collect();
-                            if to_update.is_empty() {
+                            // Re-derive from live state if capture is empty (list may have changed).
+                            let ids = if updatable_ids.is_empty() {
+                                combined_content_of(&this.content, this.mods_content.as_ref(), cx)
+                                    .into_iter()
+                                    .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
+                                    .map(|s| s.id)
+                                    .collect::<Vec<_>>()
+                            } else {
+                                updatable_ids.clone()
+                            };
+                            if ids.is_empty() {
                                 return;
                             }
-                            this.updating_all = true;
+                            let action =
+                                crate::root::update_multiple_mods(this.instance, ids, &this.backend_handle, window, cx);
+                            this.update_all_action = Some(action);
                             cx.notify();
-                            for summary in to_update {
-                                crate::root::update_single_mod(
-                                    this.instance,
-                                    summary.id,
-                                    &this.backend_handle,
-                                    window,
-                                    cx,
-                                );
-                            }
                         })),
                 )
             })
