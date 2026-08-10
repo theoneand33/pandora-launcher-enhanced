@@ -34,12 +34,10 @@ impl RenderOnce for ErrorAlert {
 
         let danger = cx.theme().danger;
         let bg = danger.opacity(0.08);
-        let fg = danger;
-        let border_color = danger;
 
         h_flex()
             .w(self.w)
-            .text_color(fg)
+            .text_color(danger)
             .bg(bg)
             .px(padding_x)
             .py(padding_y)
@@ -47,7 +45,7 @@ impl RenderOnce for ErrorAlert {
             .justify_between()
             .text_sm()
             .border_1()
-            .border_color(border_color)
+            .border_color(danger)
             .rounded(radius)
             .items_start()
             .child(
