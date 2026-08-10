@@ -287,10 +287,10 @@ fn generate_triangles(part: &BodyPart, is_64x32: bool, cape_is_optifine_hd: bool
     }
 
     let mut add_face = |p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, tx: f32, ty: f32, tw: f32, th: f32| {
-        let (mut u0, mut v0) = (tx, ty);
-        let (mut u1, mut v1) = (tx + tw, ty);
-        let (mut u2, mut v2) = (tx + tw, ty + th);
-        let (mut u3, mut v3) = (tx, ty + th);
+        let (mut u0, v0) = (tx, ty);
+        let (mut u1, v1) = (tx + tw, ty);
+        let (mut u2, v2) = (tx + tw, ty + th);
+        let (mut u3, v3) = (tx, ty + th);
 
         // Flip UVs for mirrored limbs
         if mirror_uvs {
@@ -301,7 +301,7 @@ fn generate_triangles(part: &BodyPart, is_64x32: bool, cape_is_optifine_hd: bool
         }
 
         // Apply rotations
-        let mut t = |pos: Vec3| -> Vec3 {
+        let t = |pos: Vec3| -> Vec3 {
             let mut pt = pos - part.pivot;
             pt = rotate_z(pt, part.rot.z);
             pt = rotate_x(pt, part.rot.x);
@@ -707,7 +707,8 @@ impl Render for SkinRenderer {
                         let h = h_f32 as u32;
                         if w > 0 && h > 0 {
                             if let Some(render_img) = entity.read(cx).render_to_buffer(w, h) {
-                                let _ = window.paint_image(bounds, bounds, gpui::Corners::default(), render_img, 0, false);
+                                let _ =
+                                    window.paint_image(bounds, bounds, gpui::Corners::default(), render_img, 0, false);
                             }
                         }
                     },

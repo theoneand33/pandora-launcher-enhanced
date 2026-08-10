@@ -24,6 +24,7 @@ fn normalize_shortcut_path(mut path: PathBuf) -> PathBuf {
     path
 }
 
+#[allow(dead_code)]
 pub fn known_shortcut_filenames(instance_name: &str) -> [String; 2] {
     [
         format!("{instance_name}.{}", shortcut_extension()),
@@ -31,6 +32,7 @@ pub fn known_shortcut_filenames(instance_name: &str) -> [String; 2] {
     ]
 }
 
+#[allow(dead_code)]
 fn maybe_rename_shortcut_path(path: &Path, old_instance_name: &str, new_instance_name: &str) -> PathBuf {
     let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
         return path.to_path_buf();
@@ -160,6 +162,7 @@ pub fn create_shortcut(path: PathBuf, name: &str, bin: &Path, args: &[&str]) -> 
     Some(path)
 }
 
+#[allow(dead_code)]
 pub fn update_shortcut(
     path: PathBuf,
     old_instance_name: &str,

@@ -382,5 +382,6 @@ pub fn format_downloads(downloads: u64) -> SharedString {
         t::instance::content::downloads::k((downloads / 10) as f64 / 100.0)
     } else {
         t::instance::content::downloads::n(downloads)
-    }.into()
+    }
+    .into()
 }

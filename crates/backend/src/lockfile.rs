@@ -54,5 +54,4 @@ impl Lockfile {
             _permit: permit,
         })
     }
-
 }

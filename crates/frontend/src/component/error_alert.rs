@@ -34,7 +34,7 @@ impl RenderOnce for ErrorAlert {
 
         let danger = cx.theme().danger;
         let bg = danger.opacity(0.08);
-        let fg = cx.theme().red;
+        let fg = danger;
         let border_color = danger;
 
         h_flex()

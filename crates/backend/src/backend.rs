@@ -20,8 +20,7 @@ use bridge::{
     handle::{BackendHandle, BackendReceiver, FrontendHandle},
     install::{ContentDownload, ContentInstall, ContentInstallFile, ContentInstallPath},
     instance::{
-        ContentFolder, ContentSummary, ContentType, InstanceContentSummary, InstanceID, ModpackFile, ModpackFilePath,
-        ModpackFileSource,
+        ContentFolder, ContentType, InstanceContentSummary, InstanceID, ModpackFile, ModpackFilePath, ModpackFileSource,
     },
     message::{EmbeddedOrRaw, MessageToFrontend},
     modal_action::{ModalAction, ModalActionVisitUrl, ProgressTracker, ProgressTrackerFinishType},
@@ -313,7 +312,11 @@ impl BackendState {
         self.file_watching
             .write()
             .watch_filesystem(self.directories.instances_dir.clone(), WatchTarget::InstancesDir);
-        for entry in std::fs::read_dir(&self.directories.instances_dir).unwrap() {
+        let Ok(entries) = std::fs::read_dir(&self.directories.instances_dir) else {
+            log::warn!("Unable to read instances dir: {:?}", &self.directories.instances_dir);
+            return;
+        };
+        for entry in entries {
             let Ok(entry) = entry else {
                 log::warn!("Error reading directory in instances folder: {:?}", entry.unwrap_err());
                 continue;
@@ -788,7 +791,12 @@ impl BackendState {
         if disable {
             crate::syncing::apply_to_instance(&SyncTargets::default(), &self.directories, path, &mut instances);
         } else {
-            crate::syncing::apply_to_instance(&self.config.write().get().sync_targets, &self.directories, path, &mut instances);
+            crate::syncing::apply_to_instance(
+                &self.config.write().get().sync_targets,
+                &self.directories,
+                path,
+                &mut instances,
+            );
         }
     }
 
@@ -829,11 +837,7 @@ impl BackendState {
         instance.set_frozen_mods_folder(false);
     }
 
-    pub async fn prelaunch_setup_mods(
-        self: &Arc<Self>,
-        id: InstanceID,
-        modal_action: &ModalAction,
-    ) {
+    pub async fn prelaunch_setup_mods(self: &Arc<Self>, id: InstanceID, modal_action: &ModalAction) {
         let (loader, minecraft_version, root_dir, dot_minecraft_dir, mods_dir) =
             if let Some(instance) = self.instance_state.write().instances.get_mut(id) {
                 if !instance.processes.is_empty() {
@@ -1075,9 +1079,7 @@ impl BackendState {
                         if let Some(filename) = rel_path.strip_prefix("mods") {
                             mod_copies.push(PrelaunchModCopy {
                                 path: filename,
-                                source: PrelaunchModCopySource::FromBytes {
-                                    bytes: bytes.clone(),
-                                },
+                                source: PrelaunchModCopySource::FromBytes { bytes: bytes.clone() },
                             });
                         } else {
                             let dest_path = rel_path.to_path(&dot_minecraft_dir);
@@ -1098,9 +1100,7 @@ impl BackendState {
                         if let Some(filename) = rel_path.strip_prefix("mods") {
                             mod_copies.push(PrelaunchModCopy {
                                 path: filename,
-                                source: PrelaunchModCopySource::FromContentLibrary {
-                                    hash: file.hash,
-                                },
+                                source: PrelaunchModCopySource::FromContentLibrary { hash: file.hash },
                             });
                         } else {
                             let dest_path = rel_path.to_path(&dot_minecraft_dir);
@@ -1221,7 +1221,9 @@ impl BackendState {
         let modrinth_source_for_url = |url: &str| -> Option<ContentSource> {
             let path = url.strip_prefix("https://cdn.modrinth.com/data/")?;
             let project_id = path.split('/').next().filter(|s| !s.is_empty())?;
-            Some(ContentSource::ModrinthProject { project_id: project_id.into() })
+            Some(ContentSource::ModrinthProject {
+                project_id: project_id.into(),
+            })
         };
 
         for file in files.iter() {
@@ -1507,7 +1509,10 @@ impl BackendState {
 
         let sanitized = sanitize_filename::sanitize_with_options(
             &old_name,
-            sanitize_filename::Options { windows: true, ..Default::default() },
+            sanitize_filename::Options {
+                windows: true,
+                ..Default::default()
+            },
         );
 
         let mut new_name = format!("{}-1", sanitized);

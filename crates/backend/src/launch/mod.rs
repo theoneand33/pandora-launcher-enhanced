@@ -287,7 +287,8 @@ impl Launcher {
                             .and_then(|u| u.port().map(|p| format!("http://127.0.0.1:{p}/api/yggdrasil")))
                             .map(|s| Arc::from(s.as_str()))
                     };
-                    let javaagent_path = yggdrasil_url.as_ref().and_then(|_| Self::ensure_authlib_injector(&self.directories));
+                    let javaagent_path =
+                        yggdrasil_url.as_ref().and_then(|_| Self::ensure_authlib_injector(&self.directories));
                     (Some((guard, url)), Some(injection), yggdrasil_url, javaagent_path)
                 } else {
                     (None, None, None, None)
@@ -2067,7 +2068,7 @@ impl Launcher {
                 hasher2.update(BYTES);
                 let expected_hash = hasher2.finalize();
                 existing_hash != expected_hash
-            }
+            },
             Err(_) => true,
         };
         if needs_write {
@@ -2509,9 +2510,7 @@ impl LaunchContext {
             }
         }
 
-        if let (Some(agent_path), Some(yggdrasil_url)) =
-            (&self.offline_javaagent_path, &self.offline_yggdrasil_url)
-        {
+        if let (Some(agent_path), Some(yggdrasil_url)) = (&self.offline_javaagent_path, &self.offline_yggdrasil_url) {
             command.arg(format!("-javaagent:{}={}", agent_path.display(), yggdrasil_url));
         }
 

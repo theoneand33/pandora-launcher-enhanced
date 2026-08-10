@@ -59,19 +59,22 @@ impl Page for InstancePage {
         let name = instance.name.clone();
         let backend_handle = self.backend_handle.clone();
 
-        let button = match instance.status {
-            InstanceStatus::NotRunning => {
-                Button::new("start_instance").success().icon(PandoraIcon::Play).label(t::instance::start::label()).on_click(
-                    move |_, window, cx| {
+        let button =
+            match instance.status {
+                InstanceStatus::NotRunning => Button::new("start_instance")
+                    .success()
+                    .icon(PandoraIcon::Play)
+                    .label(t::instance::start::label())
+                    .on_click(move |_, window, cx| {
                         root::start_instance(id, name.clone(), None, &backend_handle, window, cx);
-                    },
-                ).into_any_element()
-            },
-            InstanceStatus::Launching => {
-                Button::new("launching").warning().icon(PandoraIcon::Loader).label(t::instance::start::starting()).into_any_element()
-            },
-            InstanceStatus::Stopping => {
-                Button::new("stopping")
+                    })
+                    .into_any_element(),
+                InstanceStatus::Launching => Button::new("launching")
+                    .warning()
+                    .icon(PandoraIcon::Loader)
+                    .label(t::instance::start::starting())
+                    .into_any_element(),
+                InstanceStatus::Stopping => Button::new("stopping")
                     .danger()
                     .icon(PandoraIcon::Loader)
                     .label(t::instance::start::stopping())
@@ -81,61 +84,71 @@ impl Page for InstancePage {
                             backend_handle.send(MessageToBackend::KillInstance { id });
                         }
                     })
-                    .into_any_element()
-            },
-            InstanceStatus::Running => {
-                ButtonGroup::new("running")
-                    .child(Button::new("kill_instance")
-                        .danger()
-                        .icon(PandoraIcon::Close)
-                        .label(t::instance::kill_instance())
-                        .on_click({
-                            let backend_handle = backend_handle.clone();
-                            move |_, _, _| {
-                                backend_handle.send(MessageToBackend::KillInstance { id });
-                            }
-                        }))
-                    .child(Button::new("start_again")
-                        .success()
-                        .icon(PandoraIcon::Play)
-                        .on_click(move |_, window, cx| {
+                    .into_any_element(),
+                InstanceStatus::Running => ButtonGroup::new("running")
+                    .child(
+                        Button::new("kill_instance")
+                            .danger()
+                            .icon(PandoraIcon::Close)
+                            .label(t::instance::kill_instance())
+                            .on_click({
+                                let backend_handle = backend_handle.clone();
+                                move |_, _, _| {
+                                    backend_handle.send(MessageToBackend::KillInstance { id });
+                                }
+                            }),
+                    )
+                    .child(Button::new("start_again").success().icon(PandoraIcon::Play).on_click(
+                        move |_, window, cx| {
                             let name = name.clone();
                             let backend_handle = backend_handle.clone();
                             window.open_dialog(cx, move |dialog, _, _| {
-                                dialog.title(t::instance::already_running::title())
+                                dialog
+                                    .title(t::instance::already_running::title())
                                     .overlay_closable(false)
                                     .flex()
                                     .line_height(rems(1.2))
                                     .child(t::instance::already_running::body())
                                     .child(div().h_2())
                                     .child(t::instance::already_running::body2())
-                                    .footer(h_flex()
-                                        .gap_2()
-                                        .w_full()
-                                        .child(
-                                            Button::new("cancel")
-                                                .label(t::common::cancel())
-                                                .on_click(|_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                }).flex_grow(1.0)
-                                        )
-                                        .child(
-                                            Button::new("ok")
-                                                .success()
-                                                .label(t::instance::already_running::start_anyway())
-                                                .on_click({
-                                                    let name = name.clone();
-                                                    let backend_handle = backend_handle.clone();
-                                                    move |_, window, cx| {
+                                    .footer(
+                                        h_flex()
+                                            .gap_2()
+                                            .w_full()
+                                            .child(
+                                                Button::new("cancel")
+                                                    .label(t::common::cancel())
+                                                    .on_click(|_, window, cx| {
                                                         window.close_dialog(cx);
-                                                        root::start_instance(id, name.clone(), None, &backend_handle, window, cx);
-                                                    }
-                                                })
-                                        ))
+                                                    })
+                                                    .flex_grow(1.0),
+                                            )
+                                            .child(
+                                                Button::new("ok")
+                                                    .success()
+                                                    .label(t::instance::already_running::start_anyway())
+                                                    .on_click({
+                                                        let name = name.clone();
+                                                        let backend_handle = backend_handle.clone();
+                                                        move |_, window, cx| {
+                                                            window.close_dialog(cx);
+                                                            root::start_instance(
+                                                                id,
+                                                                name.clone(),
+                                                                None,
+                                                                &backend_handle,
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        }
+                                                    }),
+                                            ),
+                                    )
                             })
-                        })).into_any_element()
-            },
-        };
+                        },
+                    ))
+                    .into_any_element(),
+            };
 
         let open_dot_minecraft_button = Button::new("open_dot_minecraft")
             .info()

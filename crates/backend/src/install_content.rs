@@ -288,7 +288,10 @@ impl BackendState {
             // restored from `original_mods/` on stop, so installs into it must be mirrored to the
             // backup to persist.
             let original_mods_dir = if instance_running {
-                dot_minecraft_dir.parent().map(|parent| parent.join("original_mods")).filter(|dir| dir.is_dir())
+                dot_minecraft_dir
+                    .parent()
+                    .map(|parent| parent.join("original_mods"))
+                    .filter(|dir| dir.is_dir())
             } else {
                 None
             };
@@ -1167,7 +1170,12 @@ impl BackendState {
                         },
                     );
 
-                    curseforge_sources.push((hash, ContentSource::CurseforgeProject { project_id: file.mod_id }));
+                    curseforge_sources.push((
+                        hash,
+                        ContentSource::CurseforgeProject {
+                            project_id: file.mod_id,
+                        },
+                    ));
 
                     let Some(path) = SafePath::new(&file.file_name) else {
                         log::warn!("Skipping file because of invalid filename: {}", file.file_name);

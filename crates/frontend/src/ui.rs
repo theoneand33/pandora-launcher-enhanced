@@ -459,13 +459,11 @@ impl Render for LauncherUI {
                     })),
             )
             .when(!hide_skins, |this| {
-                this.child(
-                    MenuGroupItem::new(t::skins::title())
-                        .active(page_type == PageType::Skins)
-                        .on_click(cx.listener(|launcher, _, window, cx| {
-                            launcher.switch_page(PageType::Skins, &[], window, cx);
-                        })),
-                )
+                this.child(MenuGroupItem::new(t::skins::title()).active(page_type == PageType::Skins).on_click(
+                    cx.listener(|launcher, _, window, cx| {
+                        launcher.switch_page(PageType::Skins, &[], window, cx);
+                    }),
+                ))
             });
 
         let content_group = MenuGroup::new(t::instance::content::title())
