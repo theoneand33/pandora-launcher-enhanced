@@ -30,6 +30,7 @@ use crate::{
 pub mod component;
 pub mod data_asset_loader;
 pub mod entity;
+pub mod fenwick;
 pub mod game_output;
 pub mod icon;
 pub mod interface_config;

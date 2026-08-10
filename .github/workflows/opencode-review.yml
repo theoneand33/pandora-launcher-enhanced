@@ -2,7 +2,7 @@ name: opencode-review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   opencode-review:
@@ -22,7 +22,7 @@ jobs:
       - name: Configure git identity for opencode commits
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
+          git config --global user.name "opencode[bot]"
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest

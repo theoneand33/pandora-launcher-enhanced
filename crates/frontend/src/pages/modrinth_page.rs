@@ -1045,20 +1045,13 @@ impl PrimaryAction {
             PrimaryAction::ErrorCheckingForUpdates => {},
             PrimaryAction::UpToDate => {},
             PrimaryAction::Update(ids) => {
-                for id in ids {
-                    let modal_action = ModalAction::default();
-                    data.backend_handle.send(MessageToBackend::UpdateContent {
-                        instance: install_for.unwrap(),
-                        content_id: *id,
-                        modal_action: modal_action.clone(),
-                    });
-                    crate::modals::generic::show_notification(
-                        window,
-                        cx,
-                        t::instance::content::update::error().into(),
-                        modal_action,
-                    );
-                }
+                crate::root::update_multiple_mods(
+                    install_for.unwrap(),
+                    ids.clone(),
+                    &data.backend_handle,
+                    window,
+                    cx,
+                );
             },
         }
     }

@@ -2136,6 +2136,13 @@ de = "Lade Update von CurseForge herunter"
 hu = "Frissítés letöltése a Curseforgeról"
 sv = "Ladda ned uppdatering från Curseforge"
 ru = "Скачать обновление с Curseforge"
+[instance.content.update.all]
+en = "Update All"
+de = "Alle aktualisieren"
+hu = "Összes frissítése"
+sv = "Uppdatera alla"
+ru = "Обновить всё"
+
 [instance.content.update.error]
 en = "Error updating mod"
 de = "Fehler beim Aktualisieren"

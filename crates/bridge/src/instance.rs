@@ -295,10 +295,7 @@ pub enum ContentUpdateStatus {
 
 impl ContentUpdateStatus {
     pub fn can_update(&self) -> bool {
-        match self {
-            ContentUpdateStatus::Modrinth => true,
-            _ => false,
-        }
+        matches!(self, ContentUpdateStatus::Modrinth | ContentUpdateStatus::Curseforge)
     }
 }
 

@@ -7,10 +7,11 @@ use bridge::{
     handle::BackendHandle,
     install::{ContentDownload, ContentInstall, ContentInstallFile, InstallTarget},
     instance::{ContentFolder, InstanceContentSummary, InstanceID},
+    modal_action::ModalAction,
 };
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, IndexPath, Sizable, WindowExt,
+    ActiveTheme as _, Disableable, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
     h_flex,
     input::SelectAll,
@@ -53,6 +54,8 @@ pub struct InstanceContentSubpage {
     // surfaced under their own tab. `None` for the Mods tab.
     mods_content: Option<Entity<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
+    update_check_action: Option<ModalAction>,
+    update_all_action: Option<ModalAction>,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -73,6 +76,10 @@ fn combined_content_of(
         }
     }
     combined
+}
+
+fn is_updatable(s: &InstanceContentSummary, loader: Loader, version: &'static str) -> bool {
+    s.update.can_update(loader, version)
 }
 
 #[derive(Clone, Copy)]
@@ -191,8 +198,8 @@ impl InstanceContentSubpage {
         let content_folder = content_type.content_folder();
         let content = instance.content[content_folder].clone();
         // Non-Mods tabs also read the mods folder so they can surface modpack-bundled content.
-        let mods_content = (content_folder != ContentFolder::Mods)
-            .then(|| instance.content[ContentFolder::Mods].clone());
+        let mods_content =
+            (content_folder != ContentFolder::Mods).then(|| instance.content[ContentFolder::Mods].clone());
 
         let config = InterfaceConfig::get(cx);
         let mut sort_key = content_type.sort_key(config);
@@ -233,13 +240,10 @@ impl InstanceContentSubpage {
             {
                 let content_e = content_for_observe.clone();
                 let mods_e = mods_for_observe.clone();
-                cx.observe(
-                    &content_for_observe,
-                    move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                        list.delegate_mut().set_content(&combined_content_of(&content_e, mods_e.as_ref(), cx));
-                        cx.notify();
-                    },
-                )
+                cx.observe(&content_for_observe, move |list: &mut ListState<ContentListDelegate>, _, cx| {
+                    list.delegate_mut().set_content(&combined_content_of(&content_e, mods_e.as_ref(), cx));
+                    cx.notify();
+                })
                 .detach();
             }
 
@@ -247,7 +251,8 @@ impl InstanceContentSubpage {
                 let content_e = content_for_observe.clone();
                 let mods_for_closure = mods_e.clone();
                 cx.observe(&mods_e, move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                    list.delegate_mut().set_content(&combined_content_of(&content_e, Some(&mods_for_closure), cx));
+                    list.delegate_mut()
+                        .set_content(&combined_content_of(&content_e, Some(&mods_for_closure), cx));
                     cx.notify();
                 })
                 .detach();
@@ -297,6 +302,8 @@ impl InstanceContentSubpage {
             content,
             mods_content,
             sort_dropdown,
+            update_check_action: None,
+            update_all_action: None,
             _add_from_file_task: None,
         }
     }
@@ -328,7 +335,7 @@ impl InstanceContentSubpage {
 }
 
 impl Render for InstanceContentSubpage {
-    fn render(&mut self, _window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let theme = cx.theme();
 
         self.content_states.observe(self.content_type.content_folder());
@@ -336,6 +343,32 @@ impl Render for InstanceContentSubpage {
         if self.mods_content.is_some() {
             self.content_states.observe(ContentFolder::Mods);
         }
+
+        // Poll ModalActions so they reset on completion (both success and error) and
+        // drive `request_animation_frame` while active. Tidy up finished actions
+        // instead of holding them forever.
+        let is_checking = self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
+        if is_checking {
+            window.request_animation_frame();
+        } else if self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
+            self.update_check_action = None;
+        }
+
+        let is_updating_all = self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
+        if is_updating_all {
+            window.request_animation_frame();
+        } else if self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
+            self.update_all_action = None;
+        }
+
+        let combined = combined_content_of(&self.content, self.mods_content.as_ref(), cx);
+        // Single source of truth for updatable items — used for both visibility and click handler.
+        let updatable: Vec<InstanceContentSummary> = combined
+            .iter()
+            .filter(|s| is_updatable(s, self.instance_loader, self.instance_version.as_str()))
+            .cloned()
+            .collect();
+        let has_updates = !updatable.is_empty();
 
         let header = h_flex()
             .gap_3()
@@ -348,14 +381,52 @@ impl Render for InstanceContentSubpage {
                     .success()
                     .compact()
                     .small()
-                    .on_click({
-                        let backend_handle = self.backend_handle.clone();
-                        let instance_id = self.instance;
-                        move |_, window, cx| {
-                            crate::root::start_update_check(instance_id, &backend_handle, window, cx);
+                    .loading(is_checking)
+                    .when(is_checking, |b| b.disabled(true))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if this.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
+                            return;
                         }
-                    }),
+                        let action = ModalAction::default();
+                        this.update_check_action = Some(action.clone());
+                        cx.notify();
+                        crate::root::start_update_check_with_action(
+                            this.instance,
+                            &this.backend_handle,
+                            window,
+                            cx,
+                            action,
+                        );
+                    })),
             )
+            .when(has_updates && !is_checking, |this| {
+                this.child(
+                    Button::new("update-all")
+                        .label(t::instance::content::update::all())
+                        .success()
+                        .compact()
+                        .small()
+                        .loading(is_updating_all)
+                        .when(is_updating_all, |b| b.disabled(true))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if this.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
+                                return;
+                            }
+                            let ids = combined_content_of(&this.content, this.mods_content.as_ref(), cx)
+                                .into_iter()
+                                .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
+                                .map(|s| s.id)
+                                .collect::<Vec<_>>();
+                            if ids.is_empty() {
+                                return;
+                            }
+                            let action =
+                                crate::root::update_multiple_mods(this.instance, ids, &this.backend_handle, window, cx);
+                            this.update_all_action = Some(action);
+                            cx.notify();
+                        })),
+                )
+            })
             .child(
                 Button::new("addmr")
                     .label(t::instance::content::install::from_modrinth())
