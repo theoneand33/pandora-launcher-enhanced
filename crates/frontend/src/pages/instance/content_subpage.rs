@@ -53,7 +53,6 @@ pub struct InstanceContentSubpage {
     // surfaced under their own tab. `None` for the Mods tab.
     mods_content: Option<Entity<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
-    checking: bool,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -74,6 +73,10 @@ fn combined_content_of(
         }
     }
     combined
+}
+
+fn is_updatable(s: &InstanceContentSummary, loader: Loader, version: &'static str) -> bool {
+    s.update.can_update(loader, version)
 }
 
 #[derive(Clone, Copy)]
@@ -192,8 +195,8 @@ impl InstanceContentSubpage {
         let content_folder = content_type.content_folder();
         let content = instance.content[content_folder].clone();
         // Non-Mods tabs also read the mods folder so they can surface modpack-bundled content.
-        let mods_content = (content_folder != ContentFolder::Mods)
-            .then(|| instance.content[ContentFolder::Mods].clone());
+        let mods_content =
+            (content_folder != ContentFolder::Mods).then(|| instance.content[ContentFolder::Mods].clone());
 
         let config = InterfaceConfig::get(cx);
         let mut sort_key = content_type.sort_key(config);
@@ -234,13 +237,10 @@ impl InstanceContentSubpage {
             {
                 let content_e = content_for_observe.clone();
                 let mods_e = mods_for_observe.clone();
-                cx.observe(
-                    &content_for_observe,
-                    move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                        list.delegate_mut().set_content(&combined_content_of(&content_e, mods_e.as_ref(), cx));
-                        cx.notify();
-                    },
-                )
+                cx.observe(&content_for_observe, move |list: &mut ListState<ContentListDelegate>, _, cx| {
+                    list.delegate_mut().set_content(&combined_content_of(&content_e, mods_e.as_ref(), cx));
+                    cx.notify();
+                })
                 .detach();
             }
 
@@ -248,7 +248,8 @@ impl InstanceContentSubpage {
                 let content_e = content_for_observe.clone();
                 let mods_for_closure = mods_e.clone();
                 cx.observe(&mods_e, move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                    list.delegate_mut().set_content(&combined_content_of(&content_e, Some(&mods_for_closure), cx));
+                    list.delegate_mut()
+                        .set_content(&combined_content_of(&content_e, Some(&mods_for_closure), cx));
                     cx.notify();
                 })
                 .detach();
@@ -286,28 +287,6 @@ impl InstanceContentSubpage {
         )
         .detach();
 
-        // Reset checking flag when content reloads after an update check.
-        {
-            let content_clone = content.clone();
-            cx.observe(&content_clone, |this: &mut Self, _, cx| {
-                if this.checking {
-                    this.checking = false;
-                    cx.notify();
-                }
-            })
-            .detach();
-        }
-        if let Some(mods) = mods_content.as_ref() {
-            let mods_clone = mods.clone();
-            cx.observe(&mods_clone, |this: &mut Self, _, cx| {
-                if this.checking {
-                    this.checking = false;
-                    cx.notify();
-                }
-            })
-            .detach();
-        }
-
         Self {
             content_type,
             instance: instance_id,
@@ -320,7 +299,6 @@ impl InstanceContentSubpage {
             content,
             mods_content,
             sort_dropdown,
-            checking: false,
             _add_from_file_task: None,
         }
     }
@@ -361,9 +339,10 @@ impl Render for InstanceContentSubpage {
             self.content_states.observe(ContentFolder::Mods);
         }
 
-        let has_updates = combined_content_of(&self.content, self.mods_content.as_ref(), cx)
+        let combined = combined_content_of(&self.content, self.mods_content.as_ref(), cx);
+        let has_updates = combined
             .iter()
-            .any(|s| s.update.can_update(self.instance_loader, self.instance_version.as_str()));
+            .any(|s| is_updatable(s, self.instance_loader, self.instance_version.as_str()));
 
         let header = h_flex()
             .gap_3()
@@ -376,20 +355,19 @@ impl Render for InstanceContentSubpage {
                     .success()
                     .compact()
                     .small()
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.checking = true;
-                        cx.notify();
-                        let backend_handle = this.backend_handle.clone();
-                        let instance_id = this.instance;
-                        crate::root::start_update_check(instance_id, &backend_handle, window, cx);
-                    })),
+                    .on_click({
+                        let backend_handle = self.backend_handle.clone();
+                        let instance_id = self.instance;
+                        move |_, window, cx| {
+                            crate::root::start_update_check(instance_id, &backend_handle, window, cx);
+                        }
+                    }),
             )
-            .when(has_updates && !self.checking, |this| {
+            .when(has_updates, |this| {
                 this.child(Button::new("update-all").label("Update All").success().compact().small().on_click(
                     cx.listener(move |this, _, window, cx| {
-                        let combined = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
-                        for summary in combined {
-                            if summary.update.can_update(this.instance_loader, this.instance_version.as_str()) {
+                        for summary in combined_content_of(&this.content, this.mods_content.as_ref(), cx) {
+                            if is_updatable(&summary, this.instance_loader, this.instance_version.as_str()) {
                                 crate::root::update_single_mod(
                                     this.instance,
                                     summary.id,
