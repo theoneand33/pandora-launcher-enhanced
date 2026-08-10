@@ -1,9 +1,9 @@
 # Workspace layout
 
 The root `Cargo.toml` defines all shared dependencies and the build profiles.
-The default member is `crates/pandora_launcher`. The workspace uses three git
-dependencies: `gpui` and `gpui_platform` from Zed, and `gpui-component` from
-Longbridge.
+The default member is `crates/pandora_launcher`. The workspace uses four git
+dependencies: `gpui` and `gpui_platform` from Zed, and `gpui-component` and
+`gpui-component-assets` from Longbridge.
 
 | Crate | Role |
 |---|---|
@@ -157,7 +157,7 @@ hu, sv, ru. `en` is hardcoded to language id 0. A TOML structure error makes
 
 ## crates/ftree
 
-Vendored `ftree` crate v1.2.0. Do not edit it. Used by the frontend for
+Vendored `ftree` crate v1.2.0. Do not edit it. The frontend uses it for
 virtualized list heights.
 
 ## crates/reqwest_client
@@ -166,3 +166,66 @@ virtualized list heights.
 goes through the GPUI `reqwest` fork. TLS trusts the OS root store via
 `rustls_platform_verifier`. `redact_error` strips `key=...` from request URLs
 so the CurseForge key never reaches logs.
+
+## Build and platform
+
+This section covers vendoring, offline builds, platform details, and release builds.
+
+### Vendoring and offline builds
+
+`.cargo/config.toml` replaces crates.io and all git sources with the `vendor/` directory. Cargo does not fetch from the network when the vendor tree is current.
+
+After any `Cargo.toml` change, refresh the vendor tree and commit `Cargo.lock`:
+
+```
+./vendor.sh
+```
+
+`vendor.sh` runs `cargo vendor`, copies `gpui-component-assets`, and reapplies the trimmed `image` features to the vendored `gpui` crates. The `patches/` directory holds `zbus-lockstep` and its macros through `[patch.crates-io]`.
+
+### Dependencies
+
+Do not add a dependency unless the user requests it. Use workspace dependencies from the root `Cargo.toml`.
+
+Keep `image` crate features minimal: `png`, `jpeg`, `bmp`, `gif`, and `webp` only. The vendored `gpui` crates use the same set.
+
+### Commands
+
+Daily commands:
+
+```
+cargo check
+cargo fmt
+cargo build
+./vendor.sh && cargo build --release --offline
+```
+
+Release builds use per-platform scripts with a version argument: `scripts/build_linux.sh`, `scripts/build_mac.sh`, and `scripts/build_windows.sh`. CI runs these scripts through `.github/workflows/cd.yml` on tags that match `vX.Y.Z`.
+
+### Platform notes
+
+- The backend builds `rusqlite` bundled on Windows and as a system library on Linux and macOS. Linux needs `libsqlite3-dev` or the equivalent.
+- Windows-only dependencies (`junction`, `mslnk`, `windows`) stay behind `cfg(target_os = "windows")`.
+- `crates/pandora_launcher/build.rs` embeds the Windows icon through `winresource`.
+- `crates/backend/assets/authlib-injector.jar` is embedded with `include_bytes!` for offline accounts.
+- Portable mode activates when the executable file name contains `portable`.
+
+### Entry points
+
+- `crates/pandora_launcher/src/main.rs:33` — `main`, single-instance lock, runtime, logging.
+- `backend::start` — backend.rs:108.
+- `BackendState::handle` — backend.rs:461, the event loop.
+- `handle_message` — backend_handler.rs:65, message dispatch.
+- `Processor::process` — processor.rs:75, frontend message dispatch.
+- `Launcher::launch` — launch/mod.rs:124.
+- `install_content` — install_content.rs:129.
+- `create_pair` — bridge/handle.rs:13, channel pair.
+
+## Tests
+
+Tests are sparse by design. Use plain `assert` with `#[cfg(test)]`. Do not add a test framework.
+
+- `backend/src/skin_server.rs:194` has three `#[tokio::test]` tests.
+- `reqwest_client` has two tests for proxy URL handling.
+- `ftree` has a table-driven unit suite.
+- The `t` crate uses its `locales.toml` compile-error path as its test. A structure error in `locales.toml` makes `build.rs` write `compile_error!` into `src/lib.rs` and the build fails.

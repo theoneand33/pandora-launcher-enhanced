@@ -1,17 +1,17 @@
 # Backend
 
-This file covers the launcher logic in `crates/backend`. Read
-`docs/agents/architecture.md` first to see how the backend connects to the
-frontend.
+This file covers the launcher logic in `crates/backend`. Read the
+Architecture section in `AGENTS.md` first to see how the backend connects
+to the frontend.
 
 ## Data and persistence
 
 There is **no SQLite** for launcher state. `rusqlite` reads only the Modrinth
 app's profile DB during import.
 
-All launcher state is JSON. `Persistent<T>` (persistent.rs:8) loads on demand,
-re-reads from disk when a filesystem watcher marks the file dirty, and writes
-atomically via temp file, `sync_all`, and rename.
+All launcher state is JSON. `Persistent<T>` (persistent.rs:8) loads on demand
+and re-reads from disk when a filesystem watcher marks the file dirty. It
+writes atomically via a temp file, `sync_all`, and rename.
 
 Files under the launcher directory:
 
@@ -52,9 +52,9 @@ Flow from `StartInstance`:
    `original_mods/`.
 
 The wrapper jar (`wrapper/LaunchWrapper.jar`) is the first classpath entry.
-Its main class is `com.moulberry.pandora.LaunchWrapper`. Game arguments are
-not passed on the command line. They stream to the child's stdin as
-`arg\n<value>\n...launch\n<mainclass>\n`.
+Its main class is `com.moulberry.pandora.LaunchWrapper`. The launcher does
+not pass game arguments on the command line. They stream to the child's stdin
+as `arg\n<value>\n...launch\n<mainclass>\n`.
 
 Offline mode starts the local skin server and injects
 `-javaagent:authlib-injector=<yggdrasil-url>`.
@@ -78,7 +78,7 @@ Update checks batch against Modrinth and CurseForge with a semaphore of 8.
 
 `syncing.rs` shares files and folders across instances. File targets copy the
 newest version. Folder targets replace the instance folder with a symlink
-(unix) or junction (windows) into `synced/`. `options.txt` merges across all
+(Unix) or junction (Windows) into `synced/`. `options.txt` merges across all
 instances.
 
 ## Authentication state
@@ -88,7 +88,7 @@ and cancel support. Credentials go to the OS keyring through `auth`.
 
 ## Logging
 
-The `log` crate everywhere. `main.rs` configures fern once:
+The code uses the `log` crate everywhere. `main.rs` configures fern once:
 
 - Colored stdout plus `launcher.log` (rotated to `.log.old`).
 - `pandora_launcher`, `auth`, `backend`, `frontend`, `bridge`, `command` at
