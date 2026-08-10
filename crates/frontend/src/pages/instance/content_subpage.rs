@@ -381,7 +381,12 @@ impl Render for InstanceContentSubpage {
                     .success()
                     .compact()
                     .small()
+                    .loading(is_checking)
+                    .when(is_checking, |b| b.disabled(true))
                     .on_click(cx.listener(move |this, _, window, cx| {
+                        if this.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
+                            return;
+                        }
                         let action = ModalAction::default();
                         this.update_check_action = Some(action.clone());
                         cx.notify();
@@ -395,8 +400,6 @@ impl Render for InstanceContentSubpage {
                     })),
             )
             .when(has_updates && !is_checking, |this| {
-                // Capture updatable ids for the handler — source of truth is the precomputed vec.
-                let updatable_ids: Vec<_> = updatable.iter().map(|s| s.id).collect();
                 this.child(
                     Button::new("update-all")
                         .label(t::instance::content::update::all())
@@ -409,16 +412,11 @@ impl Render for InstanceContentSubpage {
                             if this.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
                                 return;
                             }
-                            // Re-derive from live state if capture is empty (list may have changed).
-                            let ids = if updatable_ids.is_empty() {
-                                combined_content_of(&this.content, this.mods_content.as_ref(), cx)
-                                    .into_iter()
-                                    .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
-                                    .map(|s| s.id)
-                                    .collect::<Vec<_>>()
-                            } else {
-                                updatable_ids.clone()
-                            };
+                            let ids = combined_content_of(&this.content, this.mods_content.as_ref(), cx)
+                                .into_iter()
+                                .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
+                                .map(|s| s.id)
+                                .collect::<Vec<_>>();
                             if ids.is_empty() {
                                 return;
                             }
