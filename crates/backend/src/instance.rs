@@ -1088,7 +1088,11 @@ impl Instance {
 
     /// Removes the given content ids from the cached mods summaries. Used after
     /// mirroring deletions to the backup folder while the instance is running.
-    pub fn remove_frozen_mods_summaries(&mut self, backend: &Arc<BackendState>, removed: &FxHashSet<InstanceContentID>) {
+    pub fn remove_frozen_mods_summaries(
+        &mut self,
+        backend: &Arc<BackendState>,
+        removed: &FxHashSet<InstanceContentID>,
+    ) {
         let Some(summaries) = self.content_state[ContentFolder::Mods].summaries.as_ref() else {
             return;
         };

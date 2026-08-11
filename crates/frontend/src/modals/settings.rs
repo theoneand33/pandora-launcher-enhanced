@@ -348,9 +348,8 @@ impl Settings {
                                 .on_click(cx.listener({
                                     let backend_handle = self.backend_handle.clone();
                                     move |settings, value, window, cx| {
-                                        backend_handle.send(MessageToBackend::SetOpenGameOutputAfterLaunching {
-                                            value: *value,
-                                        });
+                                        backend_handle
+                                            .send(MessageToBackend::SetOpenGameOutputAfterLaunching { value: *value });
                                         settings.update_backend_configuration(window, cx);
                                     }
                                 })),
@@ -374,22 +373,18 @@ impl Settings {
                 ))
                 .child(crate::labelled(
                     t::settings::modification::title(),
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            Checkbox::new("allow-modify-while-running")
-                                .label(t::settings::modification::allow_modify_while_running())
-                                .checked(backend_config.allow_modify_while_running)
-                                .on_click(cx.listener({
-                                    let backend_handle = self.backend_handle.clone();
-                                    move |settings, value, window, cx| {
-                                        backend_handle.send(MessageToBackend::SetAllowModifyWhileRunning {
-                                            value: *value,
-                                        });
-                                        settings.update_backend_configuration(window, cx);
-                                    }
-                                })),
-                        ),
+                    v_flex().gap_2().child(
+                        Checkbox::new("allow-modify-while-running")
+                            .label(t::settings::modification::allow_modify_while_running())
+                            .checked(backend_config.allow_modify_while_running)
+                            .on_click(cx.listener({
+                                let backend_handle = self.backend_handle.clone();
+                                move |settings, value, window, cx| {
+                                    backend_handle.send(MessageToBackend::SetAllowModifyWhileRunning { value: *value });
+                                    settings.update_backend_configuration(window, cx);
+                                }
+                            })),
+                    ),
                 ));
         } else {
             div = div.child(Spinner::new().large());

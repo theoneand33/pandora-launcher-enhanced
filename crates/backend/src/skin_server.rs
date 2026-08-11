@@ -39,16 +39,7 @@ pub async fn start_skin_server(
     let skin_url = format!("http://127.0.0.1:{port}/skins/{uuid_simple}.png");
 
     tokio::task::spawn(async move {
-        serve_skin(
-            listener,
-            server_shutdown,
-            skin_task,
-            uuid_simple,
-            username,
-            variant,
-            skin_url,
-        )
-        .await;
+        serve_skin(listener, server_shutdown, skin_task, uuid_simple, username, variant, skin_url).await;
     });
 
     let url = format!("http://127.0.0.1:{port}/skins/{}.png", uuid.simple());
@@ -105,10 +96,7 @@ async fn handle_connection(
 
     let (status, content_type, body): (&str, &str, Vec<u8>) = if path == format!("/skins/{uuid_simple}.png") {
         ("200 OK", "image/png", skin.to_vec())
-    } else if path == "/"
-        || path == "/api/yggdrasil"
-        || path == "/api/yggdrasil/"
-    {
+    } else if path == "/" || path == "/api/yggdrasil" || path == "/api/yggdrasil/" {
         let meta = serde_json::json!({
             "meta": {
                 "serverName": "PandoraLauncher",
@@ -200,10 +188,9 @@ mod tests {
         let skin = UniqueBytes::new(b"fake-png-bytes");
         let uuid = Uuid::parse_str("5ef06b4d-a14c-3d8b-9b4a-8c0f0a1e2b3c").unwrap();
 
-        let (guard, url) =
-            start_skin_server(skin.clone(), uuid, Arc::from("TestPlayer"), SkinVariant::Classic)
-                .await
-                .expect("server should start");
+        let (guard, url) = start_skin_server(skin.clone(), uuid, Arc::from("TestPlayer"), SkinVariant::Classic)
+            .await
+            .expect("server should start");
         let parsed = url::Url::parse(&url).unwrap();
         let path = parsed.path().to_string();
 
@@ -230,17 +217,15 @@ mod tests {
         let skin = UniqueBytes::new(b"fake-png-bytes");
         let uuid = Uuid::parse_str("5ef06b4d-a14c-3d8b-9b4a-8c0f0a1e2b3c").unwrap();
 
-        let (guard, url) =
-            start_skin_server(skin, uuid, Arc::from("TestPlayer"), SkinVariant::Slim)
-                .await
-                .expect("server should start");
+        let (guard, url) = start_skin_server(skin, uuid, Arc::from("TestPlayer"), SkinVariant::Slim)
+            .await
+            .expect("server should start");
         let parsed = url::Url::parse(&url).unwrap();
         let port = parsed.port().unwrap();
 
-        let mut socket = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
-            .await
-            .unwrap();
-        let profile_path = format!("/api/yggdrasil/sessionserver/session/minecraft/profile/{}?unsigned=false", uuid.simple());
+        let mut socket = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.unwrap();
+        let profile_path =
+            format!("/api/yggdrasil/sessionserver/session/minecraft/profile/{}?unsigned=false", uuid.simple());
         socket
             .write_all(format!("GET {profile_path} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").as_bytes())
             .await
@@ -251,7 +236,12 @@ mod tests {
         let text = String::from_utf8_lossy(&response);
         assert!(text.starts_with("HTTP/1.1 200 OK"), "got: {text}");
         // Body should contain profile JSON with textures
-        assert!(text.contains("\"name\":\"textures\"") || text.contains("\"name\": \"textures\"") || text.contains("textures"), "got: {text}");
+        assert!(
+            text.contains("\"name\":\"textures\"")
+                || text.contains("\"name\": \"textures\"")
+                || text.contains("textures"),
+            "got: {text}"
+        );
         assert!(text.contains("TestPlayer"), "got: {text}");
 
         drop(guard);
@@ -262,10 +252,9 @@ mod tests {
         let skin = UniqueBytes::new(b"fake-png-bytes");
         let uuid = Uuid::parse_str("5ef06b4d-a14c-3d8b-9b4a-8c0f0a1e2b3c").unwrap();
 
-        let (_guard, url) =
-            start_skin_server(skin, uuid, Arc::from("TestPlayer"), SkinVariant::Classic)
-                .await
-                .expect("server should start");
+        let (_guard, url) = start_skin_server(skin, uuid, Arc::from("TestPlayer"), SkinVariant::Classic)
+            .await
+            .expect("server should start");
         let parsed = url::Url::parse(&url).unwrap();
 
         let mut socket = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", parsed.port().unwrap()))

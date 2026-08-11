@@ -49,11 +49,11 @@ use crate::{
         instance::ContentStates,
         metadata::{AsMetadataResult, FrontendMetadata, FrontendMetadataResult},
     },
+    format_downloads,
     icon::PandoraIcon,
     interface_config::InterfaceConfig,
     pages::page::Page,
     ui,
-    format_downloads,
 };
 
 fn show_vanilla_change_to_fabric_modal(
@@ -263,10 +263,12 @@ impl ModrinthSearchPage {
                                     status: ContentUpdateStatus::Unknown,
                                 };
                                 all_installed_content_by_project.entry(project_id.clone()).or_default().push(dangling);
-                                specific_installed_content.entry(project_id.clone()).or_default().push(InstalledContent {
-                                    content_id: InstanceContentID::dangling(),
-                                    status: ContentUpdateStatus::Unknown,
-                                });
+                                specific_installed_content.entry(project_id.clone()).or_default().push(
+                                    InstalledContent {
+                                        content_id: InstanceContentID::dangling(),
+                                        status: ContentUpdateStatus::Unknown,
+                                    },
+                                );
                             }
                         }
                     }
@@ -289,7 +291,9 @@ impl ModrinthSearchPage {
                                         status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
                                     })
                                 },
-                                ContentSource::Manual | ContentSource::ModrinthUnknown | ContentSource::CurseforgeProject { .. } => {},
+                                ContentSource::Manual
+                                | ContentSource::ModrinthUnknown
+                                | ContentSource::CurseforgeProject { .. } => {},
                             }
 
                             let ContentType::ModrinthModpack { files, .. } = &summary.content_summary.extra else {
@@ -647,16 +651,13 @@ impl ModrinthSearchPage {
 
                         let icon = icon_for(category).unwrap_or("icons/diamond.svg");
                         let icon = Icon::empty().path(icon);
-                        let translated_category = t::modrinth::category::get(category, false)
-                            .unwrap_or("missing_translation");
+                        let translated_category =
+                            t::modrinth::category::get(category, false).unwrap_or("missing_translation");
                         Some(h_flex().gap_1().child(icon).child(translated_category))
                     })
                 });
 
-                let downloads = h_flex()
-                    .gap_1()
-                    .child(PandoraIcon::Download)
-                    .child(format_downloads(hit.downloads));
+                let downloads = h_flex().gap_1().child(PandoraIcon::Download).child(format_downloads(hit.downloads));
 
                 let open_project_page = {
                     let project_id = hit.project_id.clone();
@@ -1045,13 +1046,7 @@ impl PrimaryAction {
             PrimaryAction::ErrorCheckingForUpdates => {},
             PrimaryAction::UpToDate => {},
             PrimaryAction::Update(ids) => {
-                crate::root::update_multiple_mods(
-                    install_for.unwrap(),
-                    ids.clone(),
-                    &data.backend_handle,
-                    window,
-                    cx,
-                );
+                crate::root::update_multiple_mods(install_for.unwrap(), ids.clone(), &data.backend_handle, window, cx);
             },
         }
     }
@@ -1331,7 +1326,6 @@ impl Render for ModrinthSearchPage {
         h_flex().flex_1().min_h_0().size_full().child(parameters).child(content)
     }
 }
-
 
 pub fn icon_for(str: &str) -> Option<&'static str> {
     match str {

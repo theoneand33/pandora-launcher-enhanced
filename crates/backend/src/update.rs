@@ -55,8 +55,7 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         let response = match response {
             Ok(response) => response,
             Err(err) => {
-                log::error!("Error while requesting update manifest: {}", err);
-                send.send_error("Unable to fetch Pandora update manifest, see logs for more details");
+                log::warn!("Unable to fetch Pandora update manifest: {}", err);
                 return;
             },
         };
@@ -78,10 +77,13 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
     }
 
     let Some(manifest_bytes) = manifest_bytes else {
-        send.send_error(format!(
-            "Unable to fetch Pandora update manifest, non-200 status code: {}",
-            last_status.unwrap_or(StatusCode::NOT_FOUND)
-        ));
+        let status = last_status.unwrap_or(StatusCode::NOT_FOUND);
+        // ponytail: 404 when no release exists is expected, do not surface to user
+        if status == StatusCode::NOT_FOUND {
+            log::info!("No Pandora update manifest found (404), skipping update check");
+        } else {
+            log::warn!("Unable to fetch Pandora update manifest, non-200 status code: {}", status);
+        }
         return;
     };
 

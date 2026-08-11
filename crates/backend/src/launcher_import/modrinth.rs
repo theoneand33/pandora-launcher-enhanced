@@ -170,9 +170,7 @@ pub fn read_profiles_from_modrinth_db(modrinth: &Path) -> rusqlite::Result<Optio
 
     let conn = rusqlite::Connection::open(app_db)?;
 
-    let custom_dir = conn.query_one("SELECT custom_dir FROM settings", [], |row| {
-        row.get::<_, String>(0)
-    }).ok();
+    let custom_dir = conn.query_one("SELECT custom_dir FROM settings", [], |row| row.get::<_, String>(0)).ok();
 
     let mut profile_dir_main = modrinth.join("profiles");
     let mut profile_dir_fallback = None;
