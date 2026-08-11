@@ -45,7 +45,7 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         format!("update_{}.json", std::env::consts::OS),
         format!("update_manifest_{}.json", std::env::consts::OS),
     ];
-    let mut last_status = None;
+    let mut last_non_404_status = None;
     let mut manifest_bytes = None;
 
     for manifest_name in manifest_names {
@@ -55,14 +55,17 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         let response = match response {
             Ok(response) => response,
             Err(err) => {
-                log::error!("Error while requesting update manifest: {}", err);
-                send.send_error("Unable to fetch Pandora update manifest, see logs for more details");
+                log::warn!("Unable to fetch Pandora update manifest: {}", err);
+                send.send_warning("Unable to check for updates, network error");
                 return;
             },
         };
 
         if response.status() != StatusCode::OK {
-            last_status = Some(response.status());
+            let status = response.status();
+            if status != StatusCode::NOT_FOUND {
+                last_non_404_status = Some(status);
+            }
             continue;
         }
 
@@ -78,10 +81,13 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
     }
 
     let Some(manifest_bytes) = manifest_bytes else {
-        send.send_error(format!(
-            "Unable to fetch Pandora update manifest, non-200 status code: {}",
-            last_status.unwrap_or(StatusCode::NOT_FOUND)
-        ));
+        let status = last_non_404_status.unwrap_or(StatusCode::NOT_FOUND);
+        // ponytail: 404 when no release exists is expected, do not surface to user
+        if status == StatusCode::NOT_FOUND {
+            log::info!("No Pandora update manifest found (404), skipping update check");
+        } else {
+            log::warn!("Unable to fetch Pandora update manifest, non-200 status code: {}", status);
+        }
         return;
     };
 
