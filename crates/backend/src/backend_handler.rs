@@ -1391,7 +1391,11 @@ impl BackendState {
                                 Ok(0) => return,
                                 Ok(_) => {
                                     let replaced = log_reader::replace(line.trim_ascii_end());
-                                    if send.blocking_send(Arc::<str>::from(replaced.as_ref())).is_err() {
+                                    let arc: Arc<str> = match replaced {
+                                        Cow::Owned(s) => s.into(),
+                                        Cow::Borrowed(b) => Arc::from(b),
+                                    };
+                                    if send.blocking_send(arc).is_err() {
                                         return;
                                     }
                                     line.clear();
@@ -1401,7 +1405,11 @@ impl BackendState {
                                     let error = format!("Error while reading file: {e}");
                                     for line in error.split('\n') {
                                         let replaced = log_reader::replace(line.trim_ascii_end());
-                                        if send.blocking_send(Arc::<str>::from(replaced.as_ref())).is_err() {
+                                        let arc: Arc<str> = match replaced {
+                                            Cow::Owned(s) => s.into(),
+                                            Cow::Borrowed(b) => Arc::from(b),
+                                        };
+                                        if send.blocking_send(arc).is_err() {
                                             return;
                                         }
                                     }
@@ -1470,7 +1478,11 @@ impl BackendState {
                                     let error = format!("Error while reading file: {e}");
                                     for line in error.split('\n') {
                                         let replaced = log_reader::replace(line.trim_ascii_end());
-                                        if send.send(Arc::<str>::from(replaced.as_ref())).await.is_err() {
+                                        let arc: Arc<str> = match replaced {
+                                            Cow::Owned(s) => s.into(),
+                                            Cow::Borrowed(b) => Arc::from(b),
+                                        };
+                                        if send.send(arc).await.is_err() {
                                             return;
                                         }
                                     }
@@ -2940,13 +2952,21 @@ async fn send_log_line(
     match str::from_utf8(&*line) {
         Ok(utf8) => {
             let replaced = log_reader::replace(utf8.trim_ascii_end());
-            send.send(Arc::<str>::from(replaced.as_ref())).await?;
+            let arc: Arc<str> = match replaced {
+                Cow::Owned(s) => s.into(),
+                Cow::Borrowed(b) => Arc::from(b),
+            };
+            send.send(arc).await?;
         },
         Err(e) => {
             let error = format!("Invalid UTF8: {e}");
             for line in error.split('\n') {
                 let replaced = log_reader::replace(line.trim_ascii_end());
-                send.send(Arc::<str>::from(replaced.as_ref())).await?;
+                let arc: Arc<str> = match replaced {
+                    Cow::Owned(s) => s.into(),
+                    Cow::Borrowed(b) => Arc::from(b),
+                };
+                send.send(arc).await?;
             }
         },
     }
