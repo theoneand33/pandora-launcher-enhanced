@@ -1,9 +1,5 @@
 # AGENTS.md
 
-## Important
-
-Read this file first for every change. It gives the tech stack, the hard rules, and the core architecture. Use the routing table at the end to find the file for your task. Read that file before you edit code.
-
 ### Tech stack
 
 - Rust Edition 2024 with Cargo resolver 3. The workspace has 11 crates.
@@ -66,7 +62,7 @@ Run `./vendor.sh` after you change `Cargo.toml`. Then commit `Cargo.lock`. For r
 
 ## Routing
 
-Read the file that matches your task before you edit code.
+You must read the file that matches your task before you edit code.
 
 | Task | Read |
 |---|---|

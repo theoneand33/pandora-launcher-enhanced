@@ -5,19 +5,19 @@ The default member is `crates/pandora_launcher`. The workspace uses four git
 dependencies: `gpui` and `gpui_platform` from Zed, and `gpui-component` and
 `gpui-component-assets` from Longbridge.
 
-| Crate | Role |
-|---|---|
+| Crate              | Role                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------- |
 | `pandora_launcher` | Binary. Entry point, CLI, logging, single-instance lock, panic hooks, deadlock detector. |
-| `frontend` | GPUI UI. Pages, modals, components, skin renderer, message processor. |
-| `backend` | All launcher logic. Instances, content, launching, syncing, auth state, update, skins. |
-| `bridge` | Shared message enums and channel handles. No logic. |
-| `auth` | Microsoft OAuth login flow and OS keyring credential storage. |
-| `command` | Process spawning layer. Normal, elevated, and sandboxed spawn. |
-| `schema` | Serde data models for Mojang, Modrinth, CurseForge, Forge, Fabric APIs. |
-| `nbt` | Minecraft NBT binary format encode/decode. |
-| `t` | Compile-time internationalization. Generates code from `locales.toml`. |
-| `ftree` | Vendored Fenwick tree crate (prefix sums for virtualized lists). |
-| `reqwest_client` | Adapter that exposes the GPUI HTTP client to the rest of the app. |
+| `frontend`         | GPUI UI. Pages, modals, components, skin renderer, message processor.                    |
+| `backend`          | All launcher logic. Instances, content, launching, syncing, auth state, update, skins.   |
+| `bridge`           | Shared message enums and channel handles. No logic.                                      |
+| `auth`             | Microsoft OAuth login flow and OS keyring credential storage.                            |
+| `command`          | Process spawning layer. Normal, elevated, and sandboxed spawn.                           |
+| `schema`           | Serde data models for Mojang, Modrinth, CurseForge, Forge, Fabric APIs.                  |
+| `nbt`              | Minecraft NBT binary format encode/decode.                                               |
+| `t`                | Compile-time internationalization. Generates code from `locales.toml`.                   |
+| `ftree`            | Vendored Fenwick tree crate (prefix sums for virtualized lists).                         |
+| `reqwest_client`   | Adapter that exposes the GPUI HTTP client to the rest of the app.                        |
 
 ## crates/frontend
 
