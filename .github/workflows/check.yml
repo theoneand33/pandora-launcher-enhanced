@@ -1,0 +1,48 @@
+name: check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+      - "wrapper/**"
+      - "scripts/**"
+      - "**/*.rs"
+  push:
+    branches:
+      - master
+    tags-ignore:
+      - "**"
+    paths:
+      - ".github/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rustfmt.toml"
+      - "wrapper/**"
+      - "scripts/**"
+      - "**/*.rs"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Vendor dependencies
+        run: ./vendor.sh
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Install needed packages on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes libssl-dev libdbus-1-dev libx11-xcb1 libxkbcommon-x11-dev pkg-config libseccomp-dev libfontconfig-dev
+
+      - name: Check
+        run: cargo check --offline
