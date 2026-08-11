@@ -1250,6 +1250,7 @@ dependencies = [
  "scopeguard",
  "security-framework",
  "security-framework-sys",
+ "t",
  "tokio",
  "windows 0.62.2",
 ]

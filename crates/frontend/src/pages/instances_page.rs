@@ -159,7 +159,7 @@ impl Render for InstancesPage {
                                 .size_12()
                                 .text_color(cx.theme().muted_foreground),
                         )
-                        .child(div().text_lg().text_color(cx.theme().muted_foreground).child("No matches")),
+                        .child(div().text_lg().text_color(cx.theme().muted_foreground).child(t::common::no_matches())),
                 )
                 .into_any_element();
         }

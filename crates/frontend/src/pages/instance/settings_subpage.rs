@@ -947,7 +947,7 @@ impl Render for InstanceSettingsSubpage {
                 t::account::override_account(),
                 h_flex()
                     .gap_2()
-                    .child(Select::new(&self.account_items).placeholder("No override").cleanable(true)),
+                    .child(Select::new(&self.account_items).placeholder(t::common::no_override()).cleanable(true)),
             ))
             .child(crate::labelled(
                 t::instance::sync::label(),
@@ -968,9 +968,9 @@ impl Render for InstanceSettingsSubpage {
                     .label(t::instance::security::sandbox())
                     .disabled(!self.sandbox && !self.sandbox_available)
                     .tooltip(if self.sandbox_available {
-                        "Sandbox the instance, preventing access to files and systems it shouldn't have access to"
+                        t::instance::security::sandbox::tooltip()
                     } else {
-                        "Cannot sandbox: missing bwrap and xdg-dbus-proxy commands"
+                        t::instance::security::sandbox::not_available()
                     })
                     .checked(self.sandbox)
                     .on_click(cx.listener(|page, value, _, _| {
@@ -988,13 +988,13 @@ impl Render for InstanceSettingsSubpage {
         let mem_info: Option<SharedString> = {
             let mut parts = Vec::new();
             if let Some(total) = total_mib {
-                parts.push(format!("System RAM: {total} MiB"));
+                parts.push(t::instance::memory::system_ram(total));
                 if memory_override_enabled && max_val > 0 && max_val as u64 > total as u64 * 85 / 100 {
-                    parts.push(format!("— warning: max {max_val} MiB > 85% of system RAM"));
+                    parts.push(t::instance::memory::warning_high(max_val));
                 }
             }
             if memory_override_enabled && min_val > max_val && max_val != 0 {
-                parts.push("— min > max".to_string());
+                parts.push(t::instance::memory::min_gt_max().to_string());
             }
             if parts.is_empty() {
                 None
@@ -1112,7 +1112,7 @@ impl Render for InstanceSettingsSubpage {
                             )
                             .child(
                                 Button::new("detect_java")
-                                    .label("Detect")
+                                    .label(t::instance::jvm_binary::detect())
                                     .small()
                                     .disabled(!jvm_binary_enabled)
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1122,10 +1122,10 @@ impl Render for InstanceSettingsSubpage {
                             ),
                     )
                     .when(!self.detected_javas.is_empty(), |this| {
-                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
+                        this.child(v_flex().gap_1().children(self.detected_javas.iter().enumerate().map(|(idx, p)| {
                             let path = p.clone();
                             let label: SharedString = p.to_string_lossy().into_owned().into();
-                            Button::new(SharedString::from(format!("use-java-{}", label)))
+                            Button::new(SharedString::from(format!("use-java-{idx}")))
                                 .label(label.clone())
                                 .small()
                                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -1308,7 +1308,7 @@ impl Render for InstanceSettingsSubpage {
             .gap_4()
             .size_full()
             .child(crate::labelled(
-                "Instance Folder (click to relocate)",
+                t::instance::folder(),
                 self.instance_root_label.button("relocate").on_click({
                     let instance = self.instance.clone();
                     let backend_handle = self.backend_handle.clone();
@@ -1320,7 +1320,7 @@ impl Render for InstanceSettingsSubpage {
                             files: false,
                             directories: true,
                             multiple: false,
-                            prompt: Some("Select empty directory".into()),
+                            prompt: Some(t::instance::select_empty_directory().into()),
                         });
                         let backend_handle = backend_handle.clone();
                         cx.spawn(async move |_| {

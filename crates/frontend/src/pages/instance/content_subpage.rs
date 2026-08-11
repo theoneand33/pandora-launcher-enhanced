@@ -558,31 +558,35 @@ impl Render for InstanceContentSubpage {
                             })),
                     ),
             )
-            .child(h_flex().gap_1().child(div().text_sm().child("Outdated only")).child(
-                Switch::new("outdated_only").checked(self.show_outdated_only).on_click(cx.listener(
-                    |this, checked, _, cx| {
-                        if this.show_outdated_only == *checked {
-                            return;
-                        }
-                        this.show_outdated_only = *checked;
-                        let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
-                        let cl = this.content_list.clone();
-                        cx.update_entity(&cl, |list, cx| {
-                            list.delegate_mut().set_outdated_only(*checked);
-                            list.delegate_mut().set_content(&content);
+            .child(
+                h_flex()
+                    .gap_1()
+                    .child(div().text_sm().child(t::instance::content::outdated_only()))
+                    .child(Switch::new("outdated_only").checked(self.show_outdated_only).on_click(cx.listener(
+                        |this, checked, _, cx| {
+                            if this.show_outdated_only == *checked {
+                                return;
+                            }
+                            this.show_outdated_only = *checked;
+                            let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                            let cl = this.content_list.clone();
+                            cx.update_entity(&cl, |list, cx| {
+                                list.delegate_mut().set_outdated_only(*checked);
+                                list.delegate_mut().set_content(&content);
+                                cx.notify();
+                            });
                             cx.notify();
-                        });
-                        cx.notify();
-                    },
-                )),
-            ))
+                        },
+                    ))),
+            )
             .child(
                 Button::new("enable_all")
                     .small()
+                    // content_ids() is scoped to current tab + filter (visible summaries), so "all" is tab-scoped
                     .label(if self.show_outdated_only {
-                        "Enable outdated"
+                        t::instance::content::enable_outdated()
                     } else {
-                        "Enable all"
+                        t::instance::content::enable_all()
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                         let ids = this.content_list.read(cx).delegate().content_ids();
@@ -600,9 +604,9 @@ impl Render for InstanceContentSubpage {
                 Button::new("disable_all")
                     .small()
                     .label(if self.show_outdated_only {
-                        "Disable outdated"
+                        t::instance::content::disable_outdated()
                     } else {
-                        "Disable all"
+                        t::instance::content::disable_all()
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                         let ids = this.content_list.read(cx).delegate().content_ids();

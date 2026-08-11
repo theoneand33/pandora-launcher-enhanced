@@ -22,6 +22,7 @@ pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
     filter: SharedString,
+    visible_cache: Vec<usize>,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
     _instance_removed_subscription: Subscription,
@@ -36,25 +37,29 @@ impl InstanceList {
             let _instance_added_subscription = cx.subscribe::<_, InstanceAddedEvent>(
                 &instances,
                 |table: &mut TableState<InstanceList>, _, event, cx| {
-                    table.delegate_mut().items.insert(0, event.instance.clone());
+                    let d = table.delegate_mut();
+                    d.items.insert(0, event.instance.clone());
+                    d.rebuild_visible_cache();
                     cx.notify();
                 },
             );
             let _instance_removed_subscription =
                 cx.subscribe::<_, InstanceRemovedEvent>(&instances, |table, _, event, cx| {
-                    table.delegate_mut().items.retain(|instance| instance.id != event.id);
+                    let d = table.delegate_mut();
+                    d.items.retain(|instance| instance.id != event.id);
+                    d.rebuild_visible_cache();
                     cx.notify();
                 });
             let _instance_modified_subscription =
                 cx.subscribe::<_, InstanceModifiedEvent>(&instances, |table, _, event, cx| {
-                    if let Some(entry) =
-                        table.delegate_mut().items.iter_mut().find(|entry| entry.id == event.instance.id)
-                    {
+                    let d = table.delegate_mut();
+                    if let Some(entry) = d.items.iter_mut().find(|entry| entry.id == event.instance.id) {
                         *entry = event.instance.clone();
+                        d.rebuild_visible_cache();
                         cx.notify();
                     }
                 });
-            let instance_list = Self {
+            let mut instance_list = Self {
                 columns: vec![
                     Column::new("pin", "").width(36.).fixed_left().movable(false).resizable(false),
                     Column::new("controls", "").width(150.).fixed_left().movable(false).resizable(false),
@@ -73,17 +78,20 @@ impl InstanceList {
                 ],
                 items,
                 filter: SharedString::default(),
+                visible_cache: Vec::new(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
                 _instance_removed_subscription,
                 _instance_modified_subscription,
             };
+            instance_list.rebuild_visible_cache();
             TableState::new(instance_list, window, cx)
         })
     }
 
     pub fn set_filter(&mut self, query: SharedString) {
         self.filter = query;
+        self.rebuild_visible_cache();
     }
 
     fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
@@ -105,18 +113,25 @@ impl InstanceList {
         false
     }
 
-    fn visible_indices(&self) -> Vec<usize> {
-        let lower = self.filter.to_lowercase();
-        let mut out: Vec<usize> = self
-            .items
+    fn compute_visible(items: &[InstanceEntry], filter: &str) -> Vec<usize> {
+        let lower = filter.to_lowercase();
+        let mut out: Vec<usize> = items
             .iter()
             .enumerate()
             .filter(|(_, e)| Self::matches_filter(e, &lower))
             .map(|(i, _)| i)
             .collect();
         // pinned first, stable to preserve order from perform_sort
-        out.sort_by(|&a, &b| self.items[b].configuration.pinned.cmp(&self.items[a].configuration.pinned));
+        out.sort_by(|&a, &b| items[b].configuration.pinned.cmp(&items[a].configuration.pinned));
         out
+    }
+
+    fn rebuild_visible_cache(&mut self) {
+        self.visible_cache = Self::compute_visible(&self.items, &self.filter);
+    }
+
+    fn visible_indices(&self) -> &[usize] {
+        &self.visible_cache
     }
 
     fn visible_entry(&self, visible_ix: usize) -> Option<&InstanceEntry> {
@@ -276,7 +291,11 @@ impl InstanceList {
                     } else {
                         PandoraIcon::StarOff
                     })
-                    .tooltip(if pinned { "Unpin" } else { "Pin" })
+                    .tooltip(if pinned {
+                        t::instance::unpin()
+                    } else {
+                        t::instance::pin()
+                    })
                     .on_click(move |_, _, _| {
                         bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
                     })
@@ -360,6 +379,7 @@ impl TableDelegate for InstanceList {
                 }),
                 _ => {},
             }
+            self.rebuild_visible_cache();
         }
     }
 
@@ -392,7 +412,11 @@ impl TableDelegate for InstanceList {
                                 } else {
                                     PandoraIcon::StarOff
                                 })
-                                .tooltip(if pinned { "Unpin" } else { "Pin" })
+                                .tooltip(if pinned {
+                                    t::instance::unpin()
+                                } else {
+                                    t::instance::pin()
+                                })
                                 .on_click(move |_, _, _| {
                                     bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
                                 }),

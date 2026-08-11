@@ -166,17 +166,17 @@ impl Page for InstancePage {
         let open_mods = Button::new("open_mods")
             .info()
             .icon(PandoraIcon::Folder)
-            .label("Mods")
+            .label(t::instance::folder::mods())
             .on_click(move |_, window, cx| crate::open_folder(&mods_path, window, cx));
         let open_saves = Button::new("open_saves")
             .info()
             .icon(PandoraIcon::Folder)
-            .label("Saves")
+            .label(t::instance::folder::saves())
             .on_click(move |_, window, cx| crate::open_folder(&saves_path, window, cx));
         let open_logs = Button::new("open_logs")
             .info()
             .icon(PandoraIcon::Folder)
-            .label("Logs")
+            .label(t::instance::folder::logs())
             .on_click(move |_, window, cx| crate::open_folder(&logs_path, window, cx));
 
         h_flex()

@@ -55,33 +55,31 @@ impl PandoraExitStatus {
             if libc::WIFEXITED(self.0) {
                 return match libc::WEXITSTATUS(self.0) {
                     0 => None,
-                    1 => Some("Minecraft crashed (exit 1) — check Logs / Game Output for the stacktrace"),
-                    134 => Some("Aborted (exit 134) — native library crash, try updating GLFW/OpenAL or Java"),
-                    139 => Some("Segfault (exit 139) — native crash, check graphics drivers"),
-                    _ => Some("Minecraft exited with an error — check Logs for details"),
+                    1 => Some(t::instance::exit::crash1()),
+                    134 => Some(t::instance::exit::abort134()),
+                    139 => Some(t::instance::exit::segfault139()),
+                    _ => Some(t::instance::exit::generic()),
                 };
             }
             if libc::WIFSIGNALED(self.0) {
                 return match libc::WTERMSIG(self.0) {
-                    9 => Some("Killed (signal 9) — likely out of memory, try lower -Xmx or closing apps"),
-                    11 => Some("Segmentation fault (signal 11) — faulty native library or driver"),
-                    6 => Some("Aborted (signal 6) — native library aborted"),
-                    _ => Some("Minecraft was terminated by a signal — check Logs"),
+                    9 => Some(t::instance::exit::killed9()),
+                    11 => Some(t::instance::exit::segfault11()),
+                    6 => Some(t::instance::exit::abort6()),
+                    _ => Some(t::instance::exit::terminated_signal()),
                 };
             }
-            Some("Minecraft ended abnormally — check Logs")
+            Some(t::instance::exit::abnormal())
         }
         #[cfg(windows)]
         {
             match self.0 {
                 0 => None,
-                1 => Some("Minecraft crashed (exit 1) — check Logs / Game Output for the stacktrace"),
-                0xC0000005 => {
-                    Some("Access violation (0xC0000005) — faulty native library (GLFW/OpenAL) or wrong Java version")
-                },
-                0xC0000409 => Some("Stack buffer overrun (0xC0000409) — native crash, update drivers/Java"),
-                _ if self.0 & 0x80000000 != 0 => Some("Minecraft crashed with a Windows exception — check Logs"),
-                _ => Some("Minecraft exited with an error — check Logs for details"),
+                1 => Some(t::instance::exit::crash1()),
+                0xC0000005 => Some(t::instance::exit::access_violation()),
+                0xC0000409 => Some(t::instance::exit::stack_overrun()),
+                _ if self.0 & 0x80000000 != 0 => Some(t::instance::exit::windows_exception()),
+                _ => Some(t::instance::exit::generic()),
             }
         }
     }
