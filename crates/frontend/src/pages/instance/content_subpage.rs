@@ -56,6 +56,7 @@ pub struct InstanceContentSubpage {
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
     update_check_action: Option<ModalAction>,
     update_all_action: Option<ModalAction>,
+    show_outdated_only: bool,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -304,6 +305,7 @@ impl InstanceContentSubpage {
             sort_dropdown,
             update_check_action: None,
             update_all_action: None,
+            show_outdated_only: false,
             _add_from_file_task: None,
         }
     }
@@ -515,50 +517,98 @@ impl Render for InstanceContentSubpage {
                     }),
             );
 
-        let filter_bar_controls = h_flex()
-            .cursor_default()
-            .block_mouse_except_scroll()
-            .gap_3()
-            .items_center()
-            .child(
-                div().child(
-                    Select::new(&self.sort_dropdown)
-                        .small()
-                        .title_prefix(format!("{}: ", t::instance::content::sort())),
-                ),
-            )
-            .child(
-                h_flex()
-                    .gap_1()
-                    .child(div().text_sm().child(t::instance::content::enabled_first()))
-                    .child(
-                        Switch::new("enabled_first")
-                            .checked(self.content_type.sort_enabled_first(InterfaceConfig::get(cx)))
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                let config = InterfaceConfig::get_mut(cx);
-                                let enabled_first = *checked;
-
-                                if this.content_type.sort_enabled_first(config) == enabled_first {
-                                    return;
-                                }
-
-                                let sort_key = this.content_type.sort_key(config);
-                                this.content_type.set_sort_enabled_first(config, enabled_first);
-
-                                let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
-                                let content_list = this.content_list.clone();
-                                cx.update_entity(&content_list, |list, cx| {
-                                    list.delegate_mut().set_sort_options(sort_key, enabled_first);
-                                    list.delegate_mut().set_content(&content);
-                                    cx.notify();
-                                });
-                                cx.notify();
-                            })),
+        let filter_bar_controls =
+            h_flex()
+                .cursor_default()
+                .block_mouse_except_scroll()
+                .gap_3()
+                .items_center()
+                .child(
+                    div().child(
+                        Select::new(&self.sort_dropdown)
+                            .small()
+                            .title_prefix(format!("{}: ", t::instance::content::sort())),
                     ),
-            )
-            .absolute()
-            .top(px(4.0))
-            .right(px(12.0));
+                )
+                .child(
+                    h_flex()
+                        .gap_1()
+                        .child(div().text_sm().child(t::instance::content::enabled_first()))
+                        .child(
+                            Switch::new("enabled_first")
+                                .checked(self.content_type.sort_enabled_first(InterfaceConfig::get(cx)))
+                                .on_click(cx.listener(|this, checked, _, cx| {
+                                    let config = InterfaceConfig::get_mut(cx);
+                                    let enabled_first = *checked;
+
+                                    if this.content_type.sort_enabled_first(config) == enabled_first {
+                                        return;
+                                    }
+
+                                    let sort_key = this.content_type.sort_key(config);
+                                    this.content_type.set_sort_enabled_first(config, enabled_first);
+
+                                    let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                                    let content_list = this.content_list.clone();
+                                    cx.update_entity(&content_list, |list, cx| {
+                                        list.delegate_mut().set_sort_options(sort_key, enabled_first);
+                                        list.delegate_mut().set_content(&content);
+                                        cx.notify();
+                                    });
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(h_flex().gap_1().child(div().text_sm().child("Outdated only")).child(
+                    Switch::new("outdated_only").checked(self.show_outdated_only).on_click(cx.listener(
+                        |this, checked, _, cx| {
+                            if this.show_outdated_only == *checked {
+                                return;
+                            }
+                            this.show_outdated_only = *checked;
+                            let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                            let cl = this.content_list.clone();
+                            cx.update_entity(&cl, |list, cx| {
+                                list.delegate_mut().set_outdated_only(*checked);
+                                list.delegate_mut().set_content(&content);
+                                cx.notify();
+                            });
+                            cx.notify();
+                        },
+                    )),
+                ))
+                .child(
+                    Button::new("enable_all")
+                        .small()
+                        .label("Enable all")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            let ids = this.content_list.read(cx).delegate().content_ids();
+                            if ids.is_empty() {
+                                return;
+                            }
+                            this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
+                                id: this.instance,
+                                content_ids: ids,
+                                enabled: true,
+                            });
+                        })),
+                )
+                .child(Button::new("disable_all").small().label("Disable all").on_click(cx.listener(
+                    |this, _, _, cx| {
+                        let ids = this.content_list.read(cx).delegate().content_ids();
+                        if ids.is_empty() {
+                            return;
+                        }
+                        this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
+                            id: this.instance,
+                            content_ids: ids,
+                            enabled: false,
+                        });
+                    },
+                )))
+                .absolute()
+                .top(px(4.0))
+                .right(px(12.0));
 
         v_flex().p_4().size_full().child(header).child(
             div()

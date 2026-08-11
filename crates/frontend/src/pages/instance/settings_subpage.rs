@@ -29,6 +29,7 @@ use schema::{
     loader::Loader,
     version_manifest::MinecraftVersionManifest,
 };
+
 use strum::IntoEnumIterator;
 use uuid::Uuid;
 
@@ -52,6 +53,79 @@ use crate::{
     pages::instances_page::VersionList,
     png_render_cache,
 };
+
+// ponytail: parses /proc/meminfo or sysctl; fallback None — upgrade to sysinfo crate if cross-platform accuracy matters.
+fn total_memory_mib() -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(text) = std::fs::read_to_string("/proc/meminfo")
+            && let Some(line) = text.lines().find(|l| l.starts_with("MemTotal:"))
+            && let Some(kb_str) = line.split_whitespace().nth(1)
+            && let Ok(kb) = kb_str.parse::<u64>()
+        {
+            return Some((kb / 1024) as u32);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(out) = std::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output()
+            && out.status.success()
+            && let Ok(bytes) = String::from_utf8_lossy(&out.stdout).trim().parse::<u64>()
+        {
+            return Some((bytes / 1024 / 1024) as u32);
+        }
+    }
+    None
+}
+
+// ponytail: fs scan only, no java -version check; add version probe if false positives appear.
+fn detect_javas() -> Vec<Arc<Path>> {
+    let mut out: Vec<Arc<Path>> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |p: std::path::PathBuf| {
+        if p.exists() && seen.insert(p.clone()) {
+            out.push(p.into());
+        }
+    };
+    if let Ok(v) = std::env::var("JAVA_HOME") {
+        push(std::path::Path::new(&v).join("bin/java"));
+        push(std::path::Path::new(&v).join("bin/java.exe"));
+    }
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            push(dir.join("java"));
+            push(dir.join("java.exe"));
+        }
+    }
+    for base in ["/usr/lib/jvm", "/usr/java", "/opt/jvm", "/opt/java", "/opt/jdk"] {
+        if let Ok(rd) = std::fs::read_dir(base) {
+            for e in rd.flatten() {
+                push(e.path().join("bin/java"));
+                push(e.path().join("bin/java.exe"));
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    if let Ok(rd) = std::fs::read_dir("/Library/Java/JavaVirtualMachines") {
+        for e in rd.flatten() {
+            push(e.path().join("Contents/Home/bin/java"));
+        }
+    }
+    #[cfg(target_os = "windows")]
+    for base in [
+        "C:\\Program Files\\Java",
+        "C:\\Program Files\\Eclipse Adoptium",
+        "C:\\Program Files\\Zulu",
+    ] {
+        if let Ok(rd) = std::fs::read_dir(base) {
+            for e in rd.flatten() {
+                push(e.path().join("bin/java.exe"));
+            }
+        }
+    }
+    out.truncate(20);
+    out
+}
 
 #[derive(PartialEq, Eq)]
 enum NewNameChangeState {
@@ -85,6 +159,7 @@ pub struct InstanceSettingsSubpage {
     jvm_flags_input_state: Entity<InputState>,
     jvm_binary_enabled: bool,
     jvm_binary_path: Option<PathLabel>,
+    detected_javas: Vec<Arc<Path>>,
 
     instance_root_label: PathLabel,
 
@@ -269,6 +344,7 @@ impl InstanceSettingsSubpage {
             jvm_flags_input_state,
             jvm_binary_enabled: jvm_binary.enabled,
             jvm_binary_path: jvm_binary.path.clone().map(|path| PathLabel::new(path, false)),
+            detected_javas: Vec::new(),
             override_glfw_enabled: system_libraries.override_glfw,
             override_glfw_path: glfw_path.map(|path| PathLabel::new(path, false)),
             override_openal_enabled: system_libraries.override_openal,
@@ -900,6 +976,26 @@ impl Render for InstanceSettingsSubpage {
                     })),
             ));
 
+        let total_mib = total_memory_mib();
+        let min_val = self.memory_min_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
+        let max_val = self.memory_max_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
+        let mem_info: Option<SharedString> = {
+            let mut parts = Vec::new();
+            if let Some(total) = total_mib {
+                parts.push(format!("System RAM: {total} MiB"));
+                if memory_override_enabled && max_val > 0 && max_val as u64 > total as u64 * 85 / 100 {
+                    parts.push(format!("— warning: max {max_val} MiB > 85% of system RAM"));
+                }
+            }
+            if memory_override_enabled && min_val > max_val && max_val != 0 {
+                parts.push("— min > max".to_string());
+            }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(" ").into())
+            }
+        };
         let runtime_content = v_flex()
             .gap_4()
             .size_full()
@@ -944,7 +1040,10 @@ impl Render for InstanceSettingsSubpage {
                             .child(
                                 v_flex().gap_1().line_height(px(24.0)).child(t::common::min()).child(t::common::max()),
                             ),
-                    ),
+                    )
+                    .when_some(mem_info, |this, info| {
+                        this.child(div().text_sm().text_color(cx.theme().muted_foreground).child(info))
+                    }),
             )
             .child(
                 v_flex()
@@ -985,23 +1084,55 @@ impl Render for InstanceSettingsSubpage {
                             })),
                     )
                     .child(
-                        PathLabel::button_opt(&self.jvm_binary_path, "select_jvm_binary")
-                            .disabled(!jvm_binary_enabled)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.select_file(
-                                    t::instance::select_jvm_binary(),
-                                    |this, path| {
-                                        this.jvm_binary_path = path.map(|path| PathLabel::new(path, false));
-                                        this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
-                                            id: this.instance_id,
-                                            jvm_binary: this.get_jvm_binary_configuration(),
-                                        });
-                                    },
-                                    window,
-                                    cx,
-                                );
-                            })),
-                    ),
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                PathLabel::button_opt(&self.jvm_binary_path, "select_jvm_binary")
+                                    .disabled(!jvm_binary_enabled)
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.select_file(
+                                            t::instance::select_jvm_binary(),
+                                            |this, path| {
+                                                this.jvm_binary_path = path.map(|path| PathLabel::new(path, false));
+                                                this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
+                                                    id: this.instance_id,
+                                                    jvm_binary: this.get_jvm_binary_configuration(),
+                                                });
+                                            },
+                                            window,
+                                            cx,
+                                        );
+                                    })),
+                            )
+                            .child(
+                                Button::new("detect_java")
+                                    .label("Detect")
+                                    .small()
+                                    .disabled(!jvm_binary_enabled)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.detected_javas = detect_javas();
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .when(!self.detected_javas.is_empty(), |this| {
+                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
+                            let path = p.clone();
+                            let label: SharedString = p.to_string_lossy().into_owned().into();
+                            Button::new(SharedString::from(format!("use-java-{}", label)))
+                                .label(label.clone())
+                                .small()
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
+                                    this.jvm_binary_enabled = true;
+                                    this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
+                                        id: this.instance_id,
+                                        jvm_binary: this.get_jvm_binary_configuration(),
+                                    });
+                                    cx.notify();
+                                }))
+                        })))
+                    }),
             )
             .child(
                 v_flex()

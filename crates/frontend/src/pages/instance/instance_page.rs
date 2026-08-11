@@ -160,8 +160,32 @@ impl Page for InstancePage {
                     crate::open_folder(&dot_minecraft, window, cx);
                 }
             });
+        let mods_path = instance.dot_minecraft_folder.join("mods");
+        let saves_path = instance.dot_minecraft_folder.join("saves");
+        let logs_path = instance.dot_minecraft_folder.join("logs");
+        let open_mods = Button::new("open_mods")
+            .info()
+            .icon(PandoraIcon::Folder)
+            .label("Mods")
+            .on_click(move |_, window, cx| crate::open_folder(&mods_path, window, cx));
+        let open_saves = Button::new("open_saves")
+            .info()
+            .icon(PandoraIcon::Folder)
+            .label("Saves")
+            .on_click(move |_, window, cx| crate::open_folder(&saves_path, window, cx));
+        let open_logs = Button::new("open_logs")
+            .info()
+            .icon(PandoraIcon::Folder)
+            .label("Logs")
+            .on_click(move |_, window, cx| crate::open_folder(&logs_path, window, cx));
 
-        h_flex().gap_3().child(button).child(open_dot_minecraft_button)
+        h_flex()
+            .gap_2()
+            .child(button)
+            .child(open_dot_minecraft_button)
+            .child(open_mods)
+            .child(open_saves)
+            .child(open_logs)
     }
 
     fn scrollable(&self, _cx: &App) -> bool {

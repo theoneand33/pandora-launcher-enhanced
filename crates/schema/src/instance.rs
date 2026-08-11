@@ -77,6 +77,8 @@ pub struct InstanceConfiguration {
     pub show_shader_tab: bool,
     #[serde(default, deserialize_with = "crate::try_deserialize")]
     pub sandbox: bool,
+    #[serde(default, deserialize_with = "crate::try_deserialize")]
+    pub pinned: bool,
 }
 
 impl InstanceConfiguration {
@@ -97,6 +99,7 @@ impl InstanceConfiguration {
             created_shortcuts: Vec::new(),
             show_shader_tab: false,
             sandbox: false,
+            pinned: false,
         }
     }
 }

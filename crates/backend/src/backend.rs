@@ -515,11 +515,16 @@ impl BackendState {
         let mut instance_state = self.instance_state.write();
         for instance in instance_state.instances.iter_mut() {
             let mut killed = false;
+            let inst_name = instance.name.clone();
+            let mut hints: Vec<Arc<str>> = Vec::new();
 
             instance.processes.retain_mut(|process| match process.try_wait() {
                 Ok(None) => true,
                 Ok(Some(status)) => {
                     log::info!("Child process {} is no longer alive: {}", process.id(), status);
+                    if let Some(hint) = status.human_hint() {
+                        hints.push(format!("{}: {hint} ({status})", inst_name).into());
+                    }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;
                     false
@@ -535,6 +540,9 @@ impl BackendState {
                 Ok(None) => true,
                 Ok(Some(status)) => {
                     log::info!("Child process {} closed: {}", process.id(), status);
+                    if let Some(hint) = status.human_hint() {
+                        hints.push(format!("{}: {hint} ({status})", inst_name).into());
+                    }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;
                     false
@@ -546,6 +554,12 @@ impl BackendState {
                     false
                 },
             });
+            for hint in hints {
+                self.send.send(bridge::message::MessageToFrontend::AddNotification {
+                    notification_type: bridge::message::BridgeNotificationType::Warning,
+                    message: hint,
+                });
+            }
 
             let now = Instant::now();
             let to_kill = instance.closing_processes.extract_if(.., |(_, deadline)| now > *deadline);

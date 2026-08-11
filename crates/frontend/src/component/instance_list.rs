@@ -21,6 +21,7 @@ use crate::{
 pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
+    filter: SharedString,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
     _instance_removed_subscription: Subscription,
@@ -55,6 +56,7 @@ impl InstanceList {
                 });
             let instance_list = Self {
                 columns: vec![
+                    Column::new("pin", "").width(36.).fixed_left().movable(false).resizable(false),
                     Column::new("controls", "").width(150.).fixed_left().movable(false).resizable(false),
                     Column::new("name", t::instance::name())
                         .width(150.)
@@ -70,6 +72,7 @@ impl InstanceList {
                     Column::new("remove", "").width(44.).fixed_left().movable(false).resizable(false),
                 ],
                 items,
+                filter: SharedString::default(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
                 _instance_removed_subscription,
@@ -79,8 +82,63 @@ impl InstanceList {
         })
     }
 
+    pub fn set_filter(&mut self, query: SharedString) {
+        self.filter = query;
+    }
+
+    fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
+        if lower.is_empty() {
+            return true;
+        }
+        let name = entry.name.to_ascii_lowercase();
+        if name.contains(lower) {
+            return true;
+        }
+        let ver = entry.configuration.minecraft_version.as_str().to_ascii_lowercase();
+        if ver.contains(lower) {
+            return true;
+        }
+        let loader = entry.configuration.loader.pretty_name().to_ascii_lowercase();
+        if loader.contains(lower) {
+            return true;
+        }
+        false
+    }
+
+    fn visible_indices(&self) -> Vec<usize> {
+        let lower = self.filter.to_ascii_lowercase();
+        let mut out: Vec<usize> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| Self::matches_filter(e, &lower))
+            .map(|(i, _)| i)
+            .collect();
+        // pinned first, then natural name order
+        out.sort_by(|&a, &b| {
+            let pa = self.items[a].configuration.pinned;
+            let pb = self.items[b].configuration.pinned;
+            if pa != pb {
+                return pb.cmp(&pa);
+            }
+            lexical_sort::natural_lexical_cmp(&self.items[a].name, &self.items[b].name)
+        });
+        out
+    }
+
+    fn visible_entry(&self, visible_ix: usize) -> Option<&InstanceEntry> {
+        let idx = self.visible_indices().get(visible_ix).copied()?;
+        self.items.get(idx)
+    }
+
+    pub fn total_count(&self) -> usize {
+        self.items.len()
+    }
+
     pub fn render_card(&self, index: usize, cx: &mut App) -> Div {
-        let item = &self.items[index];
+        let Some(item) = self.visible_entry(index) else {
+            return v_flex().into();
+        };
         let loader_and_version = format!(
             "{} {}",
             item.configuration.loader.pretty_name(),
@@ -211,6 +269,25 @@ impl InstanceList {
                     }
                 }),
             ))
+            .child({
+                let pinned = item.configuration.pinned;
+                let bh = self.backend_handle.clone();
+                Button::new(("pin", index))
+                    .small()
+                    .compact()
+                    .absolute()
+                    .top_1()
+                    .left_1()
+                    .icon(if pinned {
+                        PandoraIcon::Star
+                    } else {
+                        PandoraIcon::StarOff
+                    })
+                    .tooltip(if pinned { "Unpin" } else { "Pin" })
+                    .on_click(move |_, _, _| {
+                        bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
+                    })
+            })
             .child(
                 Button::new(("remove", index))
                     .absolute()
@@ -246,7 +323,7 @@ impl TableDelegate for InstanceList {
     }
 
     fn rows_count(&self, _cx: &App) -> usize {
-        self.items.len()
+        self.visible_indices().len()
     }
 
     fn column(&self, col_ix: usize, _cx: &App) -> gpui_component::table::Column {
@@ -260,22 +337,33 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) {
+        // ponytail: pinned stays on top regardless of sort; sort only within pinned groups
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
-                "name" => self.items.sort_by(|a, b| match sort {
-                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
-                    _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                "name" => self.items.sort_by(|a, b| {
+                    if a.configuration.pinned != b.configuration.pinned {
+                        return b.configuration.pinned.cmp(&a.configuration.pinned);
+                    }
+                    match sort {
+                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
+                        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                    }
                 }),
-                "version" => self.items.sort_by(|a, b| match sort {
-                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
-                        &a.configuration.minecraft_version,
-                        &b.configuration.minecraft_version,
-                    )
-                    .reverse(),
-                    _ => lexical_sort::natural_lexical_cmp(
-                        &a.configuration.minecraft_version,
-                        &b.configuration.minecraft_version,
-                    ),
+                "version" => self.items.sort_by(|a, b| {
+                    if a.configuration.pinned != b.configuration.pinned {
+                        return b.configuration.pinned.cmp(&a.configuration.pinned);
+                    }
+                    match sort {
+                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
+                            &a.configuration.minecraft_version,
+                            &b.configuration.minecraft_version,
+                        )
+                        .reverse(),
+                        _ => lexical_sort::natural_lexical_cmp(
+                            &a.configuration.minecraft_version,
+                            &b.configuration.minecraft_version,
+                        ),
+                    }
                 }),
                 _ => {},
             }
@@ -289,9 +377,35 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let item = &self.items[row_ix];
+        let Some(item) = self.visible_entry(row_ix).cloned() else {
+            return div().into_any_element();
+        };
         if let Some(col) = self.columns.get(col_ix) {
             match col.key.as_ref() {
+                "pin" => {
+                    let id = item.id;
+                    let pinned = item.configuration.pinned;
+                    let bh = self.backend_handle.clone();
+                    h_flex()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            Button::new(("pin", row_ix))
+                                .small()
+                                .compact()
+                                .icon(if pinned {
+                                    PandoraIcon::Star
+                                } else {
+                                    PandoraIcon::StarOff
+                                })
+                                .tooltip(if pinned { "Unpin" } else { "Pin" })
+                                .on_click(move |_, _, _| {
+                                    bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
+                                }),
+                        )
+                        .into_any_element()
+                },
                 "name" => {
                     let id = item.id;
                     let name = item.name.clone();
@@ -333,7 +447,7 @@ impl TableDelegate for InstanceList {
                 },
                 "version" => item.configuration.minecraft_version.as_str().into_any_element(),
                 "controls" => {
-                    let play_button = render_play_button(item, row_ix, self.backend_handle.clone());
+                    let play_button = render_play_button(&item, row_ix, self.backend_handle.clone());
 
                     h_flex()
                         .size_full()

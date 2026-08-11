@@ -324,6 +324,19 @@ impl BackendState {
                     },
                 }
             },
+            MessageToBackend::SetInstancePinned { id, pinned } => {
+                let msg = {
+                    let mut state = self.instance_state.write();
+                    let Some(instance) = state.instances.get_mut(id) else {
+                        return;
+                    };
+                    instance.configuration.modify(|configuration| {
+                        configuration.pinned = pinned;
+                    });
+                    instance.create_modify_message()
+                };
+                self.send.send(msg);
+            },
             MessageToBackend::KillInstance { id } => {
                 let mut instance_state = self.instance_state.write();
                 let Some(instance) = instance_state.instances.get_mut(id) else {
