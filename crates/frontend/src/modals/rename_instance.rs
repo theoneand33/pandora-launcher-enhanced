@@ -23,7 +23,10 @@ pub fn open_rename_instance(
 
     let current_name = instance_name.clone();
     window.open_dialog(cx, move |dialog, window, cx| {
-        input_state.update(cx, |state, cx| state.focus(window, cx));
+        let focus_state = input_state.clone();
+        window.defer(cx, move |window, cx| {
+            focus_state.update(cx, |state, cx| state.focus(window, cx));
+        });
         let content = v_flex().gap_4().child(Input::new(&input_state)).child(
             h_flex()
                 .gap_2()

@@ -67,21 +67,37 @@ impl InstancesPage {
     }
 }
 
-impl Page for InstancesPage {
-    fn controls(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let create_instance = Button::new("create_instance")
-            .success()
-            .icon(PandoraIcon::Plus)
-            .label(t::instance::create())
-            .on_click(cx.listener(|this, _, window, cx| {
+fn create_instance_button(
+    id: impl Into<SharedString>,
+    metadata: Entity<FrontendMetadata>,
+    instances: Entity<InstanceEntries>,
+    backend_handle: BackendHandle,
+) -> Button {
+    Button::new(id.into())
+        .success()
+        .icon(PandoraIcon::Plus)
+        .label(t::instance::create())
+        .on_click({
+            move |_, window, cx| {
                 crate::modals::create_instance::open_create_instance(
-                    this.metadata.clone(),
-                    this.instances.clone(),
-                    this.backend_handle.clone(),
+                    metadata.clone(),
+                    instances.clone(),
+                    backend_handle.clone(),
                     window,
                     cx,
                 );
-            }));
+            }
+        })
+}
+
+impl Page for InstancesPage {
+    fn controls(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let create_instance = create_instance_button(
+            "create_instance",
+            self.metadata.clone(),
+            self.instances.clone(),
+            self.backend_handle.clone(),
+        );
         // wrapping in div makes it not take up the full space of the titlebar
         let select_view =
             div().child(Select::new(&self.view_dropdown).title_prefix(format!("{}: ", t::instance::view())));
@@ -99,6 +115,8 @@ impl Page for InstancesPage {
 
 impl Render for InstancesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // ponytail: empty check uses delegate count; may flash before async InstanceAdded arrives,
+        // add loading guard if flash becomes visible.
         let is_empty = self.instance_table.read(cx).delegate().rows_count(cx) == 0;
         if is_empty {
             return div()
@@ -114,27 +132,13 @@ impl Render for InstancesPage {
                         .child(
                             Icon::new(crate::icon::PandoraIcon::Box).size_12().text_color(cx.theme().muted_foreground),
                         )
-                        .child(
-                            div()
-                                .text_lg()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(t::instance::none_selected()),
-                        )
-                        .child(
-                            Button::new("create_instance_empty")
-                                .success()
-                                .icon(PandoraIcon::Plus)
-                                .label(t::instance::create())
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    crate::modals::create_instance::open_create_instance(
-                                        this.metadata.clone(),
-                                        this.instances.clone(),
-                                        this.backend_handle.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                })),
-                        ),
+                        .child(div().text_lg().text_color(cx.theme().muted_foreground).child(t::instance::empty()))
+                        .child(create_instance_button(
+                            "create_instance_empty",
+                            self.metadata.clone(),
+                            self.instances.clone(),
+                            self.backend_handle.clone(),
+                        )),
                 )
                 .into_any_element();
         }

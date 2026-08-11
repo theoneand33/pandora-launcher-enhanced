@@ -1032,6 +1032,12 @@ de = "Wähle eine Instanz aus"
 hu = "Válassz egy példányt"
 sv = "Välj en instans"
 ru = "Выберите экземпляр"
+[instance.empty]
+en = "No instances yet"
+de = "Noch keine Instanzen"
+hu = "Még nincsenek példányok"
+sv = "Inga instanser ännu"
+ru = "Пока нет экземпляров"
 [instance.unnamed]
 en = "Unnamed Instance"
 de = "Unbekannte Instanz"
@@ -2204,11 +2210,15 @@ sv = "Ladda ned"
 ru = "Скачать"
 [instance.content.downloading_children]
 en = "Downloading children"
+de = "Lade Inhalte herunter"
 hu = "Gyermekek letöltése"
+sv = "Laddar ned innehåll"
 ru = "Загрузка дочернего контента"
 [instance.content.error_downloading_children]
 en = "Error downloading children"
+de = "Fehler beim Herunterladen der Inhalte"
 hu = "Hiba a gyermekek letöltésekor"
+sv = "Fel vid nedladdning av innehåll"
 ru = "Ошибка загрузки дочернего контента"
 [instance.content.file_id]
 en = "File ID: ${file_id: u32}"

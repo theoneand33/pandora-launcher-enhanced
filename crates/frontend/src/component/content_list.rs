@@ -574,8 +574,8 @@ impl ContentListDelegate {
                             crate::modals::generic::show_modal(
                                 window,
                                 cx,
-                                "Downloading children".into(),
-                                "Error downloading children".into(),
+                                t::instance::content::downloading_children().into(),
+                                t::instance::content::error_downloading_children().into(),
                                 modal_action,
                             );
                         }
