@@ -163,6 +163,10 @@ impl ContentListDelegate {
         }
     }
 
+    pub fn has_search_filter(&self) -> bool {
+        self.searched.is_some()
+    }
+
     pub fn render_summary(
         &self,
         summary: &InstanceContentSummary,

@@ -2994,6 +2994,20 @@ hu = "Elavultak kikapcsolása"
 sv = "Inaktivera föråldrade"
 ru = "Отключить устаревшие"
 
+[instance.content.enable_filtered]
+en = "Enable filtered"
+de = "Gefilterte aktivieren"
+hu = "Szűrt bekapcsolása"
+sv = "Aktivera filtrerade"
+ru = "Включить отфильтрованные"
+
+[instance.content.disable_filtered]
+en = "Disable filtered"
+de = "Gefilterte deaktivieren"
+hu = "Szűrt kikapcsolása"
+sv = "Inaktivera filtrerade"
+ru = "Отключить отфильтрованные"
+
 [instance.jvm_binary.detect]
 en = "Detect"
 de = "Erkennen"
@@ -3064,13 +3078,6 @@ hu = "Szegmens hiba (139-es kilépés) — natív összeomlás, ellenőrizd a vi
 sv = "Segfault (exit 139) — nativ krasch, kontrollera grafikdrivrutiner"
 ru = "Segfault (код 139) — нативный сбой, проверьте драйверы видеокарты"
 
-[instance.exit.generic]
-en = "Minecraft exited with an error — check Logs for details"
-de = "Minecraft mit Fehler beendet — siehe Logs für Details"
-hu = "Minecraft hibával lépett ki — nézd meg a Naplókat"
-sv = "Minecraft avslutades med fel — se Loggar för detaljer"
-ru = "Minecraft завершился с ошибкой — смотри Логи"
-
 [instance.exit.killed9]
 en = "Killed (signal 9) — likely out of memory, try lower -Xmx or closing apps"
 de = "Beendet (Signal 9) — vermutlich zu wenig Speicher, senke -Xmx oder schließe Apps"
@@ -3091,20 +3098,6 @@ de = "Abgebrochen (Signal 6) — native Bibliothek abgebrochen"
 hu = "Megszakítva (6-os szignál) — natív könyvtár megszakadt"
 sv = "Avbruten (signal 6) — nativt bibliotek avbröts"
 ru = "Прервано (сигнал 6) — нативная библиотека прервана"
-
-[instance.exit.terminated_signal]
-en = "Minecraft was terminated by a signal — check Logs"
-de = "Minecraft durch Signal beendet — siehe Logs"
-hu = "Minecraft szignál miatt leállt — nézd meg a Naplókat"
-sv = "Minecraft avslutades av en signal — se Loggar"
-ru = "Minecraft был завершён сигналом — смотри Логи"
-
-[instance.exit.abnormal]
-en = "Minecraft ended abnormally — check Logs"
-de = "Minecraft unnormal beendet — siehe Logs"
-hu = "Minecraft rendellenesen ért véget — nézd meg a Naplókat"
-sv = "Minecraft avslutades onormalt — se Loggar"
-ru = "Minecraft завершился некорректно — смотри Логи"
 
 [instance.exit.access_violation]
 en = "Access violation (0xC0000005) — faulty native library (GLFW/OpenAL) or wrong Java version"

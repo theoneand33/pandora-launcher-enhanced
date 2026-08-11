@@ -80,6 +80,40 @@ fn total_memory_mib() -> Option<u32> {
                 return Some((bytes / 1024 / 1024) as u32);
             }
         }
+        #[cfg(target_os = "windows")]
+        {
+            // Minimal FFI for GlobalMemoryStatusEx without adding a crate.
+            #[repr(C)]
+            struct MemoryStatusEx {
+                length: u32,
+                memory_load: u32,
+                total_phys: u64,
+                avail_phys: u64,
+                total_page_file: u64,
+                avail_page_file: u64,
+                total_virtual: u64,
+                avail_virtual: u64,
+                avail_extended_virtual: u64,
+            }
+            extern "system" {
+                fn GlobalMemoryStatusEx(lp_buffer: *mut MemoryStatusEx) -> i32;
+            }
+            let mut stat = MemoryStatusEx {
+                length: std::mem::size_of::<MemoryStatusEx>() as u32,
+                memory_load: 0,
+                total_phys: 0,
+                avail_phys: 0,
+                total_page_file: 0,
+                avail_page_file: 0,
+                total_virtual: 0,
+                avail_virtual: 0,
+                avail_extended_virtual: 0,
+            };
+            // SAFETY: GlobalMemoryStatusEx writes to stat when it returns non-zero.
+            if unsafe { GlobalMemoryStatusEx(&mut stat) } != 0 && stat.total_phys > 0 {
+                return Some((stat.total_phys / 1024 / 1024) as u32);
+            }
+        }
         None
     })
 }
@@ -1132,10 +1166,16 @@ impl Render for InstanceSettingsSubpage {
                             ),
                     )
                     .when(!self.detected_javas.is_empty(), |this| {
-                        this.child(v_flex().gap_1().children(self.detected_javas.iter().enumerate().map(|(idx, p)| {
+                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
                             let path = p.clone();
                             let label: SharedString = p.to_string_lossy().into_owned().into();
-                            let id: SharedString = format!("use-java-{idx}").into();
+                            let id: SharedString = {
+                                use std::collections::hash_map::DefaultHasher;
+                                use std::hash::{Hash, Hasher};
+                                let mut hasher = DefaultHasher::new();
+                                path.to_string_lossy().hash(&mut hasher);
+                                format!("use-java-{:x}", hasher.finish()).into()
+                            };
                             Button::new(id).label(label.clone()).small().on_click(cx.listener(move |this, _, _, cx| {
                                 this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
                                 this.jvm_binary_enabled = true;

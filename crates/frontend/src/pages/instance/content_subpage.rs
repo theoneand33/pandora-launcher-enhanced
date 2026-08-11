@@ -579,19 +579,29 @@ impl Render for InstanceContentSubpage {
                         },
                     ))),
             )
-            .child(
+            .child({
+                let has_search = self.content_list.read(cx).delegate().has_search_filter();
+                let label = if self.show_outdated_only {
+                    t::instance::content::enable_outdated()
+                } else if has_search {
+                    t::instance::content::enable_filtered()
+                } else {
+                    t::instance::content::enable_all()
+                };
+                let tooltip = if has_search {
+                    t::instance::content::enable_filtered()
+                } else if self.show_outdated_only {
+                    t::instance::content::enable_outdated()
+                } else {
+                    t::instance::content::enable_all()
+                };
                 Button::new("enable_all")
                     .small()
                     // content_ids() is tab-scoped and respects search/outdated filters:
                     // "Enable all" affects only visible summaries (current tab, filtered
-                    // by search query and outdated-only). Label disambiguates outdated
-                    // but search filtering remains implicit — see content_ids() doc.
-                    .tooltip(t::instance::content::enable_all())
-                    .label(if self.show_outdated_only {
-                        t::instance::content::enable_outdated()
-                    } else {
-                        t::instance::content::enable_all()
-                    })
+                    // by search query and outdated-only).
+                    .tooltip(tooltip)
+                    .label(label)
                     .on_click(cx.listener(|this, _, _, cx| {
                         let ids = this.content_list.read(cx).delegate().content_ids();
                         if ids.is_empty() {
@@ -602,18 +612,26 @@ impl Render for InstanceContentSubpage {
                             content_ids: ids,
                             enabled: true,
                         });
-                    })),
-            )
-            .child(
-                Button::new("disable_all")
-                    .small()
-                    .tooltip(t::instance::content::disable_all())
-                    .label(if self.show_outdated_only {
-                        t::instance::content::disable_outdated()
-                    } else {
-                        t::instance::content::disable_all()
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    }))
+            })
+            .child({
+                let has_search = self.content_list.read(cx).delegate().has_search_filter();
+                let label = if self.show_outdated_only {
+                    t::instance::content::disable_outdated()
+                } else if has_search {
+                    t::instance::content::disable_filtered()
+                } else {
+                    t::instance::content::disable_all()
+                };
+                let tooltip = if has_search {
+                    t::instance::content::disable_filtered()
+                } else if self.show_outdated_only {
+                    t::instance::content::disable_outdated()
+                } else {
+                    t::instance::content::disable_all()
+                };
+                Button::new("disable_all").small().tooltip(tooltip).label(label).on_click(cx.listener(
+                    |this, _, _, cx| {
                         let ids = this.content_list.read(cx).delegate().content_ids();
                         if ids.is_empty() {
                             return;
@@ -623,8 +641,9 @@ impl Render for InstanceContentSubpage {
                             content_ids: ids,
                             enabled: false,
                         });
-                    })),
-            )
+                    },
+                ))
+            })
             .absolute()
             .top(px(4.0))
             .right(px(12.0));

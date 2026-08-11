@@ -58,17 +58,12 @@ pub enum ExitHint {
     AccessViolation,
     StackOverrun,
     WindowsException,
-    Generic,
-    TerminatedSignal,
-    Abnormal,
 }
 
 impl PandoraExitStatus {
     // ponytail: tiny match table, extend as new crash signatures appear.
     // Only actionable hints are emitted; benign exits like 130/143 (Ctrl+C/SIGTERM) return None.
-    // Unix fallback: any other non-zero exit => Generic, any other signal => TerminatedSignal,
-    // unknown wait status => Abnormal. Windows fallback: narrowed to NTSTATUS range
-    // 0xC0000000..=0xCFFFFFFF to avoid false positives on System.exit(-1) (0xFFFFFFFF).
+    // Gated to known crash codes to avoid noisy Generic warnings on mod System.exit(n).
     pub fn human_hint(&self) -> Option<ExitHint> {
         #[cfg(unix)]
         {
@@ -79,7 +74,7 @@ impl PandoraExitStatus {
                     134 => Some(ExitHint::Abort134),
                     139 => Some(ExitHint::Segfault139),
                     130 | 143 => None,
-                    _ => Some(ExitHint::Generic),
+                    _ => None,
                 };
             }
             if libc::WIFSIGNALED(self.0) {
@@ -87,10 +82,10 @@ impl PandoraExitStatus {
                     9 => Some(ExitHint::Killed9),
                     11 => Some(ExitHint::Segfault11),
                     6 => Some(ExitHint::Abort6),
-                    _ => Some(ExitHint::TerminatedSignal),
+                    _ => None,
                 };
             }
-            return Some(ExitHint::Abnormal);
+            return None;
         }
         #[cfg(windows)]
         {
@@ -100,7 +95,7 @@ impl PandoraExitStatus {
                 0xC0000005 => Some(ExitHint::AccessViolation),
                 0xC0000409 => Some(ExitHint::StackOverrun),
                 _ if (0xC0000000..=0xCFFFFFFF).contains(&self.0) => Some(ExitHint::WindowsException),
-                _ => Some(ExitHint::Generic),
+                _ => None,
             };
         }
     }
