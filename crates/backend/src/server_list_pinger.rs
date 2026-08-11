@@ -8,12 +8,12 @@ use std::{
 
 use bridge::instance::InstanceID;
 use hickory_resolver::name_server::TokioConnectionProvider;
-use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use rc_zip_sync::ReadZip;
 use rustc_hash::{FxHashMap, FxHashSet};
 use schema::server_status::ServerStatus;
 use std::io::{Cursor, Error, ErrorKind};
+use std::sync::OnceLock;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use ustr::Ustr;
@@ -27,7 +27,7 @@ const FALLBACK_PROTOCOL_VERSION: i32 = 774;
 pub struct ServerListPinger {
     data: Arc<RwLock<FxHashMap<(Arc<str>, i32), PingEntry>>>,
     start: Instant,
-    resolver: OnceCell<Option<Box<hickory_resolver::Resolver<TokioConnectionProvider>>>>,
+    resolver: OnceLock<Option<Box<hickory_resolver::Resolver<TokioConnectionProvider>>>>,
     protocol_versions: Arc<RwLock<FxHashMap<Ustr, i32>>>,
 }
 
@@ -56,7 +56,7 @@ impl ServerListPinger {
         Self {
             data: Default::default(),
             start: Instant::now(),
-            resolver: OnceCell::new(),
+            resolver: OnceLock::new(),
             protocol_versions: Default::default(),
         }
     }

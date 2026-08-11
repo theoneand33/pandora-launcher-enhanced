@@ -34,7 +34,6 @@ rustc-hash.workspace = true
 lexical-sort.workspace = true
 indexmap.workspace = true
 serde_with.workspace = true
-once_cell.workspace = true
 parking_lot.workspace = true
 lzma-rs.workspace = true
 enum-map.workspace = true

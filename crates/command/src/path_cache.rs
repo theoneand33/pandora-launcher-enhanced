@@ -5,16 +5,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
+use std::sync::LazyLock;
 
 struct CommandPathCacheEntry {
     expiry: Instant,
     path: Option<Arc<Path>>,
 }
 
-static COMMAND_PATH_CACHE: Lazy<RwLock<FxHashMap<OsString, CommandPathCacheEntry>>> = Lazy::new(Default::default);
+static COMMAND_PATH_CACHE: LazyLock<RwLock<FxHashMap<OsString, CommandPathCacheEntry>>> =
+    LazyLock::new(Default::default);
 
 fn illegal_char(b: u8) -> bool {
     b < 0x1f || matches!(b, b'/' | b'?' | b'<' | b'>' | b'\\' | b':' | b'*' | b'|' | b'"')

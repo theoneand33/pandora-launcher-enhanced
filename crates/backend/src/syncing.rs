@@ -9,10 +9,10 @@ use bridge::{
     message::{SyncState, SyncTargetState},
     safe_path::SafePath,
 };
-use once_cell::sync::Lazy;
 use relative_path::PathExt;
 use rustc_hash::FxHashMap;
 use schema::backend_config::SyncTargets;
+use std::sync::LazyLock;
 
 use crate::{BackendStateInstances, directories::LauncherDirectories};
 
@@ -348,7 +348,7 @@ fn is_empty_dir(path: &Path) -> bool {
     read_dir.next().is_none()
 }
 
-static DEFAULT_FOLDERS: Lazy<Vec<Arc<str>>> = Lazy::new(|| {
+static DEFAULT_FOLDERS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     [
         "saves",
         "config",

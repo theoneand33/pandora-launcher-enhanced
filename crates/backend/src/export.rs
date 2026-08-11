@@ -12,7 +12,6 @@ use bridge::{
     modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
-use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
 use schema::{
     backend_config::SyncTargets,
@@ -28,6 +27,7 @@ use schema::{
 };
 use sha1::{Digest as Sha1Digest, Sha1};
 use sha2::Sha512;
+use std::sync::LazyLock;
 use ustr::Ustr;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
@@ -429,7 +429,7 @@ fn matches_sync_target(rel_to_dot_minecraft: &SafePath, sync_targets: &SyncTarge
     false
 }
 
-static KNOWN_CACHE_FILES: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
+static KNOWN_CACHE_FILES: LazyLock<FxHashSet<&'static str>> = LazyLock::new(|| {
     let mut set = FxHashSet::default();
     set.insert("usercache.json");
     set.insert("usernamecache.json");
@@ -437,7 +437,7 @@ static KNOWN_CACHE_FILES: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
     set
 });
 
-static IGNORED_FILES: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
+static IGNORED_FILES: LazyLock<FxHashSet<&'static str>> = LazyLock::new(|| {
     let mut set = FxHashSet::default();
     set.insert("config/sodium-fingerprint.json");
     set.insert("config/flashback/.flashback.json.backup");

@@ -5,8 +5,8 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
 };
-use once_cell::sync::Lazy;
 use schema::pandora_update::UpdatePrompt;
+use std::sync::LazyLock;
 
 use crate::{component::page_path::PagePath, icon::PandoraIcon};
 
@@ -243,10 +243,10 @@ impl RenderOnce for WindowControl {
 }
 
 #[cfg(not(windows))]
-static ICON_FONT: Lazy<&'static str> = Lazy::new(|| "Segoe MDL2 Assets");
+static ICON_FONT: LazyLock<&'static str> = LazyLock::new(|| "Segoe MDL2 Assets");
 
 #[cfg(windows)]
-static ICON_FONT: Lazy<&'static str> = Lazy::new(|| {
+static ICON_FONT: LazyLock<&'static str> = LazyLock::new(|| {
     let mut version = unsafe { std::mem::zeroed() };
     let status = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut version) };
 

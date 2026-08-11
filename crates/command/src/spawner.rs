@@ -3,7 +3,7 @@ use std::{
     sync::mpsc,
 };
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 use crate::{PandoraChild, PandoraCommand, PandoraSandbox};
 
@@ -47,7 +47,7 @@ pub fn spawn(
 ) -> tokio::sync::oneshot::Receiver<std::io::Result<PandoraChild>> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
 
-    static SPAWNING_CHANNEL: OnceCell<mpsc::Sender<SpawnInfo>> = OnceCell::new();
+    static SPAWNING_CHANNEL: OnceLock<mpsc::Sender<SpawnInfo>> = OnceLock::new();
     let channel = SPAWNING_CHANNEL.get_or_init(|| {
         let (send, recv) = mpsc::channel::<SpawnInfo>();
 

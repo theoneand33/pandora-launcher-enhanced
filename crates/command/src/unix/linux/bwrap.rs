@@ -6,8 +6,8 @@ use std::{
 };
 
 use libseccomp::{ScmpAction, ScmpArgCompare, ScmpCompareOp, ScmpFilterContext, ScmpSyscall};
-use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
+use std::sync::LazyLock;
 
 use crate::{PandoraArg, PandoraChild, PandoraCommand, PandoraSandbox, spawner::SpawnContext, unix::unix_helpers::cvt};
 
@@ -74,7 +74,7 @@ const SYSTEM_FILES_RO: &[&str] = &[
     "/sys/module/nvidia_uvm",
 ];
 
-static ALLOWED_ENV_VARS: Lazy<FxHashSet<&'static OsStr>> = Lazy::new(|| {
+static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| {
     [
         "GDMSESSION",
         "DESKTOP_SESSION",
