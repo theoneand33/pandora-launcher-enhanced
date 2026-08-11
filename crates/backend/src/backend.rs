@@ -523,7 +523,18 @@ impl BackendState {
                 Ok(Some(status)) => {
                     log::info!("Child process {} is no longer alive: {}", process.id(), status);
                     if let Some(hint) = status.human_hint() {
-                        hints.push(format!("{}: {hint}", inst_name).into());
+                        let msg = match hint {
+                            command::ExitHint::Crash1 => t::instance::exit::crash1(),
+                            command::ExitHint::Abort134 => t::instance::exit::abort134(),
+                            command::ExitHint::Segfault139 => t::instance::exit::segfault139(),
+                            command::ExitHint::Killed9 => t::instance::exit::killed9(),
+                            command::ExitHint::Segfault11 => t::instance::exit::segfault11(),
+                            command::ExitHint::Abort6 => t::instance::exit::abort6(),
+                            command::ExitHint::AccessViolation => t::instance::exit::access_violation(),
+                            command::ExitHint::StackOverrun => t::instance::exit::stack_overrun(),
+                            command::ExitHint::WindowsException => t::instance::exit::windows_exception(),
+                        };
+                        hints.push(format!("{}: {msg}", inst_name).into());
                     }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;

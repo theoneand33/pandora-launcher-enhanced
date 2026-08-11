@@ -146,7 +146,17 @@ impl ContentListDelegate {
     }
 
     pub fn content_ids(&self) -> Vec<InstanceContentID> {
-        self.content.iter().map(|s| s.id).collect()
+        if let Some(searched) = &self.searched {
+            searched
+                .iter()
+                .filter_map(|e| match e {
+                    SummaryOrChild::Summary(s) => Some(s.id),
+                    SummaryOrChild::Child(_) => None,
+                })
+                .collect()
+        } else {
+            self.content.iter().map(|s| s.id).collect()
+        }
     }
 
     pub fn render_summary(

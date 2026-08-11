@@ -657,6 +657,7 @@ dependencies = [
  "shell-words",
  "slab",
  "strum",
+ "t",
  "tar",
  "thiserror 2.0.17",
  "tokio",
@@ -1250,7 +1251,6 @@ dependencies = [
  "scopeguard",
  "security-framework",
  "security-framework-sys",
- "t",
  "tokio",
  "windows 0.62.2",
 ]

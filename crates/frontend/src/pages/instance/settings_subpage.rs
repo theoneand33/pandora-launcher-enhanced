@@ -993,6 +993,7 @@ impl Render for InstanceSettingsSubpage {
                     parts.push(t::instance::memory::warning_high(max_val));
                 }
             }
+            // max 0 means empty/no cap, so min>max is not an error in that case.
             if memory_override_enabled && min_val > max_val && max_val != 0 {
                 parts.push(t::instance::memory::min_gt_max().to_string());
             }
@@ -1115,28 +1116,35 @@ impl Render for InstanceSettingsSubpage {
                                     .label(t::instance::jvm_binary::detect())
                                     .small()
                                     .disabled(!jvm_binary_enabled)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.detected_javas = detect_javas();
-                                        cx.notify();
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        let entity = cx.entity();
+                                        window
+                                            .spawn(cx, async move |cx| {
+                                                let javas =
+                                                    cx.background_executor().spawn(async { detect_javas() }).await;
+                                                let _ = cx.update_window_entity(&entity, |this, _, cx| {
+                                                    this.detected_javas = javas;
+                                                    cx.notify();
+                                                });
+                                            })
+                                            .detach();
                                     })),
                             ),
                     )
                     .when(!self.detected_javas.is_empty(), |this| {
-                        this.child(v_flex().gap_1().children(self.detected_javas.iter().enumerate().map(|(idx, p)| {
+                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
                             let path = p.clone();
                             let label: SharedString = p.to_string_lossy().into_owned().into();
-                            Button::new(SharedString::from(format!("use-java-{idx}")))
-                                .label(label.clone())
-                                .small()
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
-                                    this.jvm_binary_enabled = true;
-                                    this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
-                                        id: this.instance_id,
-                                        jvm_binary: this.get_jvm_binary_configuration(),
-                                    });
-                                    cx.notify();
-                                }))
+                            let id: SharedString = format!("use-java-{}", path.to_string_lossy()).into();
+                            Button::new(id).label(label.clone()).small().on_click(cx.listener(move |this, _, _, cx| {
+                                this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
+                                this.jvm_binary_enabled = true;
+                                this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
+                                    id: this.instance_id,
+                                    jvm_binary: this.get_jvm_binary_configuration(),
+                                });
+                                cx.notify();
+                            }))
                         })))
                     }),
             )

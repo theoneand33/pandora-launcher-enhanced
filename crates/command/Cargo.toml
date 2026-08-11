@@ -10,7 +10,6 @@ rustc-hash.workspace = true
 directories.workspace = true
 log.workspace = true
 tokio.workspace = true
-t.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

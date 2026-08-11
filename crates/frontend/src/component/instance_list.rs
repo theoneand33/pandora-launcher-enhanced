@@ -228,6 +228,7 @@ impl InstanceList {
                     v_flex()
                         .truncate()
                         .w_full()
+                        .pr_16()
                         .relative()
                         .child(
                             div()
