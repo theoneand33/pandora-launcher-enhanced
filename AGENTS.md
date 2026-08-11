@@ -15,6 +15,19 @@ Read this before you edit. README is context. This file tells you how to act.
 
 If you rename something, rename it everywhere. One name for one thing.
 
+## Critical rules — Hard limits
+
+- Never touch `crates/ftree`, `vendor/`, `patches/`. Tell the user. `ftree` is vendored.
+- Never touch `wrapper/LaunchWrapper.jar` bytes. Rebuild with `wrapper/build.sh`.
+- Never use colored gradients. Colorless gradients are fine.
+- Never add a crate the user did not ask for. Use `workspace.dependencies` in root `Cargo.toml`.
+- Never let an untrusted path escape the instance directory. Use `SafePath` at every trust boundary.
+- Never log or store secrets. Redact in `log_reader.rs` and `redact_error`.
+- Never commit unless the user asks you to commit.
+- Never add a test framework. Use plain `assert` with `#[cfg(test)]`.
+- Never use colored gradients non color gradients are sometimes allowed.
+- Never add a comment that does not earn its place. `ponytail:` marks a deliberate simplification and its ceiling.
+
 ## What makes this project special — Do not compromise
 
 1. **One process, typed IPC.** `main` at `crates/pandora_launcher/src/main.rs:33` creates the channel pair (`bridge::handle::create_pair` at `bridge/handle.rs:13`). Backend and frontend are Tokio tasks, not separate processes. Do not add a JSON protocol or second binary.
@@ -46,19 +59,6 @@ If you rename something, rename it everywhere. One name for one thing.
 | NBT | `docs/agents/workspace.md` (NBT) |
 | HTTP client, CurseForge key redaction | `docs/agents/workspace.md` (Reqwest_client) |
 | Build, vendoring, platform notes, tests | `docs/agents/workspace.md` (Build and platform) |
-
-## Critical rules — Hard limits
-
-- Never touch `crates/ftree`, `vendor/`, `patches/`. Tell the user. `ftree` is vendored.
-- Never touch `wrapper/LaunchWrapper.jar` bytes. Rebuild with `wrapper/build.sh`.
-- Never use colored gradients. Colorless gradients are fine.
-- Never add a crate the user did not ask for. Use `workspace.dependencies` in root `Cargo.toml`.
-- Never let an untrusted path escape the instance directory. Use `SafePath` at every trust boundary.
-- Never log or store secrets. Redact in `log_reader.rs` and `redact_error`.
-- Never commit unless the user asks you to commit.
-- Never add a test framework. Use plain `assert` with `#[cfg(test)]`.
-- Never add the `gradiants` package. Use native CSS `linear-gradient()` if you need a gradient.
-- Never add a comment that does not earn its place. `ponytail:` marks a deliberate simplification and its ceiling.
 
 ## Failure modes we have hit — Do not repeat
 
@@ -127,9 +127,10 @@ Release builds: `scripts/build_linux.sh vX.Y.Z`, `scripts/build_mac.sh`, `script
 
 ## When to use skills — Trigger keywords
 
-- **ponytail** — user says "ponytail", "simplest", "minimal", "YAGNI", "do less", or complains about bloat. Prefer stdlib / platform feature over new dep. One line over fifty. Ask if the task needs to exist at all.
-- **agent-browser** — user says "screenshot", "open site", "check UI", "fill form", "scrape". Use for visual QA of frontend changes.
-- **ste-writing** — you are writing docs, README, error messages, or comments. Use short common words, active voice, one instruction per sentence (max 20 words), no semicolons.
+- **ponytail** — you are when editing code.
+- **agent-browser** — you are interacting with websites.
+- **ste-writing** — you are writing docs, README, error messages, or comments.
+- **git-commit** — you are committing anything.
 
 If the user disagrees with a preference in this file, the user wins. This file is overrideable.
 
