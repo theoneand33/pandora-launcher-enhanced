@@ -34,10 +34,11 @@ impl RenderOnce for ErrorAlert {
 
         let danger = cx.theme().danger;
         let bg = danger.opacity(0.08);
+        let fg = cx.theme().red;
 
         h_flex()
             .w(self.w)
-            .text_color(danger)
+            .text_color(fg)
             .bg(bg)
             .px(padding_x)
             .py(padding_y)
