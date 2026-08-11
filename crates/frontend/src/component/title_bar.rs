@@ -19,8 +19,8 @@ pub struct TitleBar {
 }
 
 #[derive(Default)]
-struct TitleBarState {
-    should_move: bool,
+pub(crate) struct TitleBarState {
+    pub(crate) should_move: bool,
 }
 
 impl RenderOnce for TitleBar {
