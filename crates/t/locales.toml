@@ -2938,3 +2938,185 @@ en = "Use default for future"
 de = "Standard für zukünftige verwenden"
 hu = "Alapértelmezett használata a jövőben"
 
+[instance.pin]
+en = "Pin"
+de = "Anpinnen"
+hu = "Kitűzés"
+sv = "Fäst"
+ru = "Закрепить"
+
+[instance.unpin]
+en = "Unpin"
+de = "Lösen"
+hu = "Feloldás"
+sv = "Ta bort fäst"
+ru = "Открепить"
+
+[common.no_matches]
+en = "No matches"
+de = "Keine Treffer"
+hu = "Nincs találat"
+sv = "Inga träffar"
+ru = "Совпадений не найдено"
+
+[instance.content.outdated_only]
+en = "Outdated only"
+de = "Nur veraltete"
+hu = "Csak elavult"
+sv = "Endast föråldrade"
+ru = "Только устаревшие"
+
+[instance.content.enable_all]
+en = "Enable all"
+de = "Alle aktivieren"
+hu = "Összes bekapcsolása"
+sv = "Aktivera alla"
+ru = "Включить всё"
+
+[instance.content.enable_outdated]
+en = "Enable outdated"
+de = "Veraltete aktivieren"
+hu = "Elavultak bekapcsolása"
+sv = "Aktivera föråldrade"
+ru = "Включить устаревшие"
+
+[instance.content.disable_all]
+en = "Disable all"
+de = "Alle deaktivieren"
+hu = "Összes kikapcsolása"
+sv = "Inaktivera alla"
+ru = "Отключить всё"
+
+[instance.content.disable_outdated]
+en = "Disable outdated"
+de = "Veraltete deaktivieren"
+hu = "Elavultak kikapcsolása"
+sv = "Inaktivera föråldrade"
+ru = "Отключить устаревшие"
+
+[instance.content.enable_filtered]
+en = "Enable filtered"
+de = "Gefilterte aktivieren"
+hu = "Szűrt bekapcsolása"
+sv = "Aktivera filtrerade"
+ru = "Включить отфильтрованные"
+
+[instance.content.disable_filtered]
+en = "Disable filtered"
+de = "Gefilterte deaktivieren"
+hu = "Szűrt kikapcsolása"
+sv = "Inaktivera filtrerade"
+ru = "Отключить отфильтрованные"
+
+[instance.jvm_binary.detect]
+en = "Detect"
+de = "Erkennen"
+hu = "Felkutatás"
+sv = "Sök"
+ru = "Найти"
+
+[instance.memory.system_ram]
+en = "System RAM: ${total: u32} MiB"
+de = "System-RAM: ${total: u32} MiB"
+hu = "Rendszermemória: ${total: u32} MiB"
+sv = "System-RAM: ${total: u32} MiB"
+ru = "Оперативная память: ${total: u32} МиБ"
+
+[instance.memory.warning_high]
+en = "— warning: max ${max: u32} MiB > 85% of system RAM"
+de = "— Warnung: max ${max: u32} MiB > 85% des System-RAM"
+hu = "— figyelmeztetés: max ${max: u32} MiB > a rendszermemória 85%-a"
+sv = "— varning: max ${max: u32} MiB > 85% av system-RAM"
+ru = "— предупреждение: макс. ${max: u32} МиБ > 85% оперативной памяти"
+
+[instance.memory.min_gt_max]
+en = "— min > max"
+de = "— min > max"
+hu = "— min > max"
+sv = "— min > max"
+ru = "— мин. > макс."
+
+[instance.folder.mods]
+en = "Mods"
+de = "Mods"
+hu = "Modok"
+sv = "Mods"
+ru = "Моды"
+
+[instance.folder.saves]
+en = "Saves"
+de = "Welten"
+hu = "Mentések"
+sv = "Världar"
+ru = "Сохранения"
+
+[instance.folder.logs]
+en = "Logs"
+de = "Logs"
+hu = "Naplók"
+sv = "Loggar"
+ru = "Логи"
+
+[instance.exit.crash1]
+en = "Minecraft crashed (exit 1) — check Logs / Game Output for the stacktrace"
+de = "Minecraft abgestürzt (Exit 1) — siehe Logs / Spielausgabe für den Stacktrace"
+hu = "Minecraft összeomlott (1-es kilépés) — nézd meg a Naplókat / Játéknaplót"
+sv = "Minecraft kraschade (exit 1) — se Loggar / Spelutmatning för stacktrace"
+ru = "Minecraft аварийно завершился (код 1) — смотри Логи / вывод игры"
+
+[instance.exit.abort134]
+en = "Aborted (exit 134) — native library crash, try updating GLFW/OpenAL or Java"
+de = "Abgebrochen (Exit 134) — nativer Bibliotheksfehler, versuche GLFW/OpenAL oder Java zu aktualisieren"
+hu = "Megszakítva (134-es kilépés) — natív könyvtár hiba, próbáld frissíteni a GLFW/OpenAL-t vagy a Java-t"
+sv = "Avbruten (exit 134) — krasch i nativt bibliotek, prova att uppdatera GLFW/OpenAL eller Java"
+ru = "Прервано (код 134) — сбой нативной библиотеки, попробуйте обновить GLFW/OpenAL или Java"
+
+[instance.exit.segfault139]
+en = "Segfault (exit 139) — native crash, check graphics drivers"
+de = "Segfault (Exit 139) — nativer Absturz, prüfe Grafiktreiber"
+hu = "Szegmens hiba (139-es kilépés) — natív összeomlás, ellenőrizd a videó-illesztőket"
+sv = "Segfault (exit 139) — nativ krasch, kontrollera grafikdrivrutiner"
+ru = "Segfault (код 139) — нативный сбой, проверьте драйверы видеокарты"
+
+[instance.exit.killed9]
+en = "Killed (signal 9) — likely out of memory, try lower -Xmx or closing apps"
+de = "Beendet (Signal 9) — vermutlich zu wenig Speicher, senke -Xmx oder schließe Apps"
+hu = "Kilőve (9-es szignál) — valószínűleg kevés memória, csökkentsd az -Xmx-et"
+sv = "Dödad (signal 9) — troligen slut på minne, sänk -Xmx eller stäng appar"
+ru = "Завершено (сигнал 9) — вероятно, нехватка памяти, уменьшите -Xmx"
+
+[instance.exit.segfault11]
+en = "Segmentation fault (signal 11) — faulty native library or driver"
+de = "Segmentation Fault (Signal 11) — fehlerhafte native Bibliothek oder Treiber"
+hu = "Szegmens hiba (11-es szignál) — hibás natív könyvtár vagy illesztő"
+sv = "Segmentation fault (signal 11) — felaktigt nativt bibliotek eller drivrutin"
+ru = "Ошибка сегментации (сигнал 11) — сбой нативной библиотеки или драйвера"
+
+[instance.exit.abort6]
+en = "Aborted (signal 6) — native library aborted"
+de = "Abgebrochen (Signal 6) — native Bibliothek abgebrochen"
+hu = "Megszakítva (6-os szignál) — natív könyvtár megszakadt"
+sv = "Avbruten (signal 6) — nativt bibliotek avbröts"
+ru = "Прервано (сигнал 6) — нативная библиотека прервана"
+
+[instance.exit.access_violation]
+en = "Access violation (0xC0000005) — faulty native library (GLFW/OpenAL) or wrong Java version"
+de = "Zugriffsverletzung (0xC0000005) — fehlerhafte native Bibliothek (GLFW/OpenAL) oder falsche Java-Version"
+hu = "Hozzáférési hiba (0xC0000005) — hibás natív könyvtár (GLFW/OpenAL) vagy rossz Java-verzió"
+sv = "Åtkomstfel (0xC0000005) — felaktigt nativt bibliotek (GLFW/OpenAL) eller fel Java-version"
+ru = "Нарушение доступа (0xC0000005) — сбой нативной библиотеки (GLFW/OpenAL) или неверная версия Java"
+
+[instance.exit.stack_overrun]
+en = "Stack buffer overrun (0xC0000409) — native crash, update drivers/Java"
+de = "Stack-Überlauf (0xC0000409) — nativer Absturz, aktualisiere Treiber/Java"
+hu = "Stack túlcsordulás (0xC0000409) — natív összeomlás, frissítsd az illesztőket/Java-t"
+sv = "Stack buffer overrun (0xC0000409) — nativ krasch, uppdatera drivrutiner/Java"
+ru = "Переполнение стека (0xC0000409) — нативный сбой, обновите драйверы/Java"
+
+[instance.exit.windows_exception]
+en = "Minecraft crashed with a Windows exception — check Logs"
+de = "Minecraft mit Windows-Exception abgestürzt — siehe Logs"
+hu = "Minecraft Windows kivétellel omlott össze — nézd meg a Naplókat"
+sv = "Minecraft kraschade med Windows-undantag — se Loggar"
+ru = "Minecraft аварийно завершился с исключением Windows — смотри Логи"
+

@@ -158,6 +158,10 @@ pub enum MessageToBackend {
         id: InstanceID,
         icon: Option<EmbeddedOrRaw>,
     },
+    SetInstancePinned {
+        id: InstanceID,
+        pinned: bool,
+    },
     KillInstance {
         id: InstanceID,
     },
