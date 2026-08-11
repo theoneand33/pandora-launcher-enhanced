@@ -547,34 +547,40 @@ impl ContentListDelegate {
         if blocked {
             item_content = item_content.child(
                 ErrorAlert::new(
-                    "Blocked".into(),
-                    "The mod author has blocked downloads from third-party launchers".into(),
+                    t::instance::content::blocked().into(),
+                    t::instance::content::install::no_third_party_downloads().into(),
                 )
                 .w(Length::Auto),
             );
         } else if child.is_missing {
-            item_content = item_content.child(Button::new("download").label("Download").success().on_click({
-                let backend_handle = self.backend_handle.clone();
-                let id = self.id;
-                let content_id = child.parent;
-                move |_, window, cx| {
-                    let modal_action = ModalAction::default();
+            item_content = item_content.child(
+                Button::new("download")
+                    .label(t::instance::content::download())
+                    .small()
+                    .success()
+                    .on_click({
+                        let backend_handle = self.backend_handle.clone();
+                        let id = self.id;
+                        let content_id = child.parent;
+                        move |_, window, cx| {
+                            let modal_action = ModalAction::default();
 
-                    backend_handle.send(MessageToBackend::DownloadContentChildren {
-                        id,
-                        content_id,
-                        modal_action: modal_action.clone(),
-                    });
+                            backend_handle.send(MessageToBackend::DownloadContentChildren {
+                                id,
+                                content_id,
+                                modal_action: modal_action.clone(),
+                            });
 
-                    crate::modals::generic::show_modal(
-                        window,
-                        cx,
-                        "Downloading children".into(),
-                        "Error downloading children".into(),
-                        modal_action,
-                    );
-                }
-            }));
+                            crate::modals::generic::show_modal(
+                                window,
+                                cx,
+                                t::instance::content::downloading_children().into(),
+                                t::instance::content::error_downloading_children().into(),
+                                modal_action,
+                            );
+                        }
+                    }),
+            );
         } else {
             let id = self.id;
             let content_id = child.parent;
