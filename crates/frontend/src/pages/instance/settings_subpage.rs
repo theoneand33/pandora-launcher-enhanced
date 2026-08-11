@@ -1402,9 +1402,9 @@ impl Render for InstanceSettingsSubpage {
                                 .as_ref()
                                 .and_then(directories::UserDirs::desktop_dir)
                                 .unwrap_or(Path::new("."));
-                    let instance = instance.read(cx);
-                    let id = instance.id;
-                    let name = instance.name.clone();
+                            let instance = instance.read(cx);
+                            let id = instance.id;
+                            let name = instance.name.clone();
 
                             #[cfg(target_os = "linux")]
                             let suggested_name = format!("{name}.desktop");
@@ -1459,27 +1459,34 @@ impl Render for InstanceSettingsSubpage {
                         }
                     }),
             )
-            .child(Button::new("delete").label(t::instance::delete()).icon(PandoraIcon::Trash2).overflow_x_hidden().danger().on_click({
-                let instance = self.instance.clone();
-                let backend_handle = self.backend_handle.clone();
-                move |click: &ClickEvent, window, cx| {
-                    let instance = instance.read(cx);
-                    let id = instance.id;
-                    let name = instance.name.clone();
+            .child(
+                Button::new("delete")
+                    .label(t::instance::delete())
+                    .icon(PandoraIcon::Trash2)
+                    .overflow_x_hidden()
+                    .danger()
+                    .on_click({
+                        let instance = self.instance.clone();
+                        let backend_handle = self.backend_handle.clone();
+                        move |click: &ClickEvent, window, cx| {
+                            let instance = instance.read(cx);
+                            let id = instance.id;
+                            let name = instance.name.clone();
 
-                    if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                        backend_handle.send(bridge::message::MessageToBackend::DeleteInstance { id });
-                    } else {
-                        crate::modals::delete_instance::open_delete_instance(
-                            id,
-                            name,
-                            backend_handle.clone(),
-                            window,
-                            cx,
-                        );
-                    }
-                }
-            }));
+                            if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
+                                backend_handle.send(bridge::message::MessageToBackend::DeleteInstance { id });
+                            } else {
+                                crate::modals::delete_instance::open_delete_instance(
+                                    id,
+                                    name,
+                                    backend_handle.clone(),
+                                    window,
+                                    cx,
+                                );
+                            }
+                        }
+                    }),
+            );
 
         let sections = HorizontalSections::new()
             .size_full()

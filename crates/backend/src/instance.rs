@@ -445,11 +445,7 @@ impl Instance {
         }
     }
 
-    pub async fn delete_server(
-        backend: Arc<BackendState>,
-        id: InstanceID,
-        index: usize,
-    ) {
+    pub async fn delete_server(backend: Arc<BackendState>, id: InstanceID, index: usize) {
         let server_dat_path = {
             let guard = backend.instance_state.read();
             let Some(instance) = guard.instances.get(id) else {

@@ -383,7 +383,6 @@ impl Render for SyncingPage {
                     .text_lg()
                     .child(t::instance::sync::custom()),
             )
-
             .children(sync_state.targets.iter().filter_map(|(name, state)| {
                 if !state.enabled || NAMED_SYNC_TARGETS.contains(&**name) {
                     return None;

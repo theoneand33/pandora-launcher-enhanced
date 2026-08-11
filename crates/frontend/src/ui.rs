@@ -596,7 +596,8 @@ impl Render for LauncherUI {
                 }
             });
 
-        let header_drag_state = window.use_keyed_state("sidebar-header-drag-state", cx, |_, _| TitleBarState::default());
+        let header_drag_state =
+            window.use_keyed_state("sidebar-header-drag-state", cx, |_, _| TitleBarState::default());
         let header = h_flex()
             .id("sidebar-header")
             .window_control_area(WindowControlArea::Drag)

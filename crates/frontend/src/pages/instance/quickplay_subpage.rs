@@ -424,35 +424,27 @@ impl ListDelegate for ServersListDelegate {
                 this.delegate_mut().delete_server(row_index, cx);
             }));
 
-        let item = ListItem::new(ix)
-            .p_1()
-            .child(
-                h_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .child(Button::new(ix).success().icon(PandoraIcon::Play).on_click(move |_, window, cx| {
-                                root::start_instance(
-                                    id,
-                                    name.clone(),
-                                    Some(QuickPlayLaunch::Multiplayer(target.clone())),
-                                    &backend_handle,
-                                    window,
-                                    cx,
-                                );
-                            }))
-                            .px_2(),
-                    )
-                    .child(icon.size_16().min_w_16().min_h_16())
-                    .child(description)
-                    .child(v_flex()
-                        .gap_1()
-                        .child(move_up)
-                        .child(move_down)
-                        .child(delete)
+        let item = ListItem::new(ix).p_1().child(
+            h_flex()
+                .gap_1()
+                .child(
+                    div()
+                        .child(Button::new(ix).success().icon(PandoraIcon::Play).on_click(move |_, window, cx| {
+                            root::start_instance(
+                                id,
+                                name.clone(),
+                                Some(QuickPlayLaunch::Multiplayer(target.clone())),
+                                &backend_handle,
+                                window,
+                                cx,
+                            );
+                        }))
                         .px_2(),
-                    ),
-            );
+                )
+                .child(icon.size_16().min_w_16().min_h_16())
+                .child(description)
+                .child(v_flex().gap_1().child(move_up).child(move_down).child(delete).px_2()),
+        );
 
         Some(item)
     }
@@ -500,10 +492,7 @@ impl ServersListDelegate {
     }
 
     fn delete_server(&mut self, index: usize, cx: &mut Context<ListState<Self>>) {
-        self.backend_handle.send(MessageToBackend::DeleteServer {
-            id: self.id,
-            index,
-        });
+        self.backend_handle.send(MessageToBackend::DeleteServer { id: self.id, index });
         cx.notify();
     }
 }
