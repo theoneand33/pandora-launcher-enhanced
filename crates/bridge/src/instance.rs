@@ -76,6 +76,7 @@ pub struct InstanceServerSummary {
     pub pinging: bool,
     pub status: Option<Arc<ServerStatus>>,
     pub ping: Option<Duration>,
+    pub raw_index: usize,
 }
 
 #[derive(Debug, Clone)]

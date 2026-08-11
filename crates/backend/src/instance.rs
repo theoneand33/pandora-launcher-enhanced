@@ -1437,7 +1437,7 @@ fn load_servers_summary(
 
     let mut summaries = Vec::with_capacity(servers.len());
 
-    for server in servers.iter() {
+    for (raw_index, server) in servers.iter().enumerate() {
         let server = server.as_compound().unwrap();
 
         if let Some(hidden) = server.find_byte("hidden")
@@ -1488,6 +1488,7 @@ fn load_servers_summary(
             pinging,
             status,
             ping,
+            raw_index,
         });
     }
 

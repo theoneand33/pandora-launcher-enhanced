@@ -388,6 +388,7 @@ impl ListDelegate for ServersListDelegate {
         let backend_handle = self.backend_handle.clone();
         let target = OsString::from(summary.ip.to_string());
         let row_index = ix.row;
+        let raw_index = summary.raw_index;
 
         let move_up = Button::new(("server-up", row_index))
             .compact()
@@ -421,7 +422,7 @@ impl ListDelegate for ServersListDelegate {
             .danger()
             .icon(PandoraIcon::Trash2)
             .on_click(cx.listener(move |this, _, _, cx| {
-                this.delegate_mut().delete_server(row_index, cx);
+                this.delegate_mut().delete_server(raw_index, cx);
             }));
 
         let item = ListItem::new(ix).p_1().child(
