@@ -3247,8 +3247,12 @@ ru = "Синхронизировать ресурспаки (resourcepacks)"
 fr = "Synchroniser le dossier des packs de ressources"
 [instance.sync.targets.downloads]
 en = "Sync downloads folder"
+pl = "Synchronizuj folder downloads"
 de = "Synchronisiere Server-Ressourcenpakete (downloads)"
+hu = "Letöltések (downloads) mappájának szinkronizálása"
 sv = "Synka serverresurspakets mappan (downloads)"
+ru = "Синхронизировать папку загрузок (downloads)"
+fr = "Synchroniser le dossier « downloads »"
 [instance.sync.targets.shaderpacks]
 en = "Sync shaderpacks folder"
 pl = "Synchronizuj folder shaderpacks"

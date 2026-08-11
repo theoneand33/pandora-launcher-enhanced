@@ -102,6 +102,12 @@ impl RenderOnce for TitleBar {
                     state.should_move = false;
                 }),
             )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                window.listener_for(&state, |state, _, _, _| {
+                    state.should_move = false;
+                }),
+            )
             .on_mouse_move(window.listener_for(&state, |state, _, window, _| {
                 if state.should_move {
                     state.should_move = false;

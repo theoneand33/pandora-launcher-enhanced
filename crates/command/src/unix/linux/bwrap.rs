@@ -93,6 +93,8 @@ static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| 
         "XAUTHORITY",
         "WAYLAND_DISPLAY",
         "PULSE_SERVER",
+        // LD_LIBRARY_PATH is required on NixOS where GL drivers/libs live in /nix/store and are
+        // exposed via LD_LIBRARY_PATH; sandbox is still read-only + namespaced.
         "LD_LIBRARY_PATH",
     ]
     .iter()

@@ -483,11 +483,18 @@ impl ServersListDelegate {
         if !self.can_reorder() {
             return;
         }
+        // ponytail: translate display row -> raw NBT index (hidden/ip-less servers are filtered)
+        let Some(from_raw) = self.searched.get(from_index).map(|s| s.raw_index) else {
+            return;
+        };
+        let Some(to_raw) = self.searched.get(to_index).map(|s| s.raw_index) else {
+            return;
+        };
 
         self.backend_handle.send(MessageToBackend::ReorderServers {
             id: self.id,
-            from_index,
-            to_index,
+            from_index: from_raw,
+            to_index: to_raw,
         });
         cx.notify();
     }
