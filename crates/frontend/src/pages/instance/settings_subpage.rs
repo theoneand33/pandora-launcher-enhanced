@@ -1,4 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use bridge::{
     handle::BackendHandle,
@@ -56,26 +59,29 @@ use crate::{
 
 // ponytail: parses /proc/meminfo or sysctl; fallback None — upgrade to sysinfo crate if cross-platform accuracy matters.
 fn total_memory_mib() -> Option<u32> {
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(text) = std::fs::read_to_string("/proc/meminfo")
-            && let Some(line) = text.lines().find(|l| l.starts_with("MemTotal:"))
-            && let Some(kb_str) = line.split_whitespace().nth(1)
-            && let Ok(kb) = kb_str.parse::<u64>()
+    static CACHE: OnceLock<Option<u32>> = OnceLock::new();
+    *CACHE.get_or_init(|| {
+        #[cfg(target_os = "linux")]
         {
-            return Some((kb / 1024) as u32);
+            if let Ok(text) = std::fs::read_to_string("/proc/meminfo")
+                && let Some(line) = text.lines().find(|l| l.starts_with("MemTotal:"))
+                && let Some(kb_str) = line.split_whitespace().nth(1)
+                && let Ok(kb) = kb_str.parse::<u64>()
+            {
+                return Some((kb / 1024) as u32);
+            }
         }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(out) = std::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output()
-            && out.status.success()
-            && let Ok(bytes) = String::from_utf8_lossy(&out.stdout).trim().parse::<u64>()
+        #[cfg(target_os = "macos")]
         {
-            return Some((bytes / 1024 / 1024) as u32);
+            if let Ok(out) = std::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output()
+                && out.status.success()
+                && let Ok(bytes) = String::from_utf8_lossy(&out.stdout).trim().parse::<u64>()
+            {
+                return Some((bytes / 1024 / 1024) as u32);
+            }
         }
-    }
-    None
+        None
+    })
 }
 
 // ponytail: fs scan only, no java -version check; add version probe if false positives appear.

@@ -48,17 +48,6 @@ impl Debug for PandoraExitStatus {
 }
 
 impl PandoraExitStatus {
-    pub fn is_success(&self) -> bool {
-        #[cfg(unix)]
-        {
-            libc::WIFEXITED(self.0) && libc::WEXITSTATUS(self.0) == 0
-        }
-        #[cfg(windows)]
-        {
-            self.0 == 0
-        }
-    }
-
     // ponytail: tiny match table, extend as new crash signatures appear.
     pub fn human_hint(&self) -> Option<&'static str> {
         #[cfg(unix)]
@@ -69,10 +58,7 @@ impl PandoraExitStatus {
                     1 => Some("Minecraft crashed (exit 1) — check Logs / Game Output for the stacktrace"),
                     134 => Some("Aborted (exit 134) — native library crash, try updating GLFW/OpenAL or Java"),
                     139 => Some("Segfault (exit 139) — native crash, check graphics drivers"),
-                    c => {
-                        let _ = c;
-                        Some("Minecraft exited with an error — check Logs for details")
-                    },
+                    _ => Some("Minecraft exited with an error — check Logs for details"),
                 };
             }
             if libc::WIFSIGNALED(self.0) {

@@ -523,7 +523,7 @@ impl BackendState {
                 Ok(Some(status)) => {
                     log::info!("Child process {} is no longer alive: {}", process.id(), status);
                     if let Some(hint) = status.human_hint() {
-                        hints.push(format!("{}: {hint} ({status})", inst_name).into());
+                        hints.push(format!("{}: {hint}", inst_name).into());
                     }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;
@@ -540,9 +540,6 @@ impl BackendState {
                 Ok(None) => true,
                 Ok(Some(status)) => {
                     log::info!("Child process {} closed: {}", process.id(), status);
-                    if let Some(hint) = status.human_hint() {
-                        hints.push(format!("{}: {hint} ({status})", inst_name).into());
-                    }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;
                     false
@@ -555,10 +552,7 @@ impl BackendState {
                 },
             });
             for hint in hints {
-                self.send.send(bridge::message::MessageToFrontend::AddNotification {
-                    notification_type: bridge::message::BridgeNotificationType::Warning,
-                    message: hint,
-                });
+                self.send.send_warning(hint);
             }
 
             let now = Instant::now();

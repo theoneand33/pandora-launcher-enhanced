@@ -90,15 +90,15 @@ impl InstanceList {
         if lower.is_empty() {
             return true;
         }
-        let name = entry.name.to_ascii_lowercase();
+        let name = entry.name.to_lowercase();
         if name.contains(lower) {
             return true;
         }
-        let ver = entry.configuration.minecraft_version.as_str().to_ascii_lowercase();
+        let ver = entry.configuration.minecraft_version.as_str().to_lowercase();
         if ver.contains(lower) {
             return true;
         }
-        let loader = entry.configuration.loader.pretty_name().to_ascii_lowercase();
+        let loader = entry.configuration.loader.pretty_name().to_lowercase();
         if loader.contains(lower) {
             return true;
         }
@@ -106,7 +106,7 @@ impl InstanceList {
     }
 
     fn visible_indices(&self) -> Vec<usize> {
-        let lower = self.filter.to_ascii_lowercase();
+        let lower = self.filter.to_lowercase();
         let mut out: Vec<usize> = self
             .items
             .iter()
@@ -114,15 +114,8 @@ impl InstanceList {
             .filter(|(_, e)| Self::matches_filter(e, &lower))
             .map(|(i, _)| i)
             .collect();
-        // pinned first, then natural name order
-        out.sort_by(|&a, &b| {
-            let pa = self.items[a].configuration.pinned;
-            let pb = self.items[b].configuration.pinned;
-            if pa != pb {
-                return pb.cmp(&pa);
-            }
-            lexical_sort::natural_lexical_cmp(&self.items[a].name, &self.items[b].name)
-        });
+        // pinned first, stable to preserve order from perform_sort
+        out.sort_by(|&a, &b| self.items[b].configuration.pinned.cmp(&self.items[a].configuration.pinned));
         out
     }
 
@@ -277,7 +270,7 @@ impl InstanceList {
                     .compact()
                     .absolute()
                     .top_1()
-                    .left_1()
+                    .right_10()
                     .icon(if pinned {
                         PandoraIcon::Star
                     } else {
