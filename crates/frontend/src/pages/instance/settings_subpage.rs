@@ -1132,10 +1132,10 @@ impl Render for InstanceSettingsSubpage {
                             ),
                     )
                     .when(!self.detected_javas.is_empty(), |this| {
-                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
+                        this.child(v_flex().gap_1().children(self.detected_javas.iter().enumerate().map(|(idx, p)| {
                             let path = p.clone();
                             let label: SharedString = p.to_string_lossy().into_owned().into();
-                            let id: SharedString = format!("use-java-{}", path.to_string_lossy()).into();
+                            let id: SharedString = format!("use-java-{idx}").into();
                             Button::new(id).label(label.clone()).small().on_click(cx.listener(move |this, _, _, cx| {
                                 this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
                                 this.jvm_binary_enabled = true;

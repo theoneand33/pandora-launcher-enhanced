@@ -145,6 +145,10 @@ impl ContentListDelegate {
         self.outdated_only = v;
     }
 
+    /// Returns IDs of visible summaries for the current tab. Scope is the active
+    /// tab only and respects both search and outdated filters: when a search query
+    /// is active, only matching summaries are returned; when outdated-only is on,
+    /// only updatable summaries were inserted into `self.content`.
     pub fn content_ids(&self) -> Vec<InstanceContentID> {
         if let Some(searched) = &self.searched {
             searched

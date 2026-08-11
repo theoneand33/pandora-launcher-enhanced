@@ -278,54 +278,55 @@ impl InstanceList {
                     }
                 }),
             ))
-            .child({
-                let pinned = item.configuration.pinned;
-                let bh = self.backend_handle.clone();
-                Button::new(("pin", index))
-                    .small()
-                    .compact()
-                    .absolute()
-                    .top_1()
-                    .right_10()
-                    .icon(if pinned {
-                        PandoraIcon::Star
-                    } else {
-                        PandoraIcon::StarOff
-                    })
-                    .tooltip(if pinned {
-                        t::instance::unpin()
-                    } else {
-                        t::instance::pin()
-                    })
-                    .on_click(move |_, _, _| {
-                        bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
-                    })
-            })
             .child(
-                Button::new(("remove", index))
+                h_flex()
                     .absolute()
                     .top_1()
                     .right_1()
-                    .danger()
-                    .small()
-                    .compact()
-                    .icon(trash_icon)
-                    .tooltip(t::instance::delete())
-                    .on_click(move |click: &ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        window.prevent_default();
-                        if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                            backend_handle.send(MessageToBackend::DeleteInstance { id });
-                        } else {
-                            modals::delete_instance::open_delete_instance(
-                                id,
-                                name.clone(),
-                                backend_handle.clone(),
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
+                    .gap_1()
+                    .child({
+                        let pinned = item.configuration.pinned;
+                        let bh = self.backend_handle.clone();
+                        Button::new(("pin", index))
+                            .small()
+                            .compact()
+                            .icon(if pinned {
+                                PandoraIcon::Star
+                            } else {
+                                PandoraIcon::StarOff
+                            })
+                            .tooltip(if pinned {
+                                t::instance::unpin()
+                            } else {
+                                t::instance::pin()
+                            })
+                            .on_click(move |_, _, _| {
+                                bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
+                            })
+                    })
+                    .child(
+                        Button::new(("remove", index))
+                            .danger()
+                            .small()
+                            .compact()
+                            .icon(trash_icon)
+                            .tooltip(t::instance::delete())
+                            .on_click(move |click: &ClickEvent, window, cx| {
+                                cx.stop_propagation();
+                                window.prevent_default();
+                                if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
+                                    backend_handle.send(MessageToBackend::DeleteInstance { id });
+                                } else {
+                                    modals::delete_instance::open_delete_instance(
+                                        id,
+                                        name.clone(),
+                                        backend_handle.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                    ),
             )
     }
 }

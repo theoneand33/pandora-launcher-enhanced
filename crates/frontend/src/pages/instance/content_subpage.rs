@@ -582,7 +582,10 @@ impl Render for InstanceContentSubpage {
             .child(
                 Button::new("enable_all")
                     .small()
-                    // content_ids() is tab-scoped and respects search/outdated filters (visible summaries).
+                    // content_ids() is tab-scoped and respects search/outdated filters:
+                    // "Enable all" affects only visible summaries (current tab, filtered
+                    // by search query and outdated-only). Label disambiguates outdated
+                    // but search filtering remains implicit — see content_ids() doc.
                     .tooltip(t::instance::content::enable_all())
                     .label(if self.show_outdated_only {
                         t::instance::content::enable_outdated()

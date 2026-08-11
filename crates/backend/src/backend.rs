@@ -533,6 +533,9 @@ impl BackendState {
                             command::ExitHint::AccessViolation => t::instance::exit::access_violation(),
                             command::ExitHint::StackOverrun => t::instance::exit::stack_overrun(),
                             command::ExitHint::WindowsException => t::instance::exit::windows_exception(),
+                            command::ExitHint::Generic => t::instance::exit::generic(),
+                            command::ExitHint::TerminatedSignal => t::instance::exit::terminated_signal(),
+                            command::ExitHint::Abnormal => t::instance::exit::abnormal(),
                         };
                         hints.push(format!("{}: {msg}", inst_name).into());
                     }
