@@ -816,8 +816,9 @@ fn paint_lines<'a, const REVERSE: bool>(
             {
                 item.time = TimeShapedLine::Shaped(Arc::clone(last_shaped_time));
             } else {
-                let date_time =
-                    chrono::DateTime::from_timestamp_millis(timestamp).unwrap().with_timezone(&chrono::Local);
+                let date_time = chrono::DateTime::from_timestamp_millis(timestamp)
+                    .map(|dt| dt.with_timezone(&chrono::Local))
+                    .unwrap_or_else(chrono::Local::now);
                 let time = format!("{}", date_time.time().format("%H:%M:%S%.3f"));
                 let time_run = TextRun {
                     len: time.len(),
@@ -1014,7 +1015,11 @@ impl GameOutputRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let InputEvent::PressEnter { secondary: false, shift: _ } = event else {
+        let InputEvent::PressEnter {
+            secondary: false,
+            shift: _,
+        } = event
+        else {
             return;
         };
 

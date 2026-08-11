@@ -24,33 +24,6 @@ fn normalize_shortcut_path(mut path: PathBuf) -> PathBuf {
     path
 }
 
-pub fn known_shortcut_filenames(instance_name: &str) -> [String; 2] {
-    [
-        format!("{instance_name}.{}", shortcut_extension()),
-        format!("Launch {instance_name}.{}", shortcut_extension()),
-    ]
-}
-
-fn maybe_rename_shortcut_path(path: &Path, old_instance_name: &str, new_instance_name: &str) -> PathBuf {
-    let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
-        return path.to_path_buf();
-    };
-
-    let replacement = if stem == old_instance_name {
-        Some(new_instance_name.to_string())
-    } else if stem == format!("Launch {old_instance_name}") {
-        Some(format!("Launch {new_instance_name}"))
-    } else {
-        None
-    };
-
-    let Some(replacement) = replacement else {
-        return path.to_path_buf();
-    };
-
-    path.with_file_name(format!("{replacement}.{}", shortcut_extension()))
-}
-
 #[cfg(target_os = "linux")]
 pub fn create_shortcut(path: PathBuf, name: &str, bin: &Path, args: &[&str]) -> Option<PathBuf> {
     let path = normalize_shortcut_path(path);
@@ -158,23 +131,6 @@ pub fn create_shortcut(path: PathBuf, name: &str, bin: &Path, args: &[&str]) -> 
     use std::os::unix::fs::PermissionsExt;
     let _ = std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755));
     Some(path)
-}
-
-pub fn update_shortcut(
-    path: PathBuf,
-    old_instance_name: &str,
-    new_instance_name: &str,
-    bin: &Path,
-    args: &[&str],
-) -> Option<PathBuf> {
-    let old_path = normalize_shortcut_path(path);
-    let new_path = maybe_rename_shortcut_path(&old_path, old_instance_name, new_instance_name);
-
-    if old_path != new_path && old_path.exists() && !new_path.exists() {
-        let _ = std::fs::rename(&old_path, &new_path);
-    }
-
-    create_shortcut(new_path, &format!("Launch {new_instance_name}"), bin, args)
 }
 
 fn has_extension(path: &Path, extension: &str) -> bool {

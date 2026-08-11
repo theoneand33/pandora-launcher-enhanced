@@ -158,9 +158,7 @@ pub struct CompoundRef<'a> {
 
 impl<'a> Debug for CompoundRef<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_map()
-            .entries(self.entries().map(|(k, v)| (k, format!("{:?}", v))))
-            .finish()
+        f.debug_map().entries(self.entries().map(|(k, v)| (k, format!("{:?}", v)))).finish()
     }
 }
 
@@ -356,9 +354,7 @@ pub struct CompoundRefMut<'a> {
 
 impl<'a> Debug for CompoundRefMut<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_map()
-            .entries(self.entries().map(|(k, v)| (k, format!("{:?}", v))))
-            .finish()
+        f.debug_map().entries(self.entries().map(|(k, v)| (k, format!("{:?}", v)))).finish()
     }
 }
 
@@ -670,10 +666,7 @@ impl<'a> Debug for ListRefMut<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // ponytail: debug via immutable view, avoids duplicating pretty module
         let (ty, children) = self.get_self_node();
-        f.debug_struct("ListRefMut")
-            .field("type", &ty.0)
-            .field("len", &children.len())
-            .finish()
+        f.debug_struct("ListRefMut").field("type", &ty.0).field("len", &children.len()).finish()
     }
 }
 

@@ -28,9 +28,9 @@ use crate::{
         instance::ContentStates,
         metadata::{AsMetadataResult, FrontendMetadata, FrontendMetadataResult},
     },
+    format_downloads,
     icon::PandoraIcon,
     pages::modrinth_page::{InstalledContent, PrimaryAction, env_display, get_primary_action, icon_for},
-    format_downloads,
 };
 
 pub struct ModrinthProjectPage {

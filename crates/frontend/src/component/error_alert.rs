@@ -35,7 +35,6 @@ impl RenderOnce for ErrorAlert {
         let danger = cx.theme().danger;
         let bg = danger.opacity(0.08);
         let fg = cx.theme().red;
-        let border_color = danger;
 
         h_flex()
             .w(self.w)
@@ -47,7 +46,7 @@ impl RenderOnce for ErrorAlert {
             .justify_between()
             .text_sm()
             .border_1()
-            .border_color(border_color)
+            .border_color(danger)
             .rounded(radius)
             .items_start()
             .child(

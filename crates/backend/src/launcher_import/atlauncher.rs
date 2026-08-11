@@ -298,7 +298,7 @@ async fn import_accounts_from_atlauncher(
         Err(error) => {
             log::error!("Error initializing secret storage: {error}");
             return None;
-        }
+        },
     };
 
     let num_accounts = accounts_json.len();
@@ -434,12 +434,7 @@ fn try_load_from_atlauncher(
         configuration.preferred_account = instance_cfg
             .launcher
             .account
-            .map(|username| {
-                accounts
-                    .iter()
-                    .find(|account| account.username == username)
-                    .map(|account| account.uuid)
-            })
+            .map(|username| accounts.iter().find(|account| account.username == username).map(|account| account.uuid))
             .flatten();
     }
 

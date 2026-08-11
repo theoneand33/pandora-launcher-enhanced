@@ -110,34 +110,36 @@ impl Page for ImportPage {
 
 impl Render for ImportPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut content =
-            v_flex().size_full().p_3().gap_3().child(
-                ResponsiveGrid::new(Size::new(AvailableSpace::MinContent, AvailableSpace::MinContent))
-                    .gap_2()
-                    .children({
-                        OtherLauncher::iter().map(|launcher| {
-                            Button::new(launcher.name())
-                                .label(format!("Import from {}", launcher.name()))
-                                .w_full()
-                                .on_click(cx.listener(move |page, _, _, cx| {
-                                    page.import_from = Some(launcher);
+        let mut content = v_flex().size_full().p_3().gap_3().child(
+            ResponsiveGrid::new(Size::new(AvailableSpace::MinContent, AvailableSpace::MinContent))
+                .gap_2()
+                .children({
+                    OtherLauncher::iter().map(|launcher| {
+                        Button::new(launcher.name())
+                            .label(format!("Import from {}", launcher.name()))
+                            .w_full()
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.import_from = Some(launcher);
 
-                                    let Some(base_dirs) = directories::BaseDirs::new() else {
-                                        page.import_from_path = None;
-                                        page.import_job = None;
-                                        page._get_import_job_task = Task::ready(());
-                                        return;
-                                    };
-
-                                    let default_path = launcher.default_path(&base_dirs);
-                                    page.import_from_path = Some(PathLabel::new(default_path.clone(), true));
+                                let Some(base_dirs) = directories::BaseDirs::new() else {
+                                    page.import_from_path = None;
                                     page.import_job = None;
-                                    page.get_import_job(launcher, default_path, cx);
-                                }))
-                        })
+                                    page._get_import_job_task = Task::ready(());
+                                    return;
+                                };
+
+                                let default_path = launcher.default_path(&base_dirs);
+                                page.import_from_path = Some(PathLabel::new(default_path.clone(), true));
+                                page.import_job = None;
+                                page.get_import_job(launcher, default_path, cx);
+                            }))
                     })
-                    .child(Button::new("mrpack").label("Import from Exported File (.mrpack / .zip)").w_full().on_click(
-                        cx.listener(|page, _, window, cx| {
+                })
+                .child(
+                    Button::new("mrpack")
+                        .label("Import from Exported File (.mrpack / .zip)")
+                        .w_full()
+                        .on_click(cx.listener(|page, _, window, cx| {
                             let receiver = cx.prompt_for_paths(PathPromptOptions {
                                 files: true,
                                 directories: false,
@@ -168,9 +170,9 @@ impl Render for ImportPage {
                                     );
                                 });
                             })
-                        }),
-                    )),
-            );
+                        })),
+                ),
+        );
 
         if let Some(import_from) = self.import_from {
             let label = format!("Import From {}", import_from.name());
