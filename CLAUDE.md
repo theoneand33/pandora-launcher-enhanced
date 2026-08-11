@@ -1,4 +1,4 @@
-# AGENTS.md — How to change this codebase
+# CLAUDE.md — How to change this codebase
 
 Read this before you edit. README is context. This file tells you how to act.
 
