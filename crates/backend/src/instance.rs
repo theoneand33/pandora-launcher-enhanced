@@ -714,7 +714,15 @@ impl Instance {
             return Vec::new();
         };
 
-        let paths: Vec<PathBuf> = directory.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        let paths: Vec<PathBuf> = directory
+            .filter_map(|e| match e {
+                Ok(entry) => Some(entry.path()),
+                Err(err) => {
+                    log::warn!("Failed to read directory entry in {:?}: {}", path, err);
+                    None
+                }
+            })
+            .collect();
 
         // ponytail: rayon parallelizes sha1+zip parsing across cores, ~N× speedup for 100+ mods
         use rayon::prelude::*;
