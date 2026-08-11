@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-once_cell.workspace = true
 parking_lot.workspace = true
 rustc-hash.workspace = true
 directories.workspace = true

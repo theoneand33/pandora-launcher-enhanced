@@ -1,9 +1,10 @@
 use bridge::handle::BackendHandle;
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme, Icon, IndexPath,
+    ActiveTheme, Icon, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     h_flex,
+    input::{Input, InputEvent, InputState},
     select::{Select, SelectDelegate, SelectEvent, SelectItem, SelectState},
     table::{DataTable, TableDelegate, TableState},
     v_flex,
@@ -25,6 +26,7 @@ use crate::{
 pub struct InstancesPage {
     instance_table: Entity<TableState<InstanceList>>,
     view_dropdown: Entity<SelectState<NamedDropdown<InstancesViewMode>>>,
+    search_state: Entity<InputState>,
 
     metadata: Entity<FrontendMetadata>,
     instances: Entity<InstanceEntries>,
@@ -57,9 +59,24 @@ impl InstancesPage {
         })
         .detach();
 
+        let search_state = cx.new(|cx| InputState::new(window, cx).placeholder(t::common::search()));
+        let table_for_search = instance_table.clone();
+        cx.subscribe(&search_state, move |_, state, event: &InputEvent, cx| {
+            if let InputEvent::Change = event {
+                let q: SharedString = state.read(cx).value().into();
+                table_for_search.update(cx, |table, cx| {
+                    table.delegate_mut().set_filter(q);
+                    cx.notify();
+                });
+                cx.notify();
+            }
+        })
+        .detach();
+
         Self {
             instance_table,
             view_dropdown,
+            search_state,
             metadata: data.metadata.clone(),
             instances: data.instances.clone(),
             backend_handle: data.backend_handle.clone(),
@@ -102,7 +119,15 @@ impl Page for InstancesPage {
         let select_view =
             div().child(Select::new(&self.view_dropdown).title_prefix(format!("{}: ", t::instance::view())));
 
-        h_flex().gap_3().child(create_instance).child(select_view)
+        h_flex()
+            .gap_3()
+            .child(create_instance)
+            .child(
+                div()
+                    .w_64()
+                    .child(Input::new(&self.search_state).small().prefix(Icon::new(PandoraIcon::Search))),
+            )
+            .child(select_view)
     }
 
     fn scrollable(&self, cx: &App) -> bool {
@@ -115,9 +140,29 @@ impl Page for InstancesPage {
 
 impl Render for InstancesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // ponytail: empty check uses delegate count; may flash before async InstanceAdded arrives,
-        // add loading guard if flash becomes visible.
-        let is_empty = self.instance_table.read(cx).delegate().rows_count(cx) == 0;
+        // ponytail: empty check uses total count; filtered empty shows "no results" below.
+        let is_empty = self.instance_table.read(cx).delegate().total_count() == 0;
+        let is_filtered_empty = !is_empty && self.instance_table.read(cx).delegate().rows_count(cx) == 0;
+        if is_filtered_empty {
+            return div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_8()
+                .child(
+                    v_flex()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            Icon::new(crate::icon::PandoraIcon::Search)
+                                .size_12()
+                                .text_color(cx.theme().muted_foreground),
+                        )
+                        .child(div().text_lg().text_color(cx.theme().muted_foreground).child(t::common::no_matches())),
+                )
+                .into_any_element();
+        }
         if is_empty {
             return div()
                 .size_full()

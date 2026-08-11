@@ -34,7 +34,6 @@ rustc-hash.workspace = true
 lexical-sort.workspace = true
 indexmap.workspace = true
 serde_with.workspace = true
-once_cell.workspace = true
 parking_lot.workspace = true
 lzma-rs.workspace = true
 enum-map.workspace = true
@@ -58,6 +57,7 @@ crc32fast.workspace = true
 scopeguard.workspace = true
 hickory-resolver.workspace = true
 command.workspace = true
+t.workspace = true
 
 # Windows-only deps: junction/mslnk/windows are only used under cfg(windows)
 # (see syncing.rs, shortcut.rs, update.rs). Keep them here to avoid building on Linux/macOS.

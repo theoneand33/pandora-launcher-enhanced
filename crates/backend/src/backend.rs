@@ -515,11 +515,27 @@ impl BackendState {
         let mut instance_state = self.instance_state.write();
         for instance in instance_state.instances.iter_mut() {
             let mut killed = false;
+            let inst_name = instance.name.clone();
+            let mut hints: Vec<Arc<str>> = Vec::new();
 
             instance.processes.retain_mut(|process| match process.try_wait() {
                 Ok(None) => true,
                 Ok(Some(status)) => {
                     log::info!("Child process {} is no longer alive: {}", process.id(), status);
+                    if let Some(hint) = status.human_hint() {
+                        let msg = match hint {
+                            command::ExitHint::Crash1 => t::instance::exit::crash1(),
+                            command::ExitHint::Abort134 => t::instance::exit::abort134(),
+                            command::ExitHint::Segfault139 => t::instance::exit::segfault139(),
+                            command::ExitHint::Killed9 => t::instance::exit::killed9(),
+                            command::ExitHint::Segfault11 => t::instance::exit::segfault11(),
+                            command::ExitHint::Abort6 => t::instance::exit::abort6(),
+                            command::ExitHint::AccessViolation => t::instance::exit::access_violation(),
+                            command::ExitHint::StackOverrun => t::instance::exit::stack_overrun(),
+                            command::ExitHint::WindowsException => t::instance::exit::windows_exception(),
+                        };
+                        hints.push(format!("{}: {msg}", inst_name).into());
+                    }
                     instance.skin_server_guards.remove(&process.id());
                     killed = true;
                     false
@@ -546,6 +562,9 @@ impl BackendState {
                     false
                 },
             });
+            for hint in hints {
+                self.send.send_warning(hint);
+            }
 
             let now = Instant::now();
             let to_kill = instance.closing_processes.extract_if(.., |(_, deadline)| now > *deadline);

@@ -5,8 +5,8 @@ use std::{
     path::Path,
 };
 
-use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
+use std::sync::LazyLock;
 
 use crate::{PandoraChild, PandoraCommand, PandoraSandbox, spawner::SpawnContext, unix::unix_helpers::RawStringVec};
 
@@ -268,7 +268,7 @@ static NETWORK: &'static str = r#"
          "com.apple.nsurlsessiond"))
 "#;
 
-static ALLOWED_ENV_VARS: Lazy<FxHashSet<&'static OsStr>> = Lazy::new(|| {
+static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| {
     ["TMPDIR", "PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "USERNAME"]
         .iter()
         .map(OsStr::new)

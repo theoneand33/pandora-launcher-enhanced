@@ -42,7 +42,6 @@ use uuid::Uuid;
 use crate::{
     BackendState, CachedMinecraftProfile, FolderChanges, LoginError,
     account::BackendAccount,
-    arcfactory::ArcStrFactory,
     instance::Instance,
     launch::{ArgumentExpansionKey, LaunchError},
     log_reader,
@@ -323,6 +322,19 @@ impl BackendState {
                         }
                     },
                 }
+            },
+            MessageToBackend::SetInstancePinned { id, pinned } => {
+                let msg = {
+                    let mut state = self.instance_state.write();
+                    let Some(instance) = state.instances.get_mut(id) else {
+                        return;
+                    };
+                    instance.configuration.modify(|configuration| {
+                        configuration.pinned = pinned;
+                    });
+                    instance.create_modify_message()
+                };
+                self.send.send(msg);
             },
             MessageToBackend::KillInstance { id } => {
                 let mut instance_state = self.instance_state.write();
@@ -1387,13 +1399,16 @@ impl BackendState {
                     let mut buf_reader = std::io::BufReader::new(gz_decoder);
                     tokio::task::spawn_blocking(move || {
                         let mut line = String::new();
-                        let mut factory = ArcStrFactory::default();
                         loop {
                             match buf_reader.read_line(&mut line) {
                                 Ok(0) => return,
                                 Ok(_) => {
                                     let replaced = log_reader::replace(line.trim_ascii_end());
-                                    if send.blocking_send(factory.create(&replaced)).is_err() {
+                                    let arc: Arc<str> = match replaced {
+                                        Cow::Owned(s) => s.into(),
+                                        Cow::Borrowed(b) => Arc::from(b),
+                                    };
+                                    if send.blocking_send(arc).is_err() {
                                         return;
                                     }
                                     line.clear();
@@ -1403,7 +1418,11 @@ impl BackendState {
                                     let error = format!("Error while reading file: {e}");
                                     for line in error.split('\n') {
                                         let replaced = log_reader::replace(line.trim_ascii_end());
-                                        if send.blocking_send(factory.create(&replaced)).is_err() {
+                                        let arc: Arc<str> = match replaced {
+                                            Cow::Owned(s) => s.into(),
+                                            Cow::Borrowed(b) => Arc::from(b),
+                                        };
+                                        if send.blocking_send(arc).is_err() {
                                             return;
                                         }
                                     }
@@ -1421,13 +1440,12 @@ impl BackendState {
                 let mut reader = tokio::io::BufReader::new(tokio::fs::File::from_std(file));
 
                 tokio::task::spawn(async move {
-                    let mut factory = ArcStrFactory::default();
                     let mut remaining = initial_data.as_slice();
                     while let Some(index) = memchr::memchr(b'\n', remaining) {
                         let line = &remaining[..index + 1];
                         remaining = &remaining[index + 1..];
 
-                        if send_log_line(&line, &send, &mut factory).await.is_err() {
+                        if send_log_line(&line, &send).await.is_err() {
                             return;
                         }
                         frontend.send_with_serial(MessageToFrontend::Refresh, &serial);
@@ -1462,7 +1480,7 @@ impl BackendState {
                                         continue;
                                     }
 
-                                    if send_log_line(&line, &send, &mut factory).await.is_err() {
+                                    if send_log_line(&line, &send).await.is_err() {
                                         return;
                                     }
 
@@ -1473,7 +1491,11 @@ impl BackendState {
                                     let error = format!("Error while reading file: {e}");
                                     for line in error.split('\n') {
                                         let replaced = log_reader::replace(line.trim_ascii_end());
-                                        if send.send(factory.create(&replaced)).await.is_err() {
+                                        let arc: Arc<str> = match replaced {
+                                            Cow::Owned(s) => s.into(),
+                                            Cow::Borrowed(b) => Arc::from(b),
+                                        };
+                                        if send.send(arc).await.is_err() {
                                             return;
                                         }
                                     }
@@ -2939,18 +2961,25 @@ fn check_argument_expansions(argument: &str) {
 async fn send_log_line(
     line: &[u8],
     send: &tokio::sync::mpsc::Sender<Arc<str>>,
-    factory: &mut ArcStrFactory,
 ) -> Result<(), tokio::sync::mpsc::error::SendError<Arc<str>>> {
     match str::from_utf8(&*line) {
         Ok(utf8) => {
             let replaced = log_reader::replace(utf8.trim_ascii_end());
-            send.send(factory.create(&replaced)).await?;
+            let arc: Arc<str> = match replaced {
+                Cow::Owned(s) => s.into(),
+                Cow::Borrowed(b) => Arc::from(b),
+            };
+            send.send(arc).await?;
         },
         Err(e) => {
             let error = format!("Invalid UTF8: {e}");
             for line in error.split('\n') {
                 let replaced = log_reader::replace(line.trim_ascii_end());
-                send.send(factory.create(&replaced)).await?;
+                let arc: Arc<str> = match replaced {
+                    Cow::Owned(s) => s.into(),
+                    Cow::Borrowed(b) => Arc::from(b),
+                };
+                send.send(arc).await?;
             }
         },
     }

@@ -89,6 +89,7 @@ pub struct ContentListDelegate {
     backend_handle: BackendHandle,
     sort_key: InstanceContentSortKey,
     enabled_first: bool,
+    outdated_only: bool,
     content: Vec<InstanceContentSummary>,
     searched: Option<Vec<SummaryOrChild>>,
     children: Vec<Vec<ContentEntryChild>>,
@@ -120,6 +121,7 @@ impl ContentListDelegate {
             backend_handle,
             sort_key,
             enabled_first,
+            outdated_only: false,
             content: Vec::new(),
             searched: None,
             children: Vec::new(),
@@ -137,6 +139,32 @@ impl ContentListDelegate {
     pub fn set_sort_options(&mut self, sort_key: InstanceContentSortKey, enabled_first: bool) {
         self.sort_key = sort_key;
         self.enabled_first = enabled_first;
+    }
+
+    pub fn set_outdated_only(&mut self, v: bool) {
+        self.outdated_only = v;
+    }
+
+    /// Returns IDs of visible summaries for the current tab. Scope is the active
+    /// tab only and respects both search and outdated filters: when a search query
+    /// is active, only matching summaries are returned; when outdated-only is on,
+    /// only updatable summaries were inserted into `self.content`.
+    pub fn content_ids(&self) -> Vec<InstanceContentID> {
+        if let Some(searched) = &self.searched {
+            searched
+                .iter()
+                .filter_map(|e| match e {
+                    SummaryOrChild::Summary(s) => Some(s.id),
+                    SummaryOrChild::Child(_) => None,
+                })
+                .collect()
+        } else {
+            self.content.iter().map(|s| s.id).collect()
+        }
+    }
+
+    pub fn has_search_filter(&self) -> bool {
+        self.searched.is_some()
     }
 
     pub fn render_summary(
@@ -645,6 +673,15 @@ impl ContentListDelegate {
     }
 
     pub fn set_content(&mut self, new_content: &[InstanceContentSummary]) {
+        // ponytail: outdated filter is applied at delegate level so search+filter combine correctly.
+        let owned_filtered: Option<Vec<InstanceContentSummary>> = self.outdated_only.then(|| {
+            new_content
+                .iter()
+                .filter(|s| s.update.can_update(self.for_loader, self.for_version.as_str()))
+                .cloned()
+                .collect()
+        });
+        let src: &[InstanceContentSummary] = owned_filtered.as_deref().unwrap_or(new_content);
         let last_mods_len = self.content.len();
 
         struct Item {
@@ -652,9 +689,9 @@ impl ContentListDelegate {
             children: Vec<ContentEntryChild>,
         }
 
-        let mut items = Vec::with_capacity(new_content.len());
+        let mut items = Vec::with_capacity(src.len());
 
-        for modification in new_content.iter() {
+        for modification in src.iter() {
             let mut inner_children = Vec::new();
 
             let extra = &modification.content_summary.extra;

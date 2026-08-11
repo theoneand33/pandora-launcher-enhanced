@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use ustr::Ustr;
 use uuid::Uuid;
 
@@ -77,6 +77,8 @@ pub struct InstanceConfiguration {
     pub show_shader_tab: bool,
     #[serde(default, deserialize_with = "crate::try_deserialize")]
     pub sandbox: bool,
+    #[serde(default, deserialize_with = "crate::try_deserialize")]
+    pub pinned: bool,
 }
 
 impl InstanceConfiguration {
@@ -97,6 +99,7 @@ impl InstanceConfiguration {
             created_shortcuts: Vec::new(),
             show_shader_tab: false,
             sandbox: false,
+            pinned: false,
         }
     }
 }
@@ -327,8 +330,10 @@ impl LwjglLibraryPath {
     }
 }
 
-pub static AUTO_LIBRARY_PATH_GLFW: Lazy<Option<Arc<Path>>> = Lazy::new(|| get_shared_library_path_for_name("glfw"));
-pub static AUTO_LIBRARY_PATH_OPENAL: Lazy<Option<Arc<Path>>> = Lazy::new(|| get_shared_library_path_for_name("openal"));
+pub static AUTO_LIBRARY_PATH_GLFW: LazyLock<Option<Arc<Path>>> =
+    LazyLock::new(|| get_shared_library_path_for_name("glfw"));
+pub static AUTO_LIBRARY_PATH_OPENAL: LazyLock<Option<Arc<Path>>> =
+    LazyLock::new(|| get_shared_library_path_for_name("openal"));
 
 #[cfg(not(unix))]
 fn get_shared_library_path_for_name(name: &str) -> Option<Arc<Path>> {

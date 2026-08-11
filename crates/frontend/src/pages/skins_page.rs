@@ -29,12 +29,12 @@ use gpui_component::{
     spinner::Spinner,
     v_flex,
 };
-use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use schema::{
     minecraft_profile::{SkinState, SkinVariant},
     unique_bytes::UniqueBytes,
 };
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 fn optifine_cape_url(username: &str) -> String {
@@ -62,8 +62,8 @@ pub struct SkinsPage {
     hovering_skin_idx: Option<usize>,
 }
 
-static DEFAULT_SKIN: Lazy<UniqueBytes> =
-    Lazy::new(|| UniqueBytes::new(include_bytes!("../../../../assets/images/default_skin.png")));
+static DEFAULT_SKIN: LazyLock<UniqueBytes> =
+    LazyLock::new(|| UniqueBytes::new(include_bytes!("../../../../assets/images/default_skin.png")));
 
 impl SkinsPage {
     pub fn new(data: &DataEntities, window: &mut Window, cx: &mut App) -> Self {
