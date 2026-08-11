@@ -46,6 +46,7 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         format!("update_manifest_{}.json", std::env::consts::OS),
     ];
     let mut last_status = None;
+    let mut last_non_404_status = None;
     let mut manifest_bytes = None;
 
     for manifest_name in manifest_names {
@@ -55,13 +56,18 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         let response = match response {
             Ok(response) => response,
             Err(err) => {
+                // ponytail: network errors are silent on launch — background check, not critical; add send_warning here if visibility is desired
                 log::warn!("Unable to fetch Pandora update manifest: {}", err);
                 return;
             },
         };
 
         if response.status() != StatusCode::OK {
-            last_status = Some(response.status());
+            let status = response.status();
+            last_status = Some(status);
+            if status != StatusCode::NOT_FOUND {
+                last_non_404_status = Some(status);
+            }
             continue;
         }
 
@@ -77,7 +83,7 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
     }
 
     let Some(manifest_bytes) = manifest_bytes else {
-        let status = last_status.unwrap_or(StatusCode::NOT_FOUND);
+        let status = last_non_404_status.or(last_status).unwrap_or(StatusCode::NOT_FOUND);
         // ponytail: 404 when no release exists is expected, do not surface to user
         if status == StatusCode::NOT_FOUND {
             log::info!("No Pandora update manifest found (404), skipping update check");
