@@ -15,8 +15,8 @@ use gpui_component::{
     spinner::Spinner,
     v_flex,
 };
-use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
+use std::sync::LazyLock;
 
 use crate::{entity::DataEntities, icon::PandoraIcon, pages::page::Page};
 
@@ -440,7 +440,7 @@ impl Render for SyncingPage {
     }
 }
 
-static NAMED_SYNC_TARGETS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static NAMED_SYNC_TARGETS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     HashSet::from([
         "options.txt",
         "servers.dat",

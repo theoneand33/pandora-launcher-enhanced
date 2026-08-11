@@ -7,10 +7,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize, de::Visitor};
+use std::sync::LazyLock;
 
 const MAX_REFS: usize = isize::MAX as usize;
 
@@ -137,7 +137,7 @@ impl Drop for UniqueBytes {
     }
 }
 
-static UNIQUE: Lazy<Mutex<FxHashSet<UniqueBytesPtr>>> = Lazy::new(Default::default);
+static UNIQUE: LazyLock<Mutex<FxHashSet<UniqueBytesPtr>>> = LazyLock::new(Default::default);
 
 impl UniqueBytes {
     pub fn new(bytes: &[u8]) -> UniqueBytes {

@@ -44,7 +44,7 @@ pub struct LauncherUI {
     page: LauncherPage,
     pub update: Option<UpdatePrompt>,
     sidebar_state: ResizePanelState,
-    recent_instances: heapless::Vec<(InstanceID, SharedString), 3>,
+    recent_instances: Vec<(InstanceID, SharedString)>,
     page_history_backwards: VecDeque<(PageType, Arc<[PageType]>)>,
     page_history_forwards: Vec<(PageType, Arc<[PageType]>)>,
     previous_pages: FxHashMap<PageType, LauncherPage>,
@@ -178,10 +178,10 @@ impl LauncherUI {
 
         let _instance_added_subscription =
             cx.subscribe::<_, InstanceAddedEvent>(&data.instances, |this, _, event, cx| {
-                if this.recent_instances.is_full() {
+                if this.recent_instances.len() >= 3 {
                     this.recent_instances.pop();
                 }
-                let _ = this.recent_instances.insert(0, (event.instance.id, event.instance.name.clone()));
+                this.recent_instances.insert(0, (event.instance.id, event.instance.name.clone()));
                 cx.notify();
             });
         let _instance_modified_subscription =
@@ -219,10 +219,10 @@ impl LauncherUI {
         let _instance_moved_to_top_subscription =
             cx.subscribe::<_, InstanceMovedToTopEvent>(&data.instances, |this, _, event, cx| {
                 this.recent_instances.retain(|entry| entry.0 != event.instance.id);
-                if this.recent_instances.is_full() {
+                if this.recent_instances.len() >= 3 {
                     this.recent_instances.pop();
                 }
-                let _ = this.recent_instances.insert(0, (event.instance.id, event.instance.name.clone()));
+                this.recent_instances.insert(0, (event.instance.id, event.instance.name.clone()));
                 cx.notify();
             });
 
@@ -500,11 +500,11 @@ impl Render for LauncherUI {
                     })),
             );
 
-        let mut groups: heapless::Vec<MenuGroup, 4> = heapless::Vec::new();
+        let mut groups = Vec::with_capacity(4);
 
-        let _ = groups.push(library_group);
-        let _ = groups.push(content_group);
-        let _ = groups.push(files_group);
+        groups.push(library_group);
+        groups.push(content_group);
+        groups.push(files_group);
 
         if !self.recent_instances.is_empty() {
             let mut recent_instances_group = MenuGroup::new(t::instance::recent());
@@ -525,7 +525,7 @@ impl Render for LauncherUI {
                 recent_instances_group = recent_instances_group.child(item);
             }
 
-            let _ = groups.push(recent_instances_group);
+            groups.push(recent_instances_group);
         }
 
         let accounts = self.data.accounts.read(cx);

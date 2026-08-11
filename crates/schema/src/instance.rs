@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use ustr::Ustr;
 use uuid::Uuid;
 
@@ -327,8 +327,10 @@ impl LwjglLibraryPath {
     }
 }
 
-pub static AUTO_LIBRARY_PATH_GLFW: Lazy<Option<Arc<Path>>> = Lazy::new(|| get_shared_library_path_for_name("glfw"));
-pub static AUTO_LIBRARY_PATH_OPENAL: Lazy<Option<Arc<Path>>> = Lazy::new(|| get_shared_library_path_for_name("openal"));
+pub static AUTO_LIBRARY_PATH_GLFW: LazyLock<Option<Arc<Path>>> =
+    LazyLock::new(|| get_shared_library_path_for_name("glfw"));
+pub static AUTO_LIBRARY_PATH_OPENAL: LazyLock<Option<Arc<Path>>> =
+    LazyLock::new(|| get_shared_library_path_for_name("openal"));
 
 #[cfg(not(unix))]
 fn get_shared_library_path_for_name(name: &str) -> Option<Arc<Path>> {

@@ -1,7 +1,6 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
 use indexmap::IndexMap;
-use once_cell::sync::Lazy;
 use schema::{
     auxiliary::AuxDisabledChildren,
     content::ContentSource,
@@ -11,6 +10,7 @@ use schema::{
     text_component::FlatTextComponent,
     unique_bytes::UniqueBytes,
 };
+use std::sync::LazyLock;
 
 use crate::safe_path::SafePath;
 
@@ -130,7 +130,7 @@ impl ContentSummary {
     }
 }
 
-pub static UNKNOWN_CONTENT_SUMMARY: Lazy<Arc<ContentSummary>> = Lazy::new(|| {
+pub static UNKNOWN_CONTENT_SUMMARY: LazyLock<Arc<ContentSummary>> = LazyLock::new(|| {
     Arc::new(ContentSummary {
         id: None,
         hash: [0_u8; 20],

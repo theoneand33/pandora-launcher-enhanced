@@ -17,5 +17,4 @@ relative-path.workspace = true
 sanitize-filename.workspace = true
 indexmap.workspace = true
 parking_lot.workspace = true
-once_cell.workspace = true
 directories.workspace = true

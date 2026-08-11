@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Lockfile {
     _permit: OwnedSemaphorePermit,
 }
 
-static LOCKED: Lazy<parking_lot::Mutex<HashMap<Arc<Path>, Arc<Semaphore>>>> = Lazy::new(Default::default);
+static LOCKED: LazyLock<parking_lot::Mutex<HashMap<Arc<Path>, Arc<Semaphore>>>> = LazyLock::new(Default::default);
 
 fn get_path_semaphore(path: Arc<Path>) -> Arc<Semaphore> {
     match LOCKED.lock().entry(path) {
