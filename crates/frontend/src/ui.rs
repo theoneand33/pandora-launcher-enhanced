@@ -589,7 +589,7 @@ impl Render for LauncherUI {
             .rounded(cx.theme().radius)
             .hover(|this| this.bg(cx.theme().sidebar_accent).text_color(cx.theme().sidebar_accent_foreground))
             .child(PandoraIcon::Bug)
-            .tooltip(move |window, cx| Tooltip::new("Report a bug").build(window, cx))
+            .tooltip(move |window, cx| Tooltip::new(t::system::report_bug()).build(window, cx))
             .on_click({
                 move |_, window, cx| {
                     open_bug_report_url(window, cx);

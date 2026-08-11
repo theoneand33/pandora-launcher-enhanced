@@ -1,11 +1,12 @@
 use bridge::handle::BackendHandle;
 use gpui::{prelude::*, *};
 use gpui_component::{
-    IndexPath,
+    ActiveTheme, Icon, IndexPath,
     button::{Button, ButtonVariants},
     h_flex,
     select::{Select, SelectDelegate, SelectEvent, SelectItem, SelectState},
     table::{DataTable, TableDelegate, TableState},
+    v_flex,
 };
 use strum::IntoEnumIterator;
 
@@ -98,6 +99,45 @@ impl Page for InstancesPage {
 
 impl Render for InstancesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_empty = self.instance_table.read(cx).delegate().rows_count(cx) == 0;
+        if is_empty {
+            return div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_8()
+                .child(
+                    v_flex()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            Icon::new(crate::icon::PandoraIcon::Box).size_12().text_color(cx.theme().muted_foreground),
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(t::instance::none_selected()),
+                        )
+                        .child(
+                            Button::new("create_instance_empty")
+                                .success()
+                                .icon(PandoraIcon::Plus)
+                                .label(t::instance::create())
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    crate::modals::create_instance::open_create_instance(
+                                        this.metadata.clone(),
+                                        this.instances.clone(),
+                                        this.backend_handle.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        ),
+                )
+                .into_any_element();
+        }
         match InterfaceConfig::get(cx).instances_view_mode {
             InstancesViewMode::Cards => {
                 let cards = self.instance_table.update(cx, |table, cx| {

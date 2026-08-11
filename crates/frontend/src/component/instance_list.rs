@@ -13,6 +13,7 @@ use crate::{
         DataEntities,
         instance::{InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceRemovedEvent},
     },
+    icon::PandoraIcon,
     interface_config::InterfaceConfig,
     modals, png_render_cache, root, ui,
 };
@@ -108,8 +109,8 @@ impl InstanceList {
         let backend_handle_for_icon = self.backend_handle.clone();
         let backend_handle_for_rename = self.backend_handle.clone();
         let name_for_rename = item.name.clone();
-        let trash_icon = Icon::default().path("icons/trash-2.svg");
-        let edit_icon = Icon::default().path("icons/brush.svg").text_color(white());
+        let trash_icon = PandoraIcon::Trash2;
+        let edit_icon = Icon::new(PandoraIcon::Brush).text_color(white());
         let icon_hover_group = format!("instance-icon-edit-{index}");
         let icon_overlay_hover_group = icon_hover_group.clone();
         let icon = div()
@@ -219,6 +220,7 @@ impl InstanceList {
                     .small()
                     .compact()
                     .icon(trash_icon)
+                    .tooltip(t::instance::delete())
                     .on_click(move |click: &ClickEvent, window, cx| {
                         cx.stop_propagation();
                         window.prevent_default();
@@ -294,7 +296,7 @@ impl TableDelegate for InstanceList {
                     let id = item.id;
                     let name = item.name.clone();
                     let backend_handle = self.backend_handle.clone();
-                    let edit_icon = Icon::default().path("icons/brush.svg").text_color(white());
+                    let edit_icon = Icon::new(PandoraIcon::Brush).text_color(white());
                     let hover_group = format!("instance-list-name-edit-{row_ix}");
                     let overlay_hover_group = hover_group.clone();
                     div()
@@ -356,27 +358,33 @@ impl TableDelegate for InstanceList {
                     let backend_handle = self.backend_handle.clone();
                     let id = item.id;
                     let name = item.name.clone();
-                    let trash_icon = Icon::default().path("icons/trash-2.svg");
+                    let trash_icon = PandoraIcon::Trash2;
                     h_flex()
                         .size_full()
                         .items_center()
-                        .child(Button::new(("remove", row_ix)).danger().small().compact().icon(trash_icon).on_click(
-                            move |click: &ClickEvent, window, cx| {
-                                cx.stop_propagation();
-                                window.prevent_default();
-                                if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                                    backend_handle.send(MessageToBackend::DeleteInstance { id });
-                                } else {
-                                    modals::delete_instance::open_delete_instance(
-                                        id,
-                                        name.clone(),
-                                        backend_handle.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            },
-                        ))
+                        .child(
+                            Button::new(("remove", row_ix))
+                                .danger()
+                                .small()
+                                .compact()
+                                .icon(trash_icon)
+                                .tooltip(t::instance::delete())
+                                .on_click(move |click: &ClickEvent, window, cx| {
+                                    cx.stop_propagation();
+                                    window.prevent_default();
+                                    if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
+                                        backend_handle.send(MessageToBackend::DeleteInstance { id });
+                                    } else {
+                                        modals::delete_instance::open_delete_instance(
+                                            id,
+                                            name.clone(),
+                                            backend_handle.clone(),
+                                            window,
+                                            cx,
+                                        );
+                                    }
+                                }),
+                        )
                         .into_any_element()
                 },
                 _ => t::common::unknown().into_any_element(),
@@ -397,8 +405,8 @@ fn render_play_button(item: &InstanceEntry, index: usize, backend_handle: Backen
             .on_click(move |_, window, cx| {
                 root::start_instance(id, name.clone(), None, &backend_handle, window, cx);
             }),
-        InstanceStatus::Launching => Button::new(("launching", index)).warning().label("..."),
-        InstanceStatus::Stopping => Button::new(("launching", index)).danger().label("..."),
+        InstanceStatus::Launching => Button::new(("launching", index)).warning().label(t::instance::start::starting()),
+        InstanceStatus::Stopping => Button::new(("stopping", index)).danger().label(t::instance::start::stopping()),
         InstanceStatus::Running => {
             Button::new(("kill_instance", index)).danger().label(t::instance::kill()).on_click({
                 let backend_handle = backend_handle.clone();

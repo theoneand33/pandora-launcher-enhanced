@@ -53,7 +53,7 @@ impl RenderOnce for TitleBar {
                             this.child(
                                 h_flex().flex_shrink_0().h_full().gap_1().child(
                                     Button::new("update")
-                                        .label("Update Available")
+                                        .label(t::system::update::available())
                                         .success()
                                         .compact()
                                         .small()
@@ -146,7 +146,7 @@ impl RenderOnce for TitleBar {
                                 .when_some(self.update, |this, update| {
                                     this.child(
                                         Button::new("update")
-                                            .label("Update Available")
+                                            .label(t::system::update::available())
                                             .success()
                                             .compact()
                                             .small()

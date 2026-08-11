@@ -17,15 +17,15 @@ pub fn open_delete_content(
     window.open_dialog(cx, move |dialog, _, _| {
         let backend_handle = backend_handle.clone();
         let content_ids = content_ids.clone();
-        dialog.title(format!("Remove {name}?")).child(
-            v_flex().gap_3().child("This will delete the installed file from this instance.").child(
+        dialog.title(t::instance::content::delete::title(&name)).child(
+            v_flex().gap_3().child(t::instance::content::delete::message()).child(
                 h_flex()
                     .gap_2()
                     .justify_end()
                     .child(Button::new("cancel").label(t::common::cancel()).on_click(|_, window, cx| {
                         window.close_dialog(cx);
                     }))
-                    .child(Button::new("remove").danger().label("Remove").on_click({
+                    .child(Button::new("remove").danger().label(t::instance::content::delete::action()).on_click({
                         let backend_handle = backend_handle.clone();
                         let content_ids = content_ids.clone();
                         move |_, window, cx| {

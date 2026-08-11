@@ -762,7 +762,9 @@ sv = "<avaktivera>"
 ru = "<не задано>"
 [common.no_override]
 en = "No override"
+de = "Kein Override"
 hu = "Nincs fellüírás"
+sv = "Ingen överstyrning"
 ru = "По умолчанию"
 [common.cancel]
 en = "Cancel"
@@ -867,15 +869,22 @@ sv = "Minecraft Log utmatning"
 ru = "Логи Minecraft"
 [system.report_bug]
 en = "Report a bug"
+de = "Fehler melden"
 hu = "Hibajelentés"
+sv = "Rapportera en bugg"
 ru = "Сообщить об ошибке"
 [system.join_discord]
 en = "Join the Discord server"
+de = "Trete dem Discord-Server bei"
 hu = "Csatlakozz a Discord-szerverhez"
+sv = "Gå med i Discord-servern"
+ru = "Присоединиться к Discord"
 
 [system.update.available]
 en = "Update Available"
+de = "Update verfügbar"
 hu = "Elérhető egy frissítés"
+sv = "Uppdatering tillgänglig"
 ru = "Доступно обновление"
 [system.update.title]
 en = "Update Pandora?"
@@ -1169,7 +1178,9 @@ sv = "Skapa en genväg"
 ru = "Создать ярлык"
 [instance.folder]
 en = "Instance Folder (click to relocate)"
+de = "Instanzordner (zum Verschieben klicken)"
 hu = "Példány mappa (kattints az áthelyezéshez)"
+sv = "Instansmapp (klicka för att flytta)"
 ru = "Папка экземпляра (нажмите для переноса)"
 [instance.open_folder]
 en = "Open .minecraft folder"
@@ -1504,7 +1515,9 @@ sv = "Sandlådeisolering"
 ru = "Песочница"
 [instance.security.sandbox.tooltip]
 en = "Sandbox the instance, preventing access to files and systems it shouldn't have access to"
+de = "Isoliert die Instanz und verhindert den Zugriff auf Dateien und Systeme, auf die sie nicht zugreifen sollte"
 hu = "Izolálja a példányt, lekorlátozva a hozzáférését fájlokhoz és rendszerekhez amikhez nem kellene neki hozzáférni"
+sv = "Isolera instansen och förhindra åtkomst till filer och system den inte bör ha tillgång till"
 ru = "Изолировать экземпляр, ограничив доступ к файлам и системам, которые не требуются для его работы"
 [instance.security.sandbox.not_available]
 en = "Cannot sandbox: missing bwrap and xdg-dbus-proxy commands"
@@ -2179,11 +2192,15 @@ ru = "Размер файла"
 
 [instance.content.blocked]
 en = "Blocked"
+de = "Blockiert"
 hu = "Blokkolva"
+sv = "Blockerad"
 ru = "Заблокировано"
 [instance.content.download]
 en = "Download"
-hu = "Letöltések"
+de = "Herunterladen"
+hu = "Letöltés"
+sv = "Ladda ned"
 ru = "Скачать"
 [instance.content.downloading_children]
 en = "Downloading children"
@@ -2203,8 +2220,40 @@ hu = "Rendezés: "
 ru = "Сортировка: "
 [instance.content.enabled_first]
 en = "Enabled first"
+de = "Aktivierte zuerst"
 hu = "Bekapcsolt először"
+sv = "Aktiverade först"
 ru = "Сначала включённые"
+[instance.content.delete.title]
+en = "Remove ${name: &str}?"
+de = "${name: &str} entfernen?"
+hu = "${name: &str} eltávolítása?"
+sv = "Ta bort ${name: &str}?"
+ru = "Удалить ${name: &str}?"
+[instance.content.delete.message]
+en = "This will delete the installed file from this instance."
+de = "Die installierte Datei wird aus dieser Instanz gelöscht."
+hu = "Ez törli a telepített fájlt ebből a példányból."
+sv = "Detta tar bort den installerade filen från instansen."
+ru = "Установленный файл будет удалён из этого экземпляра."
+[instance.content.delete.action]
+en = "Remove"
+de = "Entfernen"
+hu = "Eltávolítás"
+sv = "Ta bort"
+ru = "Удалить"
+[instance.rename.title]
+en = "Rename instance"
+de = "Instanz umbenennen"
+hu = "Példány átnevezése"
+sv = "Byt namn på instans"
+ru = "Переименовать экземпляр"
+[instance.rename.action]
+en = "Rename"
+de = "Umbenennen"
+hu = "Átnevezés"
+sv = "Byt namn"
+ru = "Переименовать"
 [instance.content.install.file_invalid_sha1]
 en = "File ${filename: &str} has invalid sha1: ${sha1: &str}"
 hu = "A(z) ${filename: &str} fájlhoz tartozó sha1 helytelen: ${sha1: &str}"

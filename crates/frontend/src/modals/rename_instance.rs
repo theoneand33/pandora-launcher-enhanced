@@ -22,7 +22,8 @@ pub fn open_rename_instance(
     });
 
     let current_name = instance_name.clone();
-    window.open_dialog(cx, move |dialog, _, _| {
+    window.open_dialog(cx, move |dialog, window, cx| {
+        input_state.update(cx, |state, cx| state.focus(window, cx));
         let content = v_flex().gap_4().child(Input::new(&input_state)).child(
             h_flex()
                 .gap_2()
@@ -32,7 +33,7 @@ pub fn open_rename_instance(
                         window.close_dialog(cx);
                     }
                 }))
-                .child(Button::new("rename").label("Rename").success().on_click({
+                .child(Button::new("rename").label(t::instance::rename::action()).success().on_click({
                     let backend_handle = backend_handle.clone();
                     let input_state = input_state.clone();
                     let current_name = current_name.clone();
@@ -60,6 +61,6 @@ pub fn open_rename_instance(
                 })),
         );
 
-        dialog.title("Rename instance").child(content)
+        dialog.title(t::instance::rename::title()).child(content)
     });
 }

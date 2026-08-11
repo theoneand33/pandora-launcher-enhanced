@@ -520,32 +520,41 @@ impl Render for InstanceContentSubpage {
             .block_mouse_except_scroll()
             .gap_3()
             .items_center()
-            .child(div().child(Select::new(&self.sort_dropdown).small().title_prefix("Sort: ")))
             .child(
-                h_flex().gap_1().child(div().text_sm().child("Enabled first")).child(
-                    Switch::new("enabled_first")
-                        .checked(self.content_type.sort_enabled_first(InterfaceConfig::get(cx)))
-                        .on_click(cx.listener(|this, checked, _, cx| {
-                            let config = InterfaceConfig::get_mut(cx);
-                            let enabled_first = *checked;
-
-                            if this.content_type.sort_enabled_first(config) == enabled_first {
-                                return;
-                            }
-
-                            let sort_key = this.content_type.sort_key(config);
-                            this.content_type.set_sort_enabled_first(config, enabled_first);
-
-                            let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
-                            let content_list = this.content_list.clone();
-                            cx.update_entity(&content_list, |list, cx| {
-                                list.delegate_mut().set_sort_options(sort_key, enabled_first);
-                                list.delegate_mut().set_content(&content);
-                                cx.notify();
-                            });
-                            cx.notify();
-                        })),
+                div().child(
+                    Select::new(&self.sort_dropdown)
+                        .small()
+                        .title_prefix(format!("{}: ", t::instance::content::sort())),
                 ),
+            )
+            .child(
+                h_flex()
+                    .gap_1()
+                    .child(div().text_sm().child(t::instance::content::enabled_first()))
+                    .child(
+                        Switch::new("enabled_first")
+                            .checked(self.content_type.sort_enabled_first(InterfaceConfig::get(cx)))
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                let config = InterfaceConfig::get_mut(cx);
+                                let enabled_first = *checked;
+
+                                if this.content_type.sort_enabled_first(config) == enabled_first {
+                                    return;
+                                }
+
+                                let sort_key = this.content_type.sort_key(config);
+                                this.content_type.set_sort_enabled_first(config, enabled_first);
+
+                                let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                                let content_list = this.content_list.clone();
+                                cx.update_entity(&content_list, |list, cx| {
+                                    list.delegate_mut().set_sort_options(sort_key, enabled_first);
+                                    list.delegate_mut().set_content(&content);
+                                    cx.notify();
+                                });
+                                cx.notify();
+                            })),
+                    ),
             )
             .absolute()
             .top(px(4.0))
