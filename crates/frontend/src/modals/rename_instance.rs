@@ -43,12 +43,13 @@ pub fn open_rename_instance(
                     move |_, window, cx| {
                         let new_name = input_state.read(cx).value().trim().to_string();
                         if new_name.is_empty() {
-                            window.push_notification((NotificationType::Error, "Instance name cannot be empty"), cx);
+                            window
+                                .push_notification((NotificationType::Error, t::instance::rename::error::empty()), cx);
                             return;
                         }
                         if new_name.contains('/') || new_name.contains('\\') {
                             window.push_notification(
-                                (NotificationType::Error, "Instance name must not contain path separators"),
+                                (NotificationType::Error, t::instance::rename::error::separator()),
                                 cx,
                             );
                             return;
