@@ -11,11 +11,11 @@ use bridge::{
 };
 use chrono::Utc;
 use memchr::memchr;
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 use thiserror::Error;
 
-static REPLACEMENTS: Lazy<[(Regex, &'static str); 7]> = Lazy::new(|| {
+static REPLACEMENTS: LazyLock<[(Regex, &'static str); 7]> = LazyLock::new(|| {
     [
         // Access token replacements
         (regex::Regex::new(r#"SignedJWT: [^\s]+"#).unwrap(), "SignedJWT: *****"),

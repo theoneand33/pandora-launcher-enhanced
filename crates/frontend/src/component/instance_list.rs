@@ -21,6 +21,8 @@ use crate::{
 pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
+    filter: SharedString,
+    visible_cache: Vec<usize>,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
     _instance_removed_subscription: Subscription,
@@ -35,26 +37,31 @@ impl InstanceList {
             let _instance_added_subscription = cx.subscribe::<_, InstanceAddedEvent>(
                 &instances,
                 |table: &mut TableState<InstanceList>, _, event, cx| {
-                    table.delegate_mut().items.insert(0, event.instance.clone());
+                    let d = table.delegate_mut();
+                    d.items.insert(0, event.instance.clone());
+                    d.rebuild_visible_cache();
                     cx.notify();
                 },
             );
             let _instance_removed_subscription =
                 cx.subscribe::<_, InstanceRemovedEvent>(&instances, |table, _, event, cx| {
-                    table.delegate_mut().items.retain(|instance| instance.id != event.id);
+                    let d = table.delegate_mut();
+                    d.items.retain(|instance| instance.id != event.id);
+                    d.rebuild_visible_cache();
                     cx.notify();
                 });
             let _instance_modified_subscription =
                 cx.subscribe::<_, InstanceModifiedEvent>(&instances, |table, _, event, cx| {
-                    if let Some(entry) =
-                        table.delegate_mut().items.iter_mut().find(|entry| entry.id == event.instance.id)
-                    {
+                    let d = table.delegate_mut();
+                    if let Some(entry) = d.items.iter_mut().find(|entry| entry.id == event.instance.id) {
                         *entry = event.instance.clone();
+                        d.rebuild_visible_cache();
                         cx.notify();
                     }
                 });
-            let instance_list = Self {
+            let mut instance_list = Self {
                 columns: vec![
+                    Column::new("pin", "").width(36.).fixed_left().movable(false).resizable(false),
                     Column::new("controls", "").width(150.).fixed_left().movable(false).resizable(false),
                     Column::new("name", t::instance::name())
                         .width(150.)
@@ -70,17 +77,76 @@ impl InstanceList {
                     Column::new("remove", "").width(44.).fixed_left().movable(false).resizable(false),
                 ],
                 items,
+                filter: SharedString::default(),
+                visible_cache: Vec::new(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
                 _instance_removed_subscription,
                 _instance_modified_subscription,
             };
+            instance_list.rebuild_visible_cache();
             TableState::new(instance_list, window, cx)
         })
     }
 
+    pub fn set_filter(&mut self, query: SharedString) {
+        self.filter = query;
+        self.rebuild_visible_cache();
+    }
+
+    fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
+        if lower.is_empty() {
+            return true;
+        }
+        let name = entry.name.to_lowercase();
+        if name.contains(lower) {
+            return true;
+        }
+        let ver = entry.configuration.minecraft_version.as_str().to_lowercase();
+        if ver.contains(lower) {
+            return true;
+        }
+        let loader = entry.configuration.loader.pretty_name().to_lowercase();
+        if loader.contains(lower) {
+            return true;
+        }
+        false
+    }
+
+    fn compute_visible(items: &[InstanceEntry], filter: &str) -> Vec<usize> {
+        let lower = filter.to_lowercase();
+        let mut out: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| Self::matches_filter(e, &lower))
+            .map(|(i, _)| i)
+            .collect();
+        // pinned first, stable to preserve order from perform_sort
+        out.sort_by(|&a, &b| items[b].configuration.pinned.cmp(&items[a].configuration.pinned));
+        out
+    }
+
+    fn rebuild_visible_cache(&mut self) {
+        self.visible_cache = Self::compute_visible(&self.items, &self.filter);
+    }
+
+    fn visible_indices(&self) -> &[usize] {
+        &self.visible_cache
+    }
+
+    fn visible_entry(&self, visible_ix: usize) -> Option<&InstanceEntry> {
+        let idx = self.visible_indices().get(visible_ix).copied()?;
+        self.items.get(idx)
+    }
+
+    pub fn total_count(&self) -> usize {
+        self.items.len()
+    }
+
     pub fn render_card(&self, index: usize, cx: &mut App) -> Div {
-        let item = &self.items[index];
+        let Some(item) = self.visible_entry(index) else {
+            return v_flex().into();
+        };
         let loader_and_version = format!(
             "{} {}",
             item.configuration.loader.pretty_name(),
@@ -162,6 +228,7 @@ impl InstanceList {
                     v_flex()
                         .truncate()
                         .w_full()
+                        .pr_16()
                         .relative()
                         .child(
                             div()
@@ -212,30 +279,54 @@ impl InstanceList {
                 }),
             ))
             .child(
-                Button::new(("remove", index))
+                h_flex()
                     .absolute()
                     .top_1()
                     .right_1()
-                    .danger()
-                    .small()
-                    .compact()
-                    .icon(trash_icon)
-                    .tooltip(t::instance::delete())
-                    .on_click(move |click: &ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        window.prevent_default();
-                        if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                            backend_handle.send(MessageToBackend::DeleteInstance { id });
-                        } else {
-                            modals::delete_instance::open_delete_instance(
-                                id,
-                                name.clone(),
-                                backend_handle.clone(),
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
+                    .gap_1()
+                    .child({
+                        let pinned = item.configuration.pinned;
+                        let bh = self.backend_handle.clone();
+                        Button::new(("pin", index))
+                            .small()
+                            .compact()
+                            .icon(if pinned {
+                                PandoraIcon::Star
+                            } else {
+                                PandoraIcon::StarOff
+                            })
+                            .tooltip(if pinned {
+                                t::instance::unpin()
+                            } else {
+                                t::instance::pin()
+                            })
+                            .on_click(move |_, _, _| {
+                                bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
+                            })
+                    })
+                    .child(
+                        Button::new(("remove", index))
+                            .danger()
+                            .small()
+                            .compact()
+                            .icon(trash_icon)
+                            .tooltip(t::instance::delete())
+                            .on_click(move |click: &ClickEvent, window, cx| {
+                                cx.stop_propagation();
+                                window.prevent_default();
+                                if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
+                                    backend_handle.send(MessageToBackend::DeleteInstance { id });
+                                } else {
+                                    modals::delete_instance::open_delete_instance(
+                                        id,
+                                        name.clone(),
+                                        backend_handle.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                    ),
             )
     }
 }
@@ -246,7 +337,7 @@ impl TableDelegate for InstanceList {
     }
 
     fn rows_count(&self, _cx: &App) -> usize {
-        self.items.len()
+        self.visible_indices().len()
     }
 
     fn column(&self, col_ix: usize, _cx: &App) -> gpui_component::table::Column {
@@ -260,25 +351,37 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) {
+        // ponytail: pinned stays on top regardless of sort; sort only within pinned groups
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
-                "name" => self.items.sort_by(|a, b| match sort {
-                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
-                    _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                "name" => self.items.sort_by(|a, b| {
+                    if a.configuration.pinned != b.configuration.pinned {
+                        return b.configuration.pinned.cmp(&a.configuration.pinned);
+                    }
+                    match sort {
+                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
+                        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
+                    }
                 }),
-                "version" => self.items.sort_by(|a, b| match sort {
-                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
-                        &a.configuration.minecraft_version,
-                        &b.configuration.minecraft_version,
-                    )
-                    .reverse(),
-                    _ => lexical_sort::natural_lexical_cmp(
-                        &a.configuration.minecraft_version,
-                        &b.configuration.minecraft_version,
-                    ),
+                "version" => self.items.sort_by(|a, b| {
+                    if a.configuration.pinned != b.configuration.pinned {
+                        return b.configuration.pinned.cmp(&a.configuration.pinned);
+                    }
+                    match sort {
+                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
+                            &a.configuration.minecraft_version,
+                            &b.configuration.minecraft_version,
+                        )
+                        .reverse(),
+                        _ => lexical_sort::natural_lexical_cmp(
+                            &a.configuration.minecraft_version,
+                            &b.configuration.minecraft_version,
+                        ),
+                    }
                 }),
                 _ => {},
             }
+            self.rebuild_visible_cache();
         }
     }
 
@@ -289,9 +392,39 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let item = &self.items[row_ix];
+        let Some(item) = self.visible_entry(row_ix).cloned() else {
+            return div().into_any_element();
+        };
         if let Some(col) = self.columns.get(col_ix) {
             match col.key.as_ref() {
+                "pin" => {
+                    let id = item.id;
+                    let pinned = item.configuration.pinned;
+                    let bh = self.backend_handle.clone();
+                    h_flex()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            Button::new(("pin", row_ix))
+                                .small()
+                                .compact()
+                                .icon(if pinned {
+                                    PandoraIcon::Star
+                                } else {
+                                    PandoraIcon::StarOff
+                                })
+                                .tooltip(if pinned {
+                                    t::instance::unpin()
+                                } else {
+                                    t::instance::pin()
+                                })
+                                .on_click(move |_, _, _| {
+                                    bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
+                                }),
+                        )
+                        .into_any_element()
+                },
                 "name" => {
                     let id = item.id;
                     let name = item.name.clone();
@@ -333,7 +466,7 @@ impl TableDelegate for InstanceList {
                 },
                 "version" => item.configuration.minecraft_version.as_str().into_any_element(),
                 "controls" => {
-                    let play_button = render_play_button(item, row_ix, self.backend_handle.clone());
+                    let play_button = render_play_button(&item, row_ix, self.backend_handle.clone());
 
                     h_flex()
                         .size_full()

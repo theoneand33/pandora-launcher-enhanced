@@ -56,6 +56,7 @@ pub struct InstanceContentSubpage {
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
     update_check_action: Option<ModalAction>,
     update_all_action: Option<ModalAction>,
+    show_outdated_only: bool,
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -304,6 +305,7 @@ impl InstanceContentSubpage {
             sort_dropdown,
             update_check_action: None,
             update_all_action: None,
+            show_outdated_only: false,
             _add_from_file_task: None,
         }
     }
@@ -556,6 +558,92 @@ impl Render for InstanceContentSubpage {
                             })),
                     ),
             )
+            .child(
+                h_flex()
+                    .gap_1()
+                    .child(div().text_sm().child(t::instance::content::outdated_only()))
+                    .child(Switch::new("outdated_only").checked(self.show_outdated_only).on_click(cx.listener(
+                        |this, checked, _, cx| {
+                            if this.show_outdated_only == *checked {
+                                return;
+                            }
+                            this.show_outdated_only = *checked;
+                            let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                            let cl = this.content_list.clone();
+                            cx.update_entity(&cl, |list, cx| {
+                                list.delegate_mut().set_outdated_only(*checked);
+                                list.delegate_mut().set_content(&content);
+                                cx.notify();
+                            });
+                            cx.notify();
+                        },
+                    ))),
+            )
+            .child({
+                let has_search = self.content_list.read(cx).delegate().has_search_filter();
+                let label = if self.show_outdated_only {
+                    t::instance::content::enable_outdated()
+                } else if has_search {
+                    t::instance::content::enable_filtered()
+                } else {
+                    t::instance::content::enable_all()
+                };
+                let tooltip = if has_search {
+                    t::instance::content::enable_filtered()
+                } else if self.show_outdated_only {
+                    t::instance::content::enable_outdated()
+                } else {
+                    t::instance::content::enable_all()
+                };
+                Button::new("enable_all")
+                    .small()
+                    // content_ids() is tab-scoped and respects search/outdated filters:
+                    // "Enable all" affects only visible summaries (current tab, filtered
+                    // by search query and outdated-only).
+                    .tooltip(tooltip)
+                    .label(label)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let ids = this.content_list.read(cx).delegate().content_ids();
+                        if ids.is_empty() {
+                            return;
+                        }
+                        this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
+                            id: this.instance,
+                            content_ids: ids,
+                            enabled: true,
+                        });
+                    }))
+            })
+            .child({
+                let has_search = self.content_list.read(cx).delegate().has_search_filter();
+                let label = if self.show_outdated_only {
+                    t::instance::content::disable_outdated()
+                } else if has_search {
+                    t::instance::content::disable_filtered()
+                } else {
+                    t::instance::content::disable_all()
+                };
+                let tooltip = if has_search {
+                    t::instance::content::disable_filtered()
+                } else if self.show_outdated_only {
+                    t::instance::content::disable_outdated()
+                } else {
+                    t::instance::content::disable_all()
+                };
+                Button::new("disable_all").small().tooltip(tooltip).label(label).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        let ids = this.content_list.read(cx).delegate().content_ids();
+                        if ids.is_empty() {
+                            return;
+                        }
+                        this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
+                            id: this.instance,
+                            content_ids: ids,
+                            enabled: false,
+                        });
+                    },
+                ))
+            })
             .absolute()
             .top(px(4.0))
             .right(px(12.0));
