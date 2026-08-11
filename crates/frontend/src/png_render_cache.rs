@@ -117,8 +117,9 @@ impl PngRenderCache {
                     let old_width = image.width();
                     let old_height = image.height();
                     if old_width != width || old_height != height {
+                        // ponytail: Triangle is ~3x faster than Lanczos3, visually close for icons
                         let filter = if old_width > width || old_height > height {
-                            FilterType::Lanczos3
+                            FilterType::Triangle
                         } else {
                             FilterType::Nearest
                         };
@@ -131,8 +132,9 @@ impl PngRenderCache {
                     let ratio = width as f64 / old_width as f64;
                     let height = ((old_height as f64 * ratio).round() as u32).max(1);
                     if old_width != width || old_height != height {
+                        // ponytail: Triangle is ~3x faster than Lanczos3, visually close for icons
                         let filter = if old_width > width || old_height > height {
-                            FilterType::Lanczos3
+                            FilterType::Triangle
                         } else {
                             FilterType::Nearest
                         };

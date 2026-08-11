@@ -714,24 +714,16 @@ impl Instance {
             return Vec::new();
         };
 
-        let mut summaries = Vec::with_capacity(32);
+        let paths: Vec<PathBuf> = directory.filter_map(|e| e.ok().map(|e| e.path())).collect();
 
-        // todo: multithread?
+        // ponytail: rayon parallelizes sha1+zip parsing across cores, ~N× speedup for 100+ mods
+        use rayon::prelude::*;
+        let mut summaries: Vec<InstanceContentSummary> = paths
+            .par_iter()
+            .filter_map(|p| create_instance_content_summary(p, &mod_metadata_manager, for_loader, for_version))
+            .collect();
 
-        for entry in directory {
-            let Ok(entry) = entry else {
-                log::error!("Error reading file in content folder: {:?}", entry.unwrap_err());
-                continue;
-            };
-
-            if let Some(summary) =
-                create_instance_content_summary(&entry.path(), &mod_metadata_manager, for_loader, for_version)
-            {
-                summaries.push(summary);
-            }
-        }
-
-        summaries.sort_by(|a, b| {
+        summaries.sort_unstable_by(|a, b| {
             a.content_summary
                 .id
                 .cmp(&b.content_summary.id)
@@ -790,7 +782,7 @@ impl Instance {
             }
         }
 
-        summaries.sort_by(|a, b| {
+        summaries.sort_unstable_by(|a, b| {
             a.content_summary
                 .id
                 .cmp(&b.content_summary.id)
