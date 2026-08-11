@@ -192,6 +192,7 @@ impl Render for SyncingPage {
             .p_3()
             .gap_3()
             .child(t::instance::sync::description())
+<<<<<<< HEAD
             .child(
                 Button::new("open")
                     .info()
@@ -290,6 +291,15 @@ impl Render for SyncingPage {
             ))
             .child(self.create_entry(
                 sync_state,
+                "downloads".into(),
+                false,
+                t::instance::sync::targets::downloads().into(),
+                warning,
+                info,
+                cx,
+            ))
+            .child(self.create_entry(
+                sync_state,
                 "shaderpacks".into(),
                 false,
                 t::instance::sync::targets::shaderpacks().into(),
@@ -374,6 +384,7 @@ impl Render for SyncingPage {
                     .text_lg()
                     .child(t::instance::sync::custom()),
             )
+
             .children(sync_state.targets.iter().filter_map(|(name, state)| {
                 if !state.enabled || NAMED_SYNC_TARGETS.contains(&**name) {
                     return None;
@@ -450,6 +461,7 @@ static NAMED_SYNC_TARGETS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "config",
         "screenshots",
         "resourcepacks",
+        "downloads",
         "shaderpacks",
         "flashback",
         "Distant_Horizons_server_data",

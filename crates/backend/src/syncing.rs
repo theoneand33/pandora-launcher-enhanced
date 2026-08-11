@@ -354,6 +354,7 @@ static DEFAULT_FOLDERS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
         "config",
         "screenshots",
         "resourcepacks",
+        "downloads",
         "shaderpacks",
         "flashback",
         "Distant_Horizons_server_data",
