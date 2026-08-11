@@ -95,7 +95,7 @@ fn total_memory_mib() -> Option<u32> {
                 avail_virtual: u64,
                 avail_extended_virtual: u64,
             }
-            extern "system" {
+            unsafe extern "system" {
                 fn GlobalMemoryStatusEx(lp_buffer: *mut MemoryStatusEx) -> i32;
             }
             let mut stat = MemoryStatusEx {
