@@ -176,9 +176,7 @@ fn create_combined_options_txt(fallback: &Path, current: &Path, instances: &mut 
         paths.push((time, path));
     }
 
-    paths.sort_unstable_by(|(time_a, path_a), (time_b, path_b)| {
-        time_a.cmp(time_b).then_with(|| path_a.cmp(path_b))
-    });
+    paths.sort_unstable_by(|(time_a, path_a), (time_b, path_b)| time_a.cmp(time_b).then_with(|| path_a.cmp(path_b)));
 
     for (_, path) in paths {
         let mut new_values = read_options_txt(&path);

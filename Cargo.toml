@@ -126,6 +126,7 @@ rc-zip-sync = "4.4.2"
 relative-path = { version = "2.0.1", features = ["serde"] }
 shell-words = "1.1.1"
 serde-xml-rs = "0.8.2"
+quick-xml = "0.39.3"
 memchr = "2.7.6"
 toml = "0.9.11"
 clap = { version = "4.5.54", features = ["derive"] }
