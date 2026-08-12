@@ -1,4 +1,4 @@
-use bridge::handle::BackendHandle;
+use bridge::{handle::BackendHandle, instance::UNGROUPED_GROUP};
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme, Icon, IndexPath, Sizable,
@@ -171,7 +171,7 @@ impl InstancesPage {
             },
             NamedDropdownItem {
                 name: t::instance::group::ungrouped().into(),
-                item: Some("__ungrouped__".into()),
+                item: Some(UNGROUPED_GROUP.into()),
             },
         ];
         let mut groups: Vec<SharedString> = entries
@@ -180,7 +180,7 @@ impl InstancesPage {
             .filter_map(|e| e.read(cx).configuration.group.map(|g| SharedString::from(g.as_str())))
             .collect();
         groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-        groups.dedup();
+        groups.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
         for g in groups {
             let name = g.clone();
             items.push(NamedDropdownItem { name, item: Some(g) });

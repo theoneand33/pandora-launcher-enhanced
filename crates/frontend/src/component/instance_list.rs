@@ -1,4 +1,8 @@
-use bridge::{handle::BackendHandle, instance::InstanceStatus, message::MessageToBackend};
+use bridge::{
+    handle::BackendHandle,
+    instance::{InstanceStatus, UNGROUPED_GROUP},
+    message::MessageToBackend,
+};
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme, Icon, Sizable,
@@ -101,17 +105,6 @@ impl InstanceList {
         self.rebuild_visible_cache();
     }
 
-    pub fn all_groups(&self) -> Vec<SharedString> {
-        let mut groups: Vec<SharedString> = self
-            .items
-            .iter()
-            .filter_map(|e| e.configuration.group.map(|g| SharedString::from(g.as_str())))
-            .collect();
-        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-        groups.dedup();
-        groups
-    }
-
     fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
         if lower.is_empty() {
             return true;
@@ -139,7 +132,7 @@ impl InstanceList {
     fn matches_group(entry: &InstanceEntry, group_filter: Option<&str>) -> bool {
         match group_filter {
             None => true,
-            Some("__ungrouped__") => entry.configuration.group.is_none(),
+            Some(UNGROUPED_GROUP) => entry.configuration.group.is_none(),
             Some(g) => entry.configuration.group.is_some_and(|v| v.as_str() == g),
         }
     }

@@ -14,6 +14,8 @@ use std::sync::LazyLock;
 
 use crate::safe_path::SafePath;
 
+pub const UNGROUPED_GROUP: &str = "__ungrouped__";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InstanceID {
     pub index: usize,
