@@ -296,7 +296,7 @@ impl InstanceSettingsSubpage {
                 .placeholder(t::instance::group::placeholder())
                 .default_value(initial_group)
         });
-        cx.subscribe(&group_input_state, Self::on_group_changed).detach();
+        cx.subscribe_in(&group_input_state, window, Self::on_group_changed).detach();
 
         let minecraft_versions =
             FrontendMetadata::request(&data.metadata, MetadataRequest::MinecraftVersionManifest, cx);
@@ -618,22 +618,33 @@ impl InstanceSettingsSubpage {
         }
     }
 
-    pub fn on_group_changed(&mut self, state: Entity<InputState>, event: &InputEvent, _cx: &mut Context<Self>) {
+    pub fn on_group_changed(
+        &mut self,
+        state: &Entity<InputState>,
+        event: &InputEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-            let raw = state.read(_cx).value();
+            let raw = state.read(cx).value();
             let trimmed = raw.trim();
             // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Arc allocation
-            const MAX_GROUP_LEN: usize = 64;
-            let group: Option<Arc<str>> = if trimmed.is_empty() {
+            use schema::instance::MAX_GROUP_LEN;
+            let canonical = if trimmed.is_empty() {
+                String::new()
+            } else if trimmed.chars().count() > MAX_GROUP_LEN {
+                trimmed.chars().take(MAX_GROUP_LEN).collect::<String>()
+            } else {
+                trimmed.to_owned()
+            };
+            let group: Option<Arc<str>> = if canonical.is_empty() {
                 None
             } else {
-                let truncated: Arc<str> = if trimmed.chars().count() > MAX_GROUP_LEN {
-                    trimmed.chars().take(MAX_GROUP_LEN).collect::<String>().into()
-                } else {
-                    trimmed.to_owned().into()
-                };
-                Some(truncated)
+                Some(canonical.clone().into())
             };
+            if raw != canonical {
+                state.update(cx, |input, cx| input.set_value(canonical.clone(), window, cx));
+            }
             self.backend_handle.send(MessageToBackend::SetInstanceGroup {
                 id: self.instance_id,
                 group,

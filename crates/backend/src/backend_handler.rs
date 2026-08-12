@@ -341,7 +341,7 @@ impl BackendState {
             },
             MessageToBackend::SetInstanceGroup { id, group } => {
                 let group = {
-                    const MAX_GROUP_LEN: usize = 64;
+                    use schema::instance::MAX_GROUP_LEN;
                     match group {
                         Some(g) if g.chars().count() > MAX_GROUP_LEN => {
                             Some(g.chars().take(MAX_GROUP_LEN).collect::<String>().into())

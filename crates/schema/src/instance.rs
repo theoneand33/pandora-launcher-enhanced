@@ -11,6 +11,8 @@ use crate::{
     loader::Loader,
 };
 
+pub const MAX_GROUP_LEN: usize = 64;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InstanceConfiguration {
     pub minecraft_version: Ustr,
