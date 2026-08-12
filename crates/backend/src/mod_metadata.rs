@@ -1140,8 +1140,9 @@ fn load_icon_bytes(icon_bytes: &[u8]) -> Option<UniqueBytes> {
     let width = image.width();
     let height = image.height();
     if width != 64 || height != 64 {
+        // ponytail: Triangle is ~3x faster than Lanczos3, visually close for 64px icons
         let filter = if width > 64 || height > 64 {
-            FilterType::Lanczos3
+            FilterType::Triangle
         } else {
             FilterType::Nearest
         };

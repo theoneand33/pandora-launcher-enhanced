@@ -360,7 +360,9 @@ impl BackendState {
             paths_with_time.push((path, time));
         }
 
-        paths_with_time.sort_by_key(|(_, time)| *time);
+        paths_with_time.sort_unstable_by(|(path_a, time_a), (path_b, time_b)| {
+            time_a.cmp(time_b).then_with(|| path_a.cmp(path_b))
+        });
         for (path, _) in paths_with_time {
             let success = self.load_instance_from_path(&path, true, false);
             if !success {
