@@ -96,31 +96,35 @@ impl InstancesPage {
         // rebuild group list when instances change
         let weak_group = group_dropdown.downgrade();
         let weak_table = instance_table.downgrade();
-        let weak_group2 = weak_group.clone();
-        let weak_table2 = weak_table.clone();
-        let weak_group3 = weak_group.clone();
-        let weak_table3 = weak_table.clone();
+        {
+            let weak_group = weak_group.clone();
+            let weak_table = weak_table.clone();
+            cx.subscribe_in(
+                &data.instances,
+                window,
+                move |_, instances, _: &crate::entity::instance::InstanceAddedEvent, window, cx| {
+                    Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
+                },
+            )
+            .detach();
+        }
+        {
+            let weak_group = weak_group.clone();
+            let weak_table = weak_table.clone();
+            cx.subscribe_in(
+                &data.instances,
+                window,
+                move |_, instances, _: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
+                    Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
+                },
+            )
+            .detach();
+        }
         cx.subscribe_in(
             &data.instances,
             window,
-            move |_, instances, _event: &crate::entity::instance::InstanceAddedEvent, window, cx| {
-                Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx);
-            },
-        )
-        .detach();
-        cx.subscribe_in(
-            &data.instances,
-            window,
-            move |_, instances, _event: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
-                Self::refresh_group_dropdown(&weak_group2, &weak_table2, &instances, window, cx);
-            },
-        )
-        .detach();
-        cx.subscribe_in(
-            &data.instances,
-            window,
-            move |_, instances, _event: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
-                Self::refresh_group_dropdown(&weak_group3, &weak_table3, &instances, window, cx);
+            move |_, instances, _: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
             },
         )
         .detach();

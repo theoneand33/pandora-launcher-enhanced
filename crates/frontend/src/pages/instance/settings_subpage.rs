@@ -629,14 +629,7 @@ impl InstanceSettingsSubpage {
             let raw = state.read(cx).value();
             let trimmed = raw.trim();
             // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Arc allocation
-            use schema::instance::MAX_GROUP_LEN;
-            let canonical = if trimmed.is_empty() {
-                String::new()
-            } else if trimmed.chars().count() > MAX_GROUP_LEN {
-                trimmed.chars().take(MAX_GROUP_LEN).collect::<String>()
-            } else {
-                trimmed.to_owned()
-            };
+            let canonical = schema::instance::truncate_group(trimmed).to_owned();
             let group: Option<Arc<str>> = if canonical.is_empty() {
                 None
             } else {

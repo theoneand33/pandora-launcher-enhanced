@@ -13,6 +13,32 @@ use crate::{
 
 pub const MAX_GROUP_LEN: usize = 64;
 
+/// Truncate to at most `MAX_GROUP_LEN` chars. Returns a borrowed slice when
+/// already short to avoid an allocation on the common path.
+pub fn truncate_group(s: &str) -> &str {
+    if s.chars().count() <= MAX_GROUP_LEN {
+        return s;
+    }
+    // Find byte index of the MAX_GROUP_LEN-th char boundary.
+    let end = s.char_indices().nth(MAX_GROUP_LEN).map(|(idx, _)| idx).unwrap_or(s.len());
+    &s[..end]
+}
+
+/// Normalize an optional group string: empty/whitespace-only becomes `None`,
+/// otherwise trimmed and truncated.
+pub fn normalize_group(group: Option<Arc<str>>) -> Option<Arc<str>> {
+    let g = group?;
+    let trimmed = truncate_group(g.trim());
+    if trimmed.is_empty() {
+        None
+    } else if trimmed.len() == g.len() && trimmed.as_ptr() == g.as_ref().as_ptr() {
+        // Already normalized and within limit — reuse allocation.
+        Some(g)
+    } else {
+        Some(trimmed.into())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InstanceConfiguration {
     pub minecraft_version: Ustr,
