@@ -18,17 +18,12 @@ use crate::{
     modals, png_render_cache, root, ui,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum GroupFilter {
+    #[default]
     All,
     Ungrouped,
     Named(SharedString),
-}
-
-impl Default for GroupFilter {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 pub struct InstanceList {

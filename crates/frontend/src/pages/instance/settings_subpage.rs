@@ -236,49 +236,31 @@ impl InstanceSettingsSubpage {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> Self {
-        let (
-            instance_id,
-            instance_name,
-            loader,
-            preferred_loader_version,
-            account,
-            disable_file_syncing,
-            sandbox,
-            memory,
-            wrapper_command,
-            jvm_flags,
-            jvm_binary,
-            instance_root_label,
-            icon,
-            initial_group,
-        ) = {
-            let entry = instance.read(cx);
-            (
-                entry.id,
-                entry.name.clone(),
-                entry.configuration.loader,
-                entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest"),
-                entry.configuration.preferred_account,
-                entry.configuration.disable_file_syncing,
-                entry.configuration.sandbox,
-                entry.configuration.memory.unwrap_or_default(),
-                entry.configuration.wrapper_command.clone().unwrap_or_default(),
-                entry.configuration.jvm_flags.clone().unwrap_or_default(),
-                entry.configuration.jvm_binary.clone().unwrap_or_default(),
-                PathLabel::new(entry.root_path.clone(), true),
-                if let Some(raw) = entry.icon.clone() {
-                    Some(EmbeddedOrRaw::Raw(raw))
-                } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
-                    Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
-                } else {
-                    None
-                },
-                entry.configuration.group.as_ref().map(|g| g.to_string()).unwrap_or_default(),
-            )
+        let entry = instance.read(cx);
+        let instance_id = entry.id;
+        let instance_name = entry.name.clone();
+        let loader = entry.configuration.loader;
+        let preferred_loader_version =
+            entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
+        let account = entry.configuration.preferred_account;
+        let disable_file_syncing = entry.configuration.disable_file_syncing;
+        let sandbox = entry.configuration.sandbox;
+        let memory = entry.configuration.memory.unwrap_or_default();
+        let wrapper_command = entry.configuration.wrapper_command.clone().unwrap_or_default();
+        let jvm_flags = entry.configuration.jvm_flags.clone().unwrap_or_default();
+        let jvm_binary = entry.configuration.jvm_binary.clone().unwrap_or_default();
+        let instance_root_label = PathLabel::new(entry.root_path.clone(), true);
+        let icon = if let Some(raw) = entry.icon.clone() {
+            Some(EmbeddedOrRaw::Raw(raw))
+        } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
+            Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
+        } else {
+            None
         };
+        let initial_group = entry.configuration.group.as_ref().map(|g| g.to_string()).unwrap_or_default();
         #[cfg(target_os = "linux")]
-        let linux_wrapper = instance.read(cx).configuration.linux_wrapper.unwrap_or_default();
-        let system_libraries = instance.read(cx).configuration.system_libraries.clone().unwrap_or_default();
+        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
+        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
 
         let sandbox_available = if cfg!(target_os = "linux") {
             command::is_command_available("bwrap") && command::is_command_available("xdg-dbus-proxy")
@@ -644,16 +626,10 @@ impl InstanceSettingsSubpage {
     ) {
         if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
             let raw = state.read(cx).value();
-            let trimmed = raw.trim();
-            // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Arc allocation
-            let canonical = schema::instance::truncate_group(trimmed).to_owned();
-            let group: Option<Arc<str>> = if canonical.is_empty() {
-                None
-            } else {
-                Some(canonical.clone().into())
-            };
-            if raw != canonical {
-                state.update(cx, |input, cx| input.set_value(canonical.clone(), window, cx));
+            let group = schema::instance::normalize_group(Some(raw.as_str().into()));
+            let canonical = group.as_deref().unwrap_or_default();
+            if raw.as_str() != canonical {
+                state.update(cx, |input, cx| input.set_value(canonical.to_owned(), window, cx));
             }
             self.backend_handle.send(MessageToBackend::SetInstanceGroup {
                 id: self.instance_id,

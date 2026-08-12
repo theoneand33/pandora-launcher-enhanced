@@ -74,7 +74,6 @@ impl InstancesPage {
         })
         .detach();
 
-        // ponytail: group filter is a typed enum; per-group locks if throughput matters.
         let group_dropdown = cx.new(|cx| {
             let items = Self::build_group_items(data.instances.read(cx), cx);
             SelectState::new(NamedDropdown::new(items), Some(IndexPath::new(0)), window, cx)
@@ -97,25 +96,25 @@ impl InstancesPage {
         let weak_group = group_dropdown.downgrade();
         let weak_table = instance_table.downgrade();
         {
-            let weak_group = weak_group.clone();
-            let weak_table = weak_table.clone();
+            let wg = weak_group.clone();
+            let wt = weak_table.clone();
             cx.subscribe_in(
                 &data.instances,
                 window,
                 move |_, instances, _: &crate::entity::instance::InstanceAddedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
+                    Self::refresh_group_dropdown(&wg, &wt, &instances, window, cx)
                 },
             )
             .detach();
         }
         {
-            let weak_group = weak_group.clone();
-            let weak_table = weak_table.clone();
+            let wg = weak_group.clone();
+            let wt = weak_table.clone();
             cx.subscribe_in(
                 &data.instances,
                 window,
                 move |_, instances, _: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
+                    Self::refresh_group_dropdown(&wg, &wt, &instances, window, cx)
                 },
             )
             .detach();
@@ -206,7 +205,6 @@ impl InstancesPage {
         let prev_selected: Option<GroupFilter> = group_state.read(cx).selected_value().map(|v| v.item.clone());
         group_state.update(cx, |state, cx| {
             let items = Self::build_group_items(entries.read(cx), cx);
-            // ponytail: same case-insensitive normalization as build_group_items dedup/sort
             let group_eq = |a: &GroupFilter, b: &GroupFilter| match (a, b) {
                 (GroupFilter::All, GroupFilter::All) => true,
                 (GroupFilter::Ungrouped, GroupFilter::Ungrouped) => true,
