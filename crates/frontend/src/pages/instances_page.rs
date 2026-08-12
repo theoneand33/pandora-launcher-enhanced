@@ -92,41 +92,7 @@ impl InstancesPage {
         })
         .detach();
 
-        // rebuild group list when instances change
-        let weak_group = group_dropdown.downgrade();
-        let weak_table = instance_table.downgrade();
-        {
-            let wg = weak_group.clone();
-            let wt = weak_table.clone();
-            cx.subscribe_in(
-                &data.instances,
-                window,
-                move |_, instances, _: &crate::entity::instance::InstanceAddedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&wg, &wt, &instances, window, cx)
-                },
-            )
-            .detach();
-        }
-        {
-            let wg = weak_group.clone();
-            let wt = weak_table.clone();
-            cx.subscribe_in(
-                &data.instances,
-                window,
-                move |_, instances, _: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&wg, &wt, &instances, window, cx)
-                },
-            )
-            .detach();
-        }
-        cx.subscribe_in(
-            &data.instances,
-            window,
-            move |_, instances, _: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
-                Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx)
-            },
-        )
-        .detach();
+        Self::wire_group_refresh(&data.instances, group_dropdown.downgrade(), instance_table.downgrade(), window, cx);
 
         Self {
             instance_table,
@@ -229,6 +195,47 @@ impl InstancesPage {
                 }
             }
         });
+    }
+
+    fn wire_group_refresh(
+        instances: &Entity<InstanceEntries>,
+        weak_group: WeakEntity<SelectState<NamedDropdown<GroupFilter>>>,
+        weak_table: WeakEntity<TableState<InstanceList>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        {
+            let wg = weak_group.clone();
+            let wt = weak_table.clone();
+            cx.subscribe_in(
+                instances,
+                window,
+                move |_, e, _: &crate::entity::instance::InstanceAddedEvent, window, cx| {
+                    Self::refresh_group_dropdown(&wg, &wt, &e, window, cx)
+                },
+            )
+            .detach();
+        }
+        {
+            let wg = weak_group.clone();
+            let wt = weak_table.clone();
+            cx.subscribe_in(
+                instances,
+                window,
+                move |_, e, _: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
+                    Self::refresh_group_dropdown(&wg, &wt, &e, window, cx)
+                },
+            )
+            .detach();
+        }
+        cx.subscribe_in(
+            instances,
+            window,
+            move |_, e, _: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group, &weak_table, &e, window, cx)
+            },
+        )
+        .detach();
     }
 }
 
