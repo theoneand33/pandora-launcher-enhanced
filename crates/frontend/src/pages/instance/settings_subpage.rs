@@ -619,13 +619,20 @@ impl InstanceSettingsSubpage {
     }
 
     pub fn on_group_changed(&mut self, state: Entity<InputState>, event: &InputEvent, _cx: &mut Context<Self>) {
-        if let InputEvent::Change = event {
+        if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
             let raw = state.read(_cx).value();
             let trimmed = raw.trim();
-            let group = if trimmed.is_empty() {
+            // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Ustr interning
+            const MAX_GROUP_LEN: usize = 64;
+            let group = if trimmed.is_empty() || trimmed == "__ungrouped__" {
                 None
             } else {
-                Some(ustr::Ustr::from(trimmed))
+                let truncated: String = if trimmed.chars().count() > MAX_GROUP_LEN {
+                    trimmed.chars().take(MAX_GROUP_LEN).collect()
+                } else {
+                    trimmed.to_owned()
+                };
+                Some(ustr::Ustr::from(truncated.as_str()))
             };
             self.backend_handle.send(MessageToBackend::SetInstanceGroup {
                 id: self.instance_id,

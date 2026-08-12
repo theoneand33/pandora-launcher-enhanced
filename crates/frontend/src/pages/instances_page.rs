@@ -178,6 +178,7 @@ impl InstancesPage {
             .entries
             .values()
             .filter_map(|e| e.read(cx).configuration.group.map(|g| SharedString::from(g.as_str())))
+            .filter(|g| g.as_str() != UNGROUPED_GROUP)
             .collect();
         groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
         groups.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
