@@ -118,7 +118,8 @@ mod tests {
     fn test_push_and_add() {
         let mut f = FenwickTree::from_iter([1, 6, 3]);
         f.push(9);
-        assert_eq!(f.index_of_with_remainder(10), (2, 2));
+        // Cumulative sizes are [1, 7, 10, 19]; remainder is offset within the item.
+        assert_eq!(f.index_of_with_remainder(10), (2, 3));
         f.add_at(0, 1);
         assert_eq!(f.inner[0], 2);
     }

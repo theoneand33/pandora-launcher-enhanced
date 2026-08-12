@@ -316,15 +316,19 @@ impl Render for ImportPage {
                                 import_job: ImportFromOtherLauncherJob {
                                     import_accounts,
                                     root: import_job.root.clone(),
-                                    paths: import_job
-                                        .paths
-                                        .iter()
-                                        .cloned()
-                                        .filter(|path| {
-                                            !page.disabled_due_to_name_conflict.contains(&*path)
-                                                && !page.disabled_manually.contains(&*path)
-                                        })
-                                        .collect(),
+                                    paths: if page.import_instances {
+                                        import_job
+                                            .paths
+                                            .iter()
+                                            .cloned()
+                                            .filter(|path| {
+                                                !page.disabled_due_to_name_conflict.contains(&*path)
+                                                    && !page.disabled_manually.contains(&*path)
+                                            })
+                                            .collect()
+                                    } else {
+                                        Vec::new()
+                                    },
                                 },
                                 modal_action: modal_action.clone(),
                             });
