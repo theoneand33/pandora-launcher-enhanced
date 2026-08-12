@@ -436,12 +436,15 @@ impl Instance {
                 return;
             };
 
-            if servers.move_index(from_index, to_index) {
-                let bytes = nbt::encode::write_named(&result);
-                if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
-                    log::error!("Error while writing server.dat: {err:?}");
-                    backend_clone.send.send_error(format!("Error while writing server.dat: {err}"));
-                }
+            if !servers.move_index(from_index, to_index) {
+                backend_clone.send.send_error("Unable to reorder servers, index out of range");
+                return;
+            }
+
+            let bytes = nbt::encode::write_named(&result);
+            if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
+                log::error!("Error while writing server.dat: {err:?}");
+                backend_clone.send.send_error(format!("Error while writing server.dat: {err}"));
             }
         })
         .await;
@@ -489,12 +492,15 @@ impl Instance {
                 return;
             };
 
-            if servers.remove_index(index) {
-                let bytes = nbt::encode::write_named(&result);
-                if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
-                    log::error!("error while writing server.dat: {err:?}");
-                    backend_clone.send.send_error(format!("error while writing server.dat: {err}"));
-                }
+            if !servers.remove_index(index) {
+                backend_clone.send.send_error("Unable to delete server, index out of range");
+                return;
+            }
+
+            let bytes = nbt::encode::write_named(&result);
+            if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
+                log::error!("error while writing server.dat: {err:?}");
+                backend_clone.send.send_error(format!("error while writing server.dat: {err}"));
             }
         })
         .await;
