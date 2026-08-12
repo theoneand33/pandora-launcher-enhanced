@@ -202,16 +202,16 @@ impl InstancesPage {
         group_state.update(cx, |state, cx| {
             let items = Self::build_group_items(entries.read(cx), cx);
             let prev_str = prev_selected.as_deref();
-            let has_prev = match prev_str {
-                None => items.iter().any(|it| it.item.is_none()),
-                Some(prev) => items.iter().any(|it| it.item.as_deref() == Some(prev)),
+            // ponytail: same case-insensitive normalization as build_group_items dedup/sort
+            let group_eq = |a: Option<&str>, b: Option<&str>| match (a, b) {
+                (None, None) => true,
+                (Some(x), Some(y)) => x.to_lowercase() == y.to_lowercase(),
+                _ => false,
             };
-            let prev_idx = items.iter().position(|it| it.item.as_deref() == prev_str);
+            let prev_idx = items.iter().position(|it| group_eq(it.item.as_deref(), prev_str));
             state.set_items(NamedDropdown::new(items), window, cx);
-            if has_prev {
-                if let Some(idx) = prev_idx {
-                    state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
-                }
+            if let Some(idx) = prev_idx {
+                state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
             } else {
                 state.set_selected_index(Some(IndexPath::new(0)), window, cx);
                 if let Some(table) = weak_table.upgrade() {

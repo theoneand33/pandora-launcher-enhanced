@@ -133,7 +133,7 @@ impl InstanceList {
         match group_filter {
             None => true,
             Some(UNGROUPED_GROUP) => entry.configuration.group.is_none(),
-            Some(g) => entry.configuration.group.is_some_and(|v| v.as_str() == g),
+            Some(g) => entry.configuration.group.is_some_and(|v| v.as_str().to_lowercase() == g.to_lowercase()),
         }
     }
 
