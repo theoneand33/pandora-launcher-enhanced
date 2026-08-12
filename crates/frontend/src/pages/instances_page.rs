@@ -141,15 +141,19 @@ impl InstancesPage {
                 item: GroupFilter::Ungrouped,
             },
         ];
-        let mut groups: Vec<SharedString> = entries
-            .entries
-            .values()
-            .filter_map(|e| e.read(cx).configuration.group.as_ref().map(|g| SharedString::from(g.as_ref())))
-            .collect();
-        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-        groups.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
+        let groups = InstanceList::deduped_groups(
+            entries
+                .entries
+                .values()
+                .filter_map(|e| e.read(cx).configuration.group.as_ref().map(|g| SharedString::from(g.as_ref()))),
+        );
         for g in groups {
-            let name = g.clone();
+            // ponytail: group named "ungrouped" would read identically to filter item; disambiguate
+            let name = if g.eq_ignore_ascii_case("ungrouped") {
+                SharedString::from(format!("\"{}\"", g))
+            } else {
+                g.clone()
+            };
             items.push(NamedDropdownItem {
                 name,
                 item: GroupFilter::Named(g),
@@ -174,14 +178,12 @@ impl InstancesPage {
             let group_eq = |a: &GroupFilter, b: &GroupFilter| match (a, b) {
                 (GroupFilter::All, GroupFilter::All) => true,
                 (GroupFilter::Ungrouped, GroupFilter::Ungrouped) => true,
-                (GroupFilter::Named(x), GroupFilter::Named(y)) => x.to_lowercase() == y.to_lowercase(),
+                (GroupFilter::Named(x), GroupFilter::Named(y)) => x.eq_ignore_ascii_case(y),
                 _ => false,
             };
-            let prev_idx = if let Some(prev) = prev_selected.as_ref() {
-                items.iter().position(|it| group_eq(&it.item, prev))
-            } else {
-                None
-            };
+            let prev_idx = prev_selected
+                .as_ref()
+                .and_then(|prev| items.iter().position(|it| group_eq(&it.item, prev)));
             state.set_items(NamedDropdown::new(items), window, cx);
             if let Some(idx) = prev_idx {
                 state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
@@ -204,34 +206,10 @@ impl InstancesPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        {
-            let wg = weak_group.clone();
-            let wt = weak_table.clone();
-            cx.subscribe_in(
-                instances,
-                window,
-                move |_, e, _: &crate::entity::instance::InstanceAddedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&wg, &wt, &e, window, cx)
-                },
-            )
-            .detach();
-        }
-        {
-            let wg = weak_group.clone();
-            let wt = weak_table.clone();
-            cx.subscribe_in(
-                instances,
-                window,
-                move |_, e, _: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
-                    Self::refresh_group_dropdown(&wg, &wt, &e, window, cx)
-                },
-            )
-            .detach();
-        }
         cx.subscribe_in(
             instances,
             window,
-            move |_, e, _: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
+            move |_, e, _: &crate::entity::instance::InstanceGroupsChangedEvent, window, cx| {
                 Self::refresh_group_dropdown(&weak_group, &weak_table, &e, window, cx)
             },
         )

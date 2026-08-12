@@ -55,6 +55,7 @@ impl InstanceEntries {
 
             entries.entries.insert_before(0, id, cx.new(|_| instance.clone()));
             cx.emit(InstanceAddedEvent { instance });
+            cx.emit(InstanceGroupsChangedEvent);
         });
     }
 
@@ -88,6 +89,7 @@ impl InstanceEntries {
         entity.update(cx, |entries, cx| {
             if let Some(_) = entries.entries.shift_remove(&id) {
                 cx.emit(InstanceRemovedEvent { id });
+                cx.emit(InstanceGroupsChangedEvent);
             }
         });
     }
@@ -121,6 +123,7 @@ impl InstanceEntries {
                 });
 
                 cx.emit(InstanceModifiedEvent { instance: cloned });
+                cx.emit(InstanceGroupsChangedEvent);
             }
         });
     }
@@ -343,3 +346,7 @@ impl EventEmitter<InstanceRemovedEvent> for InstanceEntries {}
 pub struct InstanceRemovedEvent {
     pub id: InstanceID,
 }
+
+impl EventEmitter<InstanceGroupsChangedEvent> for InstanceEntries {}
+
+pub struct InstanceGroupsChangedEvent;

@@ -109,24 +109,26 @@ impl InstanceList {
         self.rebuild_visible_cache();
     }
 
+    fn contains_ci(haystack: &str, needle_lower: &str) -> bool {
+        // ponytail: one lowercase per haystack per filter; negligible at launcher scale
+        haystack.to_lowercase().contains(needle_lower)
+    }
+
     fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
         if lower.is_empty() {
             return true;
         }
-        let name = entry.name.to_lowercase();
-        if name.contains(lower) {
+        if Self::contains_ci(&entry.name, lower) {
             return true;
         }
-        let ver = entry.configuration.minecraft_version.as_str().to_lowercase();
-        if ver.contains(lower) {
+        if Self::contains_ci(entry.configuration.minecraft_version.as_str(), lower) {
             return true;
         }
-        let loader = entry.configuration.loader.pretty_name().to_lowercase();
-        if loader.contains(lower) {
+        if Self::contains_ci(entry.configuration.loader.pretty_name(), lower) {
             return true;
         }
-        if let Some(group) = entry.configuration.group.as_ref().map(|g| g.as_ref().to_lowercase())
-            && group.contains(lower)
+        if let Some(group) = entry.configuration.group.as_deref()
+            && Self::contains_ci(group, lower)
         {
             return true;
         }
@@ -137,12 +139,34 @@ impl InstanceList {
         match group_filter {
             GroupFilter::All => true,
             GroupFilter::Ungrouped => entry.configuration.group.is_none(),
-            GroupFilter::Named(g) => entry
-                .configuration
-                .group
-                .as_ref()
-                .is_some_and(|v| v.as_ref().to_lowercase() == g.to_lowercase()),
+            GroupFilter::Named(g) => {
+                entry.configuration.group.as_ref().is_some_and(|v| v.as_ref().eq_ignore_ascii_case(g))
+            },
         }
+    }
+
+    /// Collect deduped, case-insensitive sorted group names.
+    pub fn deduped_groups(groups: impl Iterator<Item = SharedString>) -> Vec<SharedString> {
+        let mut out: Vec<SharedString> = groups.collect();
+        out.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        out.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        out
+    }
+
+    /// Canonical display for a raw group: first deduped entry with same lowercased key.
+    fn canonical_group_label(&self, raw: &str) -> SharedString {
+        let lower = raw.to_lowercase();
+        let mut groups: Vec<SharedString> = self
+            .items
+            .iter()
+            .filter_map(|e| e.configuration.group.as_ref().map(|g| SharedString::from(g.as_ref())))
+            .collect();
+        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        groups.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        groups
+            .into_iter()
+            .find(|g| g.to_lowercase() == lower)
+            .unwrap_or_else(|| SharedString::from(raw))
     }
 
     fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: &GroupFilter) -> Vec<usize> {
@@ -297,6 +321,7 @@ impl InstanceList {
                         )
                         .child(loader_and_version)
                         .when_some(item.configuration.group.clone(), |this, group| {
+                            let label = self.canonical_group_label(group.as_ref());
                             this.child(
                                 div()
                                     .text_xs()
@@ -305,7 +330,7 @@ impl InstanceList {
                                     .rounded_sm()
                                     .bg(cx.theme().accent.opacity(0.15))
                                     .text_color(cx.theme().accent)
-                                    .child(SharedString::from(group.as_ref())),
+                                    .child(label),
                             )
                         }),
                 )
