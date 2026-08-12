@@ -215,9 +215,6 @@ mod inner {
 
     use windows::Win32::Security::Credentials::*;
 
-    /// Windows Credential Manager limits each blob to 2560 bytes. Our tokens (e.g. JWT) can exceed this.
-    const CRED_MAX_BLOB_SIZE: usize = 2560;
-
     fn credentials_dir() -> Result<PathBuf, SecretStorageError> {
         let appdata = std::env::var("APPDATA").map_err(|_| SecretStorageError::UnknownError)?;
         Ok(PathBuf::from(appdata).join("PandoraLauncher").join("credentials"))

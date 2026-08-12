@@ -1,13 +1,10 @@
 use std::{
-    rc::Rc,
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use atomic_time::AtomicInstant;
 use gpui::{App, RenderImage};
 use image::{Frame, imageops::FilterType};
-use intrusive_collections::{LinkedList, LinkedListLink, intrusive_adapter};
 use rustc_hash::FxHashMap;
 use schema::unique_bytes::UniqueBytes;
 
@@ -31,19 +28,13 @@ pub enum ImageTransformation {
 }
 
 struct CacheEntry {
-    link: LinkedListLink,
-    source: UniqueBytes,
-    transform: ImageTransformation,
-    expiring: AtomicInstant,
+    expiring: Instant,
     value: Option<Arc<RenderImage>>,
 }
 
-intrusive_adapter!(CacheEntryAdapter = Rc<CacheEntry>: CacheEntry { link: LinkedListLink });
-
 #[derive(Default)]
 struct PngRenderCache {
-    map: FxHashMap<(UniqueBytes, ImageTransformation), Rc<CacheEntry>>,
-    expiring: LinkedList<CacheEntryAdapter>,
+    map: FxHashMap<(UniqueBytes, ImageTransformation), CacheEntry>,
     submitted_cleanup: bool,
 }
 
@@ -69,21 +60,16 @@ pub fn render_with_transform(image: UniqueBytes, transform: ImageTransformation,
         cx.spawn(async |cx| {
             let _ = cx.update_global(|cache: &mut PngRenderCache, cx| {
                 let now = Instant::now();
-                let mut cursor = cache.expiring.front_mut();
-                while let Some(entry) = cursor.get() {
-                    if now > entry.expiring.load(Ordering::Relaxed) {
-                        let entry = cursor.remove().expect("present");
-                        cache.map.remove(&(entry.source.clone(), entry.transform)).expect("present");
-
-                        debug_assert_eq!(Rc::strong_count(&entry), 1);
-
+                cache.map.retain(|_, entry| {
+                    if now > entry.expiring {
                         if let Some(image) = &entry.value {
                             cx.drop_image(image.clone(), None);
                         }
+                        false
                     } else {
-                        break;
+                        true
                     }
-                }
+                });
                 cache.submitted_cleanup = false;
             });
         })
@@ -97,17 +83,9 @@ impl PngRenderCache {
     fn get_or_create(&mut self, image: UniqueBytes, transform: ImageTransformation) -> Option<Arc<RenderImage>> {
         let key = (image, transform);
 
-        if let Some(result) = self.map.get(&key) {
-            // Update expiry
-            result
-                .expiring
-                .store(Instant::now() + Duration::from_secs(EXPIRY_SECONDS), Ordering::Relaxed);
-            unsafe {
-                self.expiring.cursor_mut_from_ptr(Rc::as_ptr(result)).remove();
-            }
-            self.expiring.push_back(result.clone());
-
-            return result.value.clone();
+        if let Some(entry) = self.map.get_mut(&key) {
+            entry.expiring = Instant::now() + Duration::from_secs(EXPIRY_SECONDS);
+            return entry.value.clone();
         }
 
         let result = image::load_from_memory_with_format(&key.0, image::ImageFormat::Png).map(|mut image| {
@@ -171,15 +149,11 @@ impl PngRenderCache {
             },
         };
 
-        let entry = Rc::new(CacheEntry {
-            link: LinkedListLink::new(),
-            source: key.0.clone(),
-            transform,
-            expiring: AtomicInstant::new(Instant::now() + Duration::from_secs(EXPIRY_SECONDS)),
+        let entry = CacheEntry {
+            expiring: Instant::now() + Duration::from_secs(EXPIRY_SECONDS),
             value: render_image.clone(),
-        });
-        self.map.insert(key, entry.clone());
-        self.expiring.push_back(entry);
+        };
+        self.map.insert(key, entry);
 
         render_image
     }
