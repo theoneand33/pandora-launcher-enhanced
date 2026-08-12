@@ -9,7 +9,7 @@ use bridge::{
     message::{EmbeddedOrRaw, MessageToBackend},
     meta::MetadataRequest,
 };
-use gpui::{prelude::*, *};
+use gpui::{Focusable as _, prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
@@ -344,17 +344,34 @@ impl InstanceSettingsSubpage {
         cx.subscribe_in(&loader_select_state, window, Self::on_loader_selected).detach();
 
         cx.observe_in(instance, window, |page, instance, window, cx| {
-            let entry = instance.read(cx);
-            page.instance_root_label = PathLabel::new(entry.root_path.clone(), true);
-            page.icon = if let Some(raw) = entry.icon.clone() {
+            let (root_path, icon_raw, fallback_icon, external_group, preferred_loader_version) = {
+                let entry = instance.read(cx);
+                (
+                    entry.root_path.clone(),
+                    entry.icon.clone(),
+                    entry.configuration.instance_fallback_icon,
+                    entry.configuration.group.clone(),
+                    entry.configuration.preferred_loader_version,
+                )
+            };
+            page.instance_root_label = PathLabel::new(root_path, true);
+            page.icon = if let Some(raw) = icon_raw {
                 Some(EmbeddedOrRaw::Raw(raw))
-            } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
+            } else if let Some(embedded) = fallback_icon {
                 Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
             } else {
                 None
             };
+            // Refresh group field when external change arrives and field is not focused.
+            let external_group_str = external_group.as_ref().map(|g| g.as_ref()).unwrap_or("");
+            let is_focused = page.group_input_state.focus_handle(cx).is_focused(window);
+            if !is_focused && page.group_input_state.read(cx).value().as_ref() != external_group_str {
+                page.group_input_state.update(cx, |state, cx| {
+                    state.set_value(external_group_str, window, cx);
+                });
+            }
             if page.loader_version_select_state.read(cx).selected_index(cx).is_none() {
-                let version = entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
+                let version = preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
                 page.loader_version_select_state.update(cx, |select_state, cx| {
                     select_state.set_selected_value(&version, window, cx);
                 });
@@ -1442,7 +1459,6 @@ impl Render for InstanceSettingsSubpage {
             .child(
                 Button::new("shortcut")
                     .label(t::instance::create_shortcut())
-                    .icon(PandoraIcon::ExternalLink)
                     .overflow_x_hidden()
                     .success()
                     .on_click({
@@ -1511,34 +1527,27 @@ impl Render for InstanceSettingsSubpage {
                         }
                     }),
             )
-            .child(
-                Button::new("delete")
-                    .label(t::instance::delete())
-                    .icon(PandoraIcon::Trash2)
-                    .overflow_x_hidden()
-                    .danger()
-                    .on_click({
-                        let instance = self.instance.clone();
-                        let backend_handle = self.backend_handle.clone();
-                        move |click: &ClickEvent, window, cx| {
-                            let instance = instance.read(cx);
-                            let id = instance.id;
-                            let name = instance.name.clone();
+            .child(Button::new("delete").label(t::instance::delete()).overflow_x_hidden().danger().on_click({
+                let instance = self.instance.clone();
+                let backend_handle = self.backend_handle.clone();
+                move |click: &ClickEvent, window, cx| {
+                    let instance = instance.read(cx);
+                    let id = instance.id;
+                    let name = instance.name.clone();
 
-                            if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                                backend_handle.send(bridge::message::MessageToBackend::DeleteInstance { id });
-                            } else {
-                                crate::modals::delete_instance::open_delete_instance(
-                                    id,
-                                    name,
-                                    backend_handle.clone(),
-                                    window,
-                                    cx,
-                                );
-                            }
-                        }
-                    }),
-            );
+                    if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
+                        backend_handle.send(bridge::message::MessageToBackend::DeleteInstance { id });
+                    } else {
+                        crate::modals::delete_instance::open_delete_instance(
+                            id,
+                            name,
+                            backend_handle.clone(),
+                            window,
+                            cx,
+                        );
+                    }
+                }
+            }));
 
         let sections = HorizontalSections::new()
             .size_full()
