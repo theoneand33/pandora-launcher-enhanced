@@ -18,10 +18,19 @@ use crate::{
     modals, png_render_cache, root, ui,
 };
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum GroupFilter {
+    #[default]
+    All,
+    Ungrouped,
+    Named(SharedString),
+}
+
 pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
     filter: SharedString,
+    group_filter: GroupFilter,
     visible_cache: Vec<usize>,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
@@ -78,6 +87,7 @@ impl InstanceList {
                 ],
                 items,
                 filter: SharedString::default(),
+                group_filter: GroupFilter::All,
                 visible_cache: Vec::new(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
@@ -94,31 +104,77 @@ impl InstanceList {
         self.rebuild_visible_cache();
     }
 
+    pub fn set_group_filter(&mut self, group: GroupFilter) {
+        self.group_filter = group;
+        self.rebuild_visible_cache();
+    }
+
+    fn contains_ci(haystack: &str, needle_lower: &str) -> bool {
+        // ponytail: one lowercase per haystack per filter; negligible at launcher scale
+        haystack.to_lowercase().contains(needle_lower)
+    }
+
     fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
         if lower.is_empty() {
             return true;
         }
-        let name = entry.name.to_lowercase();
-        if name.contains(lower) {
+        if Self::contains_ci(&entry.name, lower) {
             return true;
         }
-        let ver = entry.configuration.minecraft_version.as_str().to_lowercase();
-        if ver.contains(lower) {
+        if Self::contains_ci(entry.configuration.minecraft_version.as_str(), lower) {
             return true;
         }
-        let loader = entry.configuration.loader.pretty_name().to_lowercase();
-        if loader.contains(lower) {
+        if Self::contains_ci(entry.configuration.loader.pretty_name(), lower) {
+            return true;
+        }
+        if let Some(group) = entry.configuration.group.as_deref()
+            && Self::contains_ci(group, lower)
+        {
             return true;
         }
         false
     }
 
-    fn compute_visible(items: &[InstanceEntry], filter: &str) -> Vec<usize> {
+    fn matches_group(entry: &InstanceEntry, group_filter: &GroupFilter) -> bool {
+        match group_filter {
+            GroupFilter::All => true,
+            GroupFilter::Ungrouped => entry.configuration.group.is_none(),
+            GroupFilter::Named(g) => {
+                entry.configuration.group.as_ref().is_some_and(|v| v.as_ref().eq_ignore_ascii_case(g))
+            },
+        }
+    }
+
+    /// Collect deduped, case-insensitive sorted group names.
+    pub fn deduped_groups(groups: impl Iterator<Item = SharedString>) -> Vec<SharedString> {
+        let mut out: Vec<SharedString> = groups.collect();
+        out.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        out.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        out
+    }
+
+    /// Canonical display for a raw group: first deduped entry with same lowercased key.
+    fn canonical_group_label(&self, raw: &str) -> SharedString {
+        let lower = raw.to_lowercase();
+        let mut groups: Vec<SharedString> = self
+            .items
+            .iter()
+            .filter_map(|e| e.configuration.group.as_ref().map(|g| SharedString::from(g.as_ref())))
+            .collect();
+        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        groups.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        groups
+            .into_iter()
+            .find(|g| g.to_lowercase() == lower)
+            .unwrap_or_else(|| SharedString::from(raw))
+    }
+
+    fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: &GroupFilter) -> Vec<usize> {
         let lower = filter.to_lowercase();
         let mut out: Vec<usize> = items
             .iter()
             .enumerate()
-            .filter(|(_, e)| Self::matches_filter(e, &lower))
+            .filter(|(_, e)| Self::matches_filter(e, &lower) && Self::matches_group(e, group_filter))
             .map(|(i, _)| i)
             .collect();
         // pinned first, stable to preserve order from perform_sort
@@ -127,7 +183,8 @@ impl InstanceList {
     }
 
     fn rebuild_visible_cache(&mut self) {
-        self.visible_cache = Self::compute_visible(&self.items, &self.filter);
+        let group = self.group_filter.clone();
+        self.visible_cache = Self::compute_visible(&self.items, &self.filter, &group);
     }
 
     fn visible_indices(&self) -> &[usize] {
@@ -262,7 +319,20 @@ impl InstanceList {
                                         .child(edit_icon.clone().size_4()),
                                 ),
                         )
-                        .child(loader_and_version),
+                        .child(loader_and_version)
+                        .when_some(item.configuration.group.clone(), |this, group| {
+                            let label = self.canonical_group_label(group.as_ref());
+                            this.child(
+                                div()
+                                    .text_xs()
+                                    .px_1p5()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .bg(cx.theme().accent.opacity(0.15))
+                                    .text_color(cx.theme().accent)
+                                    .child(label),
+                            )
+                        }),
                 )
             })
             .child(h_flex().gap_2().child(play_button.flex_1().small()).child(

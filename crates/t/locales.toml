@@ -3318,6 +3318,60 @@ sv = "Synka Litematic (schematic) folder"
 ru = "Синхронизировать папку Litematic (schematic)"
 fr = "Synchroniser le dossier « Litematic » (schémas)"
 
+[instance.sync.custom_placeholder]
+en = "e.g. kubejs or config/custom.toml"
+pl = "np. kubejs lub config/custom.toml"
+de = "z.B. kubejs oder config/custom.toml"
+hu = "pl. kubejs vagy config/custom.toml"
+sv = "t.ex. kubejs eller config/custom.toml"
+ru = "например kubejs или config/custom.toml"
+fr = "p. ex. kubejs ou config/custom.toml"
+
+[instance.sync.custom_hint]
+en = "Folder is symlinked (all instances share one copy). File copies newest version when you launch."
+pl = "Folder jest dowiązaniem symbolicznym (wszystkie instancje dzielą jedną kopię). Plik kopiuje najnowszą wersję przy uruchomieniu."
+de = "Ordner wird verlinkt (alle Instanzen teilen eine Kopie). Datei kopiert die neueste Version beim Start."
+hu = "A mappa szimlinkelve van (minden példány egy példányt használ). A fájl a legújabbat másolja indításkor."
+sv = "Mappen är symlänkad (alla instanser delar en kopia). Filen kopierar nyaste versionen vid start."
+ru = "Папка создаёт симлинк (один экземпляр для всех). Файл копирует новейшую версию при запуске."
+fr = "Le dossier est lié (toutes les instances partagent une copie). Le fichier copie la version la plus récente au lancement."
+
+[instance.group.label]
+en = "Group"
+pl = "Grupa"
+de = "Gruppe"
+hu = "Csoport"
+sv = "Grupp"
+ru = "Группа"
+fr = "Groupe"
+
+[instance.group.all]
+en = "All Groups"
+pl = "Wszystkie grupy"
+de = "Alle Gruppen"
+hu = "Minden csoport"
+sv = "Alla grupper"
+ru = "Все группы"
+fr = "Tous les groupes"
+
+[instance.group.ungrouped]
+en = "Ungrouped"
+pl = "Bez grupy"
+de = "Ohne Gruppe"
+hu = "Csoport nélküli"
+sv = "Ogrupperad"
+ru = "Без группы"
+fr = "Sans groupe"
+
+[instance.group.placeholder]
+en = "e.g. Favorites or modpacks"
+pl = "np. Ulubione lub paczki modów"
+de = "z.B. Favoriten oder Modpacks"
+hu = "pl. Kedvencek vagy modpackok"
+sv = "t.ex. Favoriter eller modpacks"
+ru = "например Избранное или сборки"
+fr = "p. ex. Favoris ou modpacks"
+
 [settings.title]
 en = "Settings"
 pl = "Ustawienia"

@@ -9,7 +9,7 @@ use bridge::{
     message::{EmbeddedOrRaw, MessageToBackend},
     meta::MetadataRequest,
 };
-use gpui::{prelude::*, *};
+use gpui::{Focusable as _, prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
@@ -221,6 +221,7 @@ pub struct InstanceSettingsSubpage {
     #[cfg(target_os = "linux")]
     gamemode_available: bool,
     new_name_change_state: NewNameChangeState,
+    group_input_state: Entity<InputState>,
     icon: Option<EmbeddedOrRaw>,
     backend_handle: BackendHandle,
     _observe_loader_version_subscription: Option<Subscription>,
@@ -244,23 +245,11 @@ impl InstanceSettingsSubpage {
         let account = entry.configuration.preferred_account;
         let disable_file_syncing = entry.configuration.disable_file_syncing;
         let sandbox = entry.configuration.sandbox;
-
-        let sandbox_available = if cfg!(target_os = "linux") {
-            command::is_command_available("bwrap") && command::is_command_available("xdg-dbus-proxy")
-        } else {
-            true
-        };
-
         let memory = entry.configuration.memory.unwrap_or_default();
         let wrapper_command = entry.configuration.wrapper_command.clone().unwrap_or_default();
         let jvm_flags = entry.configuration.jvm_flags.clone().unwrap_or_default();
         let jvm_binary = entry.configuration.jvm_binary.clone().unwrap_or_default();
-        #[cfg(target_os = "linux")]
-        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
-        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
-
         let instance_root_label = PathLabel::new(entry.root_path.clone(), true);
-
         let icon = if let Some(raw) = entry.icon.clone() {
             Some(EmbeddedOrRaw::Raw(raw))
         } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
@@ -268,12 +257,28 @@ impl InstanceSettingsSubpage {
         } else {
             None
         };
+        let initial_group = entry.configuration.group.as_ref().map(|g| g.to_string()).unwrap_or_default();
+        #[cfg(target_os = "linux")]
+        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
+        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
+
+        let sandbox_available = if cfg!(target_os = "linux") {
+            command::is_command_available("bwrap") && command::is_command_available("xdg-dbus-proxy")
+        } else {
+            true
+        };
 
         let glfw_path = system_libraries.glfw.get_or_auto(&*AUTO_LIBRARY_PATH_GLFW);
         let openal_path = system_libraries.openal.get_or_auto(&*AUTO_LIBRARY_PATH_OPENAL);
 
         let new_name_input_state = cx.new(|cx| InputState::new(window, cx).default_value(instance_name));
         cx.subscribe(&new_name_input_state, Self::on_new_name_input).detach();
+        let group_input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t::instance::group::placeholder())
+                .default_value(initial_group)
+        });
+        cx.subscribe_in(&group_input_state, window, Self::on_group_changed).detach();
 
         let minecraft_versions =
             FrontendMetadata::request(&data.metadata, MetadataRequest::MinecraftVersionManifest, cx);
@@ -321,17 +326,34 @@ impl InstanceSettingsSubpage {
         cx.subscribe_in(&loader_select_state, window, Self::on_loader_selected).detach();
 
         cx.observe_in(instance, window, |page, instance, window, cx| {
-            let entry = instance.read(cx);
-            page.instance_root_label = PathLabel::new(entry.root_path.clone(), true);
-            page.icon = if let Some(raw) = entry.icon.clone() {
+            let (root_path, icon_raw, fallback_icon, external_group, preferred_loader_version) = {
+                let entry = instance.read(cx);
+                (
+                    entry.root_path.clone(),
+                    entry.icon.clone(),
+                    entry.configuration.instance_fallback_icon,
+                    entry.configuration.group.clone(),
+                    entry.configuration.preferred_loader_version,
+                )
+            };
+            page.instance_root_label = PathLabel::new(root_path, true);
+            page.icon = if let Some(raw) = icon_raw {
                 Some(EmbeddedOrRaw::Raw(raw))
-            } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
+            } else if let Some(embedded) = fallback_icon {
                 Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
             } else {
                 None
             };
+            // Refresh group field when external change arrives and field is not focused.
+            let external_group_str = external_group.as_ref().map(|g| g.as_ref()).unwrap_or("");
+            let is_focused = page.group_input_state.focus_handle(cx).is_focused(window);
+            if !is_focused && page.group_input_state.read(cx).value().as_ref() != external_group_str {
+                page.group_input_state.update(cx, |state, cx| {
+                    state.set_value(external_group_str, window, cx);
+                });
+            }
             if page.loader_version_select_state.read(cx).selected_index(cx).is_none() {
-                let version = entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
+                let version = preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
                 page.loader_version_select_state.update(cx, |select_state, cx| {
                     select_state.set_selected_value(&version, window, cx);
                 });
@@ -366,6 +388,7 @@ impl InstanceSettingsSubpage {
             instance: instance.clone(),
             instance_id,
             new_name_input_state,
+            group_input_state,
             version_state: TypelessFrontendMetadataResult::Loading,
             version_select_state,
             account_items,
@@ -591,6 +614,31 @@ impl InstanceSettingsSubpage {
             }
 
             self.new_name_change_state = NewNameChangeState::Pending;
+        }
+    }
+
+    pub fn on_group_changed(
+        &mut self,
+        state: &Entity<InputState>,
+        event: &InputEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
+            let raw = state.read(cx).value();
+            let group = schema::instance::normalize_group(Some(raw.as_str().into()));
+            let canonical = group.as_deref().unwrap_or_default();
+            if raw.as_str() != canonical {
+                state.update(cx, |input, cx| input.set_value(canonical.to_owned(), window, cx));
+            }
+            let current = self.instance.read(cx).configuration.group.clone();
+            if current == group {
+                return;
+            }
+            self.backend_handle.send(MessageToBackend::SetInstanceGroup {
+                id: self.instance_id,
+                group,
+            });
         }
     }
 
@@ -919,7 +967,8 @@ impl Render for InstanceSettingsSubpage {
                     row = row.child(el);
                 }
                 row
-            }));
+            }))
+            .child(crate::labelled(t::instance::group::label(), Input::new(&self.group_input_state).small()));
 
         let mut version_content = v_flex().gap_2();
 

@@ -11,6 +11,32 @@ use crate::{
     loader::Loader,
 };
 
+pub const MAX_GROUP_LEN: usize = 64;
+
+/// Truncate to at most `MAX_GROUP_LEN` chars. Returns a borrowed slice when
+/// already short to avoid an allocation on the common path.
+pub fn truncate_group(s: &str) -> &str {
+    if let Some((idx, _)) = s.char_indices().nth(MAX_GROUP_LEN) {
+        &s[..idx]
+    } else {
+        s
+    }
+}
+
+/// Normalize an optional group string: empty/whitespace-only becomes `None`,
+/// otherwise trimmed and truncated.
+pub fn normalize_group(group: Option<Arc<str>>) -> Option<Arc<str>> {
+    let g = group?;
+    let trimmed = truncate_group(g.trim());
+    if trimmed.is_empty() {
+        None
+    } else if trimmed == g.as_ref() {
+        Some(g)
+    } else {
+        Some(trimmed.into())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InstanceConfiguration {
     pub minecraft_version: Ustr,
@@ -79,6 +105,12 @@ pub struct InstanceConfiguration {
     pub sandbox: bool,
     #[serde(default, deserialize_with = "crate::try_deserialize")]
     pub pinned: bool,
+    #[serde(
+        default,
+        deserialize_with = "crate::try_deserialize",
+        skip_serializing_if = "crate::skip_if_none"
+    )]
+    pub group: Option<Arc<str>>,
 }
 
 impl InstanceConfiguration {
@@ -100,6 +132,7 @@ impl InstanceConfiguration {
             show_shader_tab: false,
             sandbox: false,
             pinned: false,
+            group: None,
         }
     }
 }

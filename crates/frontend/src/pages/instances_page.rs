@@ -13,7 +13,7 @@ use strum::IntoEnumIterator;
 
 use crate::{
     component::{
-        instance_list::InstanceList,
+        instance_list::{GroupFilter, InstanceList},
         named_dropdown::{NamedDropdown, NamedDropdownItem},
         responsive_grid::ResponsiveGrid,
     },
@@ -26,6 +26,7 @@ use crate::{
 pub struct InstancesPage {
     instance_table: Entity<TableState<InstanceList>>,
     view_dropdown: Entity<SelectState<NamedDropdown<InstancesViewMode>>>,
+    group_dropdown: Entity<SelectState<NamedDropdown<GroupFilter>>>,
     search_state: Entity<InputState>,
 
     metadata: Entity<FrontendMetadata>,
@@ -73,9 +74,30 @@ impl InstancesPage {
         })
         .detach();
 
+        let group_dropdown = cx.new(|cx| {
+            let items = Self::build_group_items(data.instances.read(cx), cx);
+            SelectState::new(NamedDropdown::new(items), Some(IndexPath::new(0)), window, cx)
+        });
+        let table_for_group = instance_table.clone();
+        cx.subscribe(&group_dropdown, move |_, _, event: &SelectEvent<NamedDropdown<GroupFilter>>, cx| {
+            let SelectEvent::Confirm(value) = event;
+            let Some(v) = value.as_ref() else {
+                return;
+            };
+            let filter = v.item.clone();
+            table_for_group.update(cx, |table, cx| {
+                table.delegate_mut().set_group_filter(filter);
+                cx.notify();
+            });
+        })
+        .detach();
+
+        Self::wire_group_refresh(&data.instances, group_dropdown.downgrade(), instance_table.downgrade(), window, cx);
+
         Self {
             instance_table,
             view_dropdown,
+            group_dropdown,
             search_state,
             metadata: data.metadata.clone(),
             instances: data.instances.clone(),
@@ -107,6 +129,94 @@ fn create_instance_button(
         })
 }
 
+impl InstancesPage {
+    fn build_group_items(entries: &InstanceEntries, cx: &App) -> Vec<NamedDropdownItem<GroupFilter>> {
+        let mut items = vec![
+            NamedDropdownItem {
+                name: t::instance::group::all().into(),
+                item: GroupFilter::All,
+            },
+            NamedDropdownItem {
+                name: t::instance::group::ungrouped().into(),
+                item: GroupFilter::Ungrouped,
+            },
+        ];
+        let groups = InstanceList::deduped_groups(
+            entries
+                .entries
+                .values()
+                .filter_map(|e| e.read(cx).configuration.group.as_ref().map(|g| SharedString::from(g.as_ref()))),
+        );
+        for g in groups {
+            // ponytail: group named "ungrouped" would read identically to filter item; disambiguate
+            let name = if g.eq_ignore_ascii_case("ungrouped") {
+                SharedString::from(format!("\"{}\"", g))
+            } else {
+                g.clone()
+            };
+            items.push(NamedDropdownItem {
+                name,
+                item: GroupFilter::Named(g),
+            });
+        }
+        items
+    }
+
+    fn refresh_group_dropdown(
+        weak_group: &WeakEntity<SelectState<NamedDropdown<GroupFilter>>>,
+        weak_table: &WeakEntity<TableState<InstanceList>>,
+        entries: &Entity<InstanceEntries>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(group_state) = weak_group.upgrade() else {
+            return;
+        };
+        let prev_selected: Option<GroupFilter> = group_state.read(cx).selected_value().map(|v| v.item.clone());
+        group_state.update(cx, |state, cx| {
+            let items = Self::build_group_items(entries.read(cx), cx);
+            let group_eq = |a: &GroupFilter, b: &GroupFilter| match (a, b) {
+                (GroupFilter::All, GroupFilter::All) => true,
+                (GroupFilter::Ungrouped, GroupFilter::Ungrouped) => true,
+                (GroupFilter::Named(x), GroupFilter::Named(y)) => x.eq_ignore_ascii_case(y),
+                _ => false,
+            };
+            let prev_idx = prev_selected
+                .as_ref()
+                .and_then(|prev| items.iter().position(|it| group_eq(&it.item, prev)));
+            state.set_items(NamedDropdown::new(items), window, cx);
+            if let Some(idx) = prev_idx {
+                state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
+            } else {
+                state.set_selected_index(Some(IndexPath::new(0)), window, cx);
+                if let Some(table) = weak_table.upgrade() {
+                    table.update(cx, |t, cx| {
+                        t.delegate_mut().set_group_filter(GroupFilter::All);
+                        cx.notify();
+                    });
+                }
+            }
+        });
+    }
+
+    fn wire_group_refresh(
+        instances: &Entity<InstanceEntries>,
+        weak_group: WeakEntity<SelectState<NamedDropdown<GroupFilter>>>,
+        weak_table: WeakEntity<TableState<InstanceList>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.subscribe_in(
+            instances,
+            window,
+            move |_, e, _: &crate::entity::instance::InstanceGroupsChangedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group, &weak_table, &e, window, cx)
+            },
+        )
+        .detach();
+    }
+}
+
 impl Page for InstancesPage {
     fn controls(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let create_instance = create_instance_button(
@@ -118,6 +228,8 @@ impl Page for InstancesPage {
         // wrapping in div makes it not take up the full space of the titlebar
         let select_view =
             div().child(Select::new(&self.view_dropdown).title_prefix(format!("{}: ", t::instance::view())));
+        let select_group =
+            div().child(Select::new(&self.group_dropdown).title_prefix(format!("{}: ", t::instance::group::label())));
 
         h_flex()
             .gap_3()
@@ -127,6 +239,7 @@ impl Page for InstancesPage {
                     .w_64()
                     .child(Input::new(&self.search_state).small().prefix(Icon::new(PandoraIcon::Search))),
             )
+            .child(select_group)
             .child(select_view)
     }
 
