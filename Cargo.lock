@@ -2384,7 +2384,6 @@ name = "frontend"
 version = "5.3.1"
 dependencies = [
  "anyhow",
- "atomic-time",
  "bridge",
  "chrono",
  "command",
@@ -2399,7 +2398,6 @@ dependencies = [
  "hex",
  "image",
  "indexmap 2.14.0",
- "intrusive-collections",
  "itertools 0.14.0",
  "lexical-sort",
  "log",
@@ -3821,15 +3819,6 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "intrusive-collections"
-version = "0.9.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "189d0897e4cbe8c75efedf3502c18c887b05046e59d28404d4d8e46cbc4d1e86"
-dependencies = [
- "memoffset",
 ]
 
 [[package]]
