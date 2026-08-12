@@ -84,7 +84,7 @@ pub struct InstanceConfiguration {
         deserialize_with = "crate::try_deserialize",
         skip_serializing_if = "crate::skip_if_none"
     )]
-    pub group: Option<Ustr>,
+    pub group: Option<Arc<str>>,
 }
 
 impl InstanceConfiguration {

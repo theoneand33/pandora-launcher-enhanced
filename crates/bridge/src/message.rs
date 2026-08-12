@@ -164,7 +164,7 @@ pub enum MessageToBackend {
     },
     SetInstanceGroup {
         id: InstanceID,
-        group: Option<Ustr>,
+        group: Option<Arc<str>>,
     },
     KillInstance {
         id: InstanceID,

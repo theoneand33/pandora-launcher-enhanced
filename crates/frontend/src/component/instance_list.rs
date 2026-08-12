@@ -1,8 +1,4 @@
-use bridge::{
-    handle::BackendHandle,
-    instance::{InstanceStatus, UNGROUPED_GROUP},
-    message::MessageToBackend,
-};
+use bridge::{handle::BackendHandle, instance::InstanceStatus, message::MessageToBackend};
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme, Icon, Sizable,
@@ -22,11 +18,24 @@ use crate::{
     modals, png_render_cache, root, ui,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupFilter {
+    All,
+    Ungrouped,
+    Named(SharedString),
+}
+
+impl Default for GroupFilter {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
 pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
     filter: SharedString,
-    group_filter: Option<SharedString>,
+    group_filter: GroupFilter,
     visible_cache: Vec<usize>,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
@@ -83,7 +92,7 @@ impl InstanceList {
                 ],
                 items,
                 filter: SharedString::default(),
-                group_filter: None,
+                group_filter: GroupFilter::All,
                 visible_cache: Vec::new(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
@@ -100,7 +109,7 @@ impl InstanceList {
         self.rebuild_visible_cache();
     }
 
-    pub fn set_group_filter(&mut self, group: Option<SharedString>) {
+    pub fn set_group_filter(&mut self, group: GroupFilter) {
         self.group_filter = group;
         self.rebuild_visible_cache();
     }
@@ -121,7 +130,7 @@ impl InstanceList {
         if loader.contains(lower) {
             return true;
         }
-        if let Some(group) = entry.configuration.group.map(|g| g.as_str().to_lowercase())
+        if let Some(group) = entry.configuration.group.as_ref().map(|g| g.as_ref().to_lowercase())
             && group.contains(lower)
         {
             return true;
@@ -129,15 +138,19 @@ impl InstanceList {
         false
     }
 
-    fn matches_group(entry: &InstanceEntry, group_filter: Option<&str>) -> bool {
+    fn matches_group(entry: &InstanceEntry, group_filter: &GroupFilter) -> bool {
         match group_filter {
-            None => true,
-            Some(UNGROUPED_GROUP) => entry.configuration.group.is_none(),
-            Some(g) => entry.configuration.group.is_some_and(|v| v.as_str().to_lowercase() == g.to_lowercase()),
+            GroupFilter::All => true,
+            GroupFilter::Ungrouped => entry.configuration.group.is_none(),
+            GroupFilter::Named(g) => entry
+                .configuration
+                .group
+                .as_ref()
+                .is_some_and(|v| v.as_ref().to_lowercase() == g.to_lowercase()),
         }
     }
 
-    fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: Option<&str>) -> Vec<usize> {
+    fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: &GroupFilter) -> Vec<usize> {
         let lower = filter.to_lowercase();
         let mut out: Vec<usize> = items
             .iter()
@@ -152,7 +165,7 @@ impl InstanceList {
 
     fn rebuild_visible_cache(&mut self) {
         let group = self.group_filter.clone();
-        self.visible_cache = Self::compute_visible(&self.items, &self.filter, group.as_deref());
+        self.visible_cache = Self::compute_visible(&self.items, &self.filter, &group);
     }
 
     fn visible_indices(&self) -> &[usize] {
@@ -288,7 +301,7 @@ impl InstanceList {
                                 ),
                         )
                         .child(loader_and_version)
-                        .when_some(item.configuration.group, |this, group| {
+                        .when_some(item.configuration.group.clone(), |this, group| {
                             this.child(
                                 div()
                                     .text_xs()
@@ -297,7 +310,7 @@ impl InstanceList {
                                     .rounded_sm()
                                     .bg(cx.theme().accent.opacity(0.15))
                                     .text_color(cx.theme().accent)
-                                    .child(SharedString::from(group.as_str())),
+                                    .child(SharedString::from(group.as_ref())),
                             )
                         }),
                 )

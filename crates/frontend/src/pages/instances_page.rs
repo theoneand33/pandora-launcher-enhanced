@@ -1,4 +1,4 @@
-use bridge::{handle::BackendHandle, instance::UNGROUPED_GROUP};
+use bridge::handle::BackendHandle;
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme, Icon, IndexPath, Sizable,
@@ -13,7 +13,7 @@ use strum::IntoEnumIterator;
 
 use crate::{
     component::{
-        instance_list::InstanceList,
+        instance_list::{GroupFilter, InstanceList},
         named_dropdown::{NamedDropdown, NamedDropdownItem},
         responsive_grid::ResponsiveGrid,
     },
@@ -26,7 +26,7 @@ use crate::{
 pub struct InstancesPage {
     instance_table: Entity<TableState<InstanceList>>,
     view_dropdown: Entity<SelectState<NamedDropdown<InstancesViewMode>>>,
-    group_dropdown: Entity<SelectState<NamedDropdown<Option<SharedString>>>>,
+    group_dropdown: Entity<SelectState<NamedDropdown<GroupFilter>>>,
     search_state: Entity<InputState>,
 
     metadata: Entity<FrontendMetadata>,
@@ -74,25 +74,23 @@ impl InstancesPage {
         })
         .detach();
 
-        // ponytail: group filter is one Option<SharedString> field + dropdown; per-group locks if throughput matters.
+        // ponytail: group filter is a typed enum; per-group locks if throughput matters.
         let group_dropdown = cx.new(|cx| {
             let items = Self::build_group_items(data.instances.read(cx), cx);
             SelectState::new(NamedDropdown::new(items), Some(IndexPath::new(0)), window, cx)
         });
         let table_for_group = instance_table.clone();
-        cx.subscribe(
-            &group_dropdown,
-            move |_, _, event: &SelectEvent<NamedDropdown<Option<SharedString>>>, cx| {
-                let SelectEvent::Confirm(value) = event else {
-                    return;
-                };
-                let filter = value.as_ref().and_then(|v| v.item.clone());
-                table_for_group.update(cx, |table, cx| {
-                    table.delegate_mut().set_group_filter(filter);
-                    cx.notify();
-                });
-            },
-        )
+        cx.subscribe(&group_dropdown, move |_, _, event: &SelectEvent<NamedDropdown<GroupFilter>>, cx| {
+            let SelectEvent::Confirm(value) = event;
+            let Some(v) = value.as_ref() else {
+                return;
+            };
+            let filter = v.item.clone();
+            table_for_group.update(cx, |table, cx| {
+                table.delegate_mut().set_group_filter(filter);
+                cx.notify();
+            });
+        })
         .detach();
 
         // rebuild group list when instances change
@@ -163,34 +161,36 @@ fn create_instance_button(
 }
 
 impl InstancesPage {
-    fn build_group_items(entries: &InstanceEntries, cx: &App) -> Vec<NamedDropdownItem<Option<SharedString>>> {
+    fn build_group_items(entries: &InstanceEntries, cx: &App) -> Vec<NamedDropdownItem<GroupFilter>> {
         let mut items = vec![
             NamedDropdownItem {
                 name: t::instance::group::all().into(),
-                item: None,
+                item: GroupFilter::All,
             },
             NamedDropdownItem {
                 name: t::instance::group::ungrouped().into(),
-                item: Some(UNGROUPED_GROUP.into()),
+                item: GroupFilter::Ungrouped,
             },
         ];
         let mut groups: Vec<SharedString> = entries
             .entries
             .values()
-            .filter_map(|e| e.read(cx).configuration.group.map(|g| SharedString::from(g.as_str())))
-            .filter(|g| g.as_str() != UNGROUPED_GROUP)
+            .filter_map(|e| e.read(cx).configuration.group.as_ref().map(|g| SharedString::from(g.as_ref())))
             .collect();
         groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
         groups.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
         for g in groups {
             let name = g.clone();
-            items.push(NamedDropdownItem { name, item: Some(g) });
+            items.push(NamedDropdownItem {
+                name,
+                item: GroupFilter::Named(g),
+            });
         }
         items
     }
 
     fn refresh_group_dropdown(
-        weak_group: &WeakEntity<SelectState<NamedDropdown<Option<SharedString>>>>,
+        weak_group: &WeakEntity<SelectState<NamedDropdown<GroupFilter>>>,
         weak_table: &WeakEntity<TableState<InstanceList>>,
         entries: &Entity<InstanceEntries>,
         window: &mut Window,
@@ -199,17 +199,21 @@ impl InstancesPage {
         let Some(group_state) = weak_group.upgrade() else {
             return;
         };
-        let prev_selected: Option<SharedString> = group_state.read(cx).selected_value().and_then(|v| v.item.clone());
+        let prev_selected: Option<GroupFilter> = group_state.read(cx).selected_value().map(|v| v.item.clone());
         group_state.update(cx, |state, cx| {
             let items = Self::build_group_items(entries.read(cx), cx);
-            let prev_str = prev_selected.as_deref();
             // ponytail: same case-insensitive normalization as build_group_items dedup/sort
-            let group_eq = |a: Option<&str>, b: Option<&str>| match (a, b) {
-                (None, None) => true,
-                (Some(x), Some(y)) => x.to_lowercase() == y.to_lowercase(),
+            let group_eq = |a: &GroupFilter, b: &GroupFilter| match (a, b) {
+                (GroupFilter::All, GroupFilter::All) => true,
+                (GroupFilter::Ungrouped, GroupFilter::Ungrouped) => true,
+                (GroupFilter::Named(x), GroupFilter::Named(y)) => x.to_lowercase() == y.to_lowercase(),
                 _ => false,
             };
-            let prev_idx = items.iter().position(|it| group_eq(it.item.as_deref(), prev_str));
+            let prev_idx = if let Some(prev) = prev_selected.as_ref() {
+                items.iter().position(|it| group_eq(&it.item, prev))
+            } else {
+                None
+            };
             state.set_items(NamedDropdown::new(items), window, cx);
             if let Some(idx) = prev_idx {
                 state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
@@ -217,7 +221,7 @@ impl InstancesPage {
                 state.set_selected_index(Some(IndexPath::new(0)), window, cx);
                 if let Some(table) = weak_table.upgrade() {
                     table.update(cx, |t, cx| {
-                        t.delegate_mut().set_group_filter(None);
+                        t.delegate_mut().set_group_filter(GroupFilter::All);
                         cx.notify();
                     });
                 }

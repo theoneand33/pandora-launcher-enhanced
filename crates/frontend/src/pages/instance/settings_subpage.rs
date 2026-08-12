@@ -273,7 +273,7 @@ impl InstanceSettingsSubpage {
                 } else {
                     None
                 },
-                entry.configuration.group.map(|g| g.as_str().to_string()).unwrap_or_default(),
+                entry.configuration.group.as_ref().map(|g| g.to_string()).unwrap_or_default(),
             )
         };
         #[cfg(target_os = "linux")]
@@ -622,17 +622,17 @@ impl InstanceSettingsSubpage {
         if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
             let raw = state.read(_cx).value();
             let trimmed = raw.trim();
-            // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Ustr interning
+            // ponytail: commit on blur/Enter to avoid per-keystroke disk write + dropdown rebuild; cap length to bound Arc allocation
             const MAX_GROUP_LEN: usize = 64;
-            let group = if trimmed.is_empty() || trimmed == "__ungrouped__" {
+            let group: Option<Arc<str>> = if trimmed.is_empty() {
                 None
             } else {
-                let truncated: String = if trimmed.chars().count() > MAX_GROUP_LEN {
-                    trimmed.chars().take(MAX_GROUP_LEN).collect()
+                let truncated: Arc<str> = if trimmed.chars().count() > MAX_GROUP_LEN {
+                    trimmed.chars().take(MAX_GROUP_LEN).collect::<String>().into()
                 } else {
-                    trimmed.to_owned()
+                    trimmed.to_owned().into()
                 };
-                Some(ustr::Ustr::from(truncated.as_str()))
+                Some(truncated)
             };
             self.backend_handle.send(MessageToBackend::SetInstanceGroup {
                 id: self.instance_id,

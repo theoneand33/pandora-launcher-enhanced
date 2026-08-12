@@ -340,6 +340,15 @@ impl BackendState {
                 self.send.send(msg);
             },
             MessageToBackend::SetInstanceGroup { id, group } => {
+                let group = {
+                    const MAX_GROUP_LEN: usize = 64;
+                    match group {
+                        Some(g) if g.chars().count() > MAX_GROUP_LEN => {
+                            Some(g.chars().take(MAX_GROUP_LEN).collect::<String>().into())
+                        },
+                        other => other,
+                    }
+                };
                 let msg = {
                     let mut state = self.instance_state.write();
                     let Some(instance) = state.instances.get_mut(id) else {
