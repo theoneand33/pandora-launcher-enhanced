@@ -185,6 +185,10 @@ pub enum MessageToBackend {
         from_index: usize,
         to_index: usize,
     },
+    DeleteServer {
+        id: InstanceID,
+        index: usize,
+    },
     RequestLoadContentFolder {
         id: InstanceID,
         content_folder: ContentFolder,

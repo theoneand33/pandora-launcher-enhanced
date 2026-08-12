@@ -715,6 +715,16 @@ impl<'a> ListRefMut<'a> {
         self.get_self_node().1.len()
     }
 
+    pub fn remove_index(&mut self, index: usize) -> bool {
+        let (_, children) = self.get_self_node_mut();
+        if index >= children.len() {
+            return false;
+        }
+        let idx = children.remove(index);
+        self.nbt.remove_node(idx);
+        true
+    }
+
     pub fn move_index(&mut self, from: usize, to: usize) -> bool {
         let (_, children) = self.get_self_node_mut();
         if from >= children.len() || to >= children.len() || from == to {
@@ -823,5 +833,119 @@ impl<'a> Iterator for CompoundIterator<'a> {
             self.index += 1;
             Some((&entry.0, next))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{NBT, TAG_COMPOUND_ID};
+
+    fn make_servers_nbt(count: usize) -> NBT {
+        let mut nbt = NBT::new_named("".into());
+        let mut root = nbt.as_compound_mut().unwrap();
+        let mut list = root.create_list("servers", TAG_COMPOUND_ID);
+        for i in 0..count {
+            let mut entry = list.create_compound();
+            entry.insert_string("ip", format!("192.168.0.{i}"));
+            entry.insert_string("name", format!("server{i}"));
+        }
+        nbt
+    }
+
+    #[test]
+    fn remove_index_basic() {
+        let mut nbt = make_servers_nbt(3);
+        let mut root = nbt.as_compound_mut().unwrap();
+        let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+        assert_eq!(list.len(), 3);
+        assert!(list.remove_index(1));
+        assert_eq!(list.len(), 2);
+        // remaining should be server0 and server2
+        assert_eq!(list.get(0).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server0");
+        assert_eq!(list.get(1).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server2");
+        drop(list);
+        drop(root);
+        // encode/decode round-trip still works
+        let bytes = crate::encode::write_named(&nbt);
+        let decoded = crate::decode::read_named(&mut bytes.as_slice()).unwrap();
+        let root = decoded.as_compound().unwrap();
+        let servers = root.find_list("servers", TAG_COMPOUND_ID).unwrap();
+        assert_eq!(servers.len(), 2);
+    }
+
+    #[test]
+    fn remove_index_out_of_range_false() {
+        let mut nbt = make_servers_nbt(2);
+        let mut root = nbt.as_compound_mut().unwrap();
+        let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+        assert!(!list.remove_index(5));
+        assert!(!list.remove_index(2));
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn remove_index_subtree_cleanup() {
+        // each server entry is a compound with its own children; removing should delete subtree
+        let mut nbt = make_servers_nbt(2);
+        {
+            let mut root = nbt.as_compound_mut().unwrap();
+            let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+            assert!(list.remove_index(0));
+            assert_eq!(list.len(), 1);
+        }
+        // after removal we can add new entries without slab corruption
+        {
+            let mut root = nbt.as_compound_mut().unwrap();
+            let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+            let mut entry = list.create_compound();
+            entry.insert_string("ip", "10.0.0.1".into());
+            entry.insert_string("name", "new".into());
+            assert_eq!(list.len(), 2);
+        }
+        let bytes = crate::encode::write_named(&nbt);
+        let decoded = crate::decode::read_named(&mut bytes.as_slice()).unwrap();
+        let root = decoded.as_compound().unwrap();
+        let servers = root.find_list("servers", TAG_COMPOUND_ID).unwrap();
+        assert_eq!(servers.len(), 2);
+    }
+
+    #[test]
+    fn move_index_reorder() {
+        let mut nbt = make_servers_nbt(3);
+        let mut root = nbt.as_compound_mut().unwrap();
+        let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+        assert!(list.move_index(0, 2));
+        // order should be 1,2,0
+        assert_eq!(list.get(0).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server1");
+        assert_eq!(list.get(1).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server2");
+        assert_eq!(list.get(2).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server0");
+        assert!(list.move_index(2, 0));
+        assert_eq!(list.get(0).unwrap().as_compound().unwrap().find_string("name").unwrap(), "server0");
+        assert!(!list.move_index(0, 0));
+        assert!(!list.move_index(5, 0));
+    }
+
+    #[test]
+    fn remove_after_decode_with_root_not_zero() {
+        // read_named inserts children before root, so root_index != 0; removing child 0 must not panic
+        let nbt = make_servers_nbt(2);
+        let bytes = crate::encode::write_named(&nbt);
+        let mut decoded = crate::decode::read_named(&mut bytes.as_slice()).unwrap();
+        // sanity: root_index is last slab index, not 0
+        assert_ne!(decoded.root_index, 0);
+        let mut root = decoded.as_compound_mut().unwrap();
+        // remove a key that lives at slab idx 0 (first inserted string child) via compound remove
+        // even if leaf, removing via ListRefMut::remove_index should not hit root guard
+        let mut list = root.find_list_mut("servers", TAG_COMPOUND_ID).unwrap();
+        assert!(list.remove_index(0));
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot remove root node")]
+    fn remove_root_panics() {
+        let mut nbt = NBT::new_named("root".into());
+        let idx = nbt.root_index;
+        nbt.remove_node(idx);
     }
 }

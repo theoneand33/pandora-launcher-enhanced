@@ -72,6 +72,10 @@ const SYSTEM_FILES_RO: &[&str] = &[
     "/sys/module/nvidia_drm",
     "/sys/module/nvidia_modeset",
     "/sys/module/nvidia_uvm",
+    // NixOS
+    "/nix/store",
+    "/run/opengl-driver",
+    "/run/opengl-driver-32",
 ];
 
 static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| {
@@ -89,6 +93,9 @@ static ALLOWED_ENV_VARS: LazyLock<FxHashSet<&'static OsStr>> = LazyLock::new(|| 
         "XAUTHORITY",
         "WAYLAND_DISPLAY",
         "PULSE_SERVER",
+        // LD_LIBRARY_PATH is required on NixOS where GL drivers/libs live in /nix/store and are
+        // exposed via LD_LIBRARY_PATH; sandbox is still read-only + namespaced.
+        "LD_LIBRARY_PATH",
     ]
     .iter()
     .map(OsStr::new)

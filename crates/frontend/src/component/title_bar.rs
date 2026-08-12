@@ -19,8 +19,8 @@ pub struct TitleBar {
 }
 
 #[derive(Default)]
-struct TitleBarState {
-    should_move: bool,
+pub(crate) struct TitleBarState {
+    pub(crate) should_move: bool,
 }
 
 impl RenderOnce for TitleBar {
@@ -97,6 +97,12 @@ impl RenderOnce for TitleBar {
                 }),
             )
             .on_mouse_up(
+                MouseButton::Left,
+                window.listener_for(&state, |state, _, _, _| {
+                    state.should_move = false;
+                }),
+            )
+            .on_mouse_up_out(
                 MouseButton::Left,
                 window.listener_for(&state, |state, _, _, _| {
                     state.should_move = false;

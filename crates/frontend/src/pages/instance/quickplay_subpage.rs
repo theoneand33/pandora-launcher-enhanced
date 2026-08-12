@@ -388,6 +388,7 @@ impl ListDelegate for ServersListDelegate {
         let backend_handle = self.backend_handle.clone();
         let target = OsString::from(summary.ip.to_string());
         let row_index = ix.row;
+        let raw_index = summary.raw_index;
 
         let move_up = Button::new(("server-up", row_index))
             .compact()
@@ -415,6 +416,15 @@ impl ListDelegate for ServersListDelegate {
                 delegate.reorder_servers(row_index, row_index + 1, cx);
             }));
 
+        let delete = Button::new(("server-delete", row_index))
+            .compact()
+            .small()
+            .danger()
+            .icon(PandoraIcon::Trash2)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.delegate_mut().delete_server(raw_index, cx);
+            }));
+
         let item = ListItem::new(ix).p_1().child(
             h_flex()
                 .gap_1()
@@ -434,7 +444,7 @@ impl ListDelegate for ServersListDelegate {
                 )
                 .child(icon.size_16().min_w_16().min_h_16())
                 .child(description)
-                .child(v_flex().gap_1().child(move_up).child(move_down).px_2()),
+                .child(v_flex().gap_1().child(move_up).child(move_down).child(delete).px_2()),
         );
 
         Some(item)
@@ -473,12 +483,24 @@ impl ServersListDelegate {
         if !self.can_reorder() {
             return;
         }
+        // ponytail: translate display row -> raw NBT index (hidden/ip-less servers are filtered)
+        let Some(from_raw) = self.searched.get(from_index).map(|s| s.raw_index) else {
+            return;
+        };
+        let Some(to_raw) = self.searched.get(to_index).map(|s| s.raw_index) else {
+            return;
+        };
 
         self.backend_handle.send(MessageToBackend::ReorderServers {
             id: self.id,
-            from_index,
-            to_index,
+            from_index: from_raw,
+            to_index: to_raw,
         });
+        cx.notify();
+    }
+
+    fn delete_server(&mut self, index: usize, cx: &mut Context<ListState<Self>>) {
+        self.backend_handle.send(MessageToBackend::DeleteServer { id: self.id, index });
         cx.notify();
     }
 }

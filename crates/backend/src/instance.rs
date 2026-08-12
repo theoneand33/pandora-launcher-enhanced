@@ -402,47 +402,108 @@ impl Instance {
             };
             instance.server_dat_path.clone()
         };
-
-        if !server_dat_path.is_file() {
-            backend.send.send_error("server.dat is not a file");
-            return;
-        }
-
-        let raw = match std::fs::read(&server_dat_path) {
-            Ok(raw) => raw,
-            Err(err) => {
-                log::error!("Error while reading server.dat: {err:?}");
-                backend.send.send_error("Error while reading server.dat: {err}");
+        let backend_clone = backend.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if !server_dat_path.is_file() {
+                backend_clone.send.send_error("server.dat is not a file");
                 return;
-            },
-        };
-        let mut nbt_data = raw.as_slice();
-        let mut result = match nbt::decode::read_named(&mut nbt_data) {
-            Ok(result) => result,
-            Err(err) => {
-                log::error!("Error while decoding server.dat: {err:?}");
-                backend.send.send_error("Error while decoding server.dat: {err}");
+            }
+
+            let raw = match std::fs::read(&server_dat_path) {
+                Ok(raw) => raw,
+                Err(err) => {
+                    log::error!("Error while reading server.dat: {err:?}");
+                    backend_clone.send.send_error(format!("Error while reading server.dat: {err}"));
+                    return;
+                },
+            };
+            let mut nbt_data = raw.as_slice();
+            let mut result = match nbt::decode::read_named(&mut nbt_data) {
+                Ok(result) => result,
+                Err(err) => {
+                    log::error!("Error while decoding server.dat: {err:?}");
+                    backend_clone.send.send_error(format!("Error while decoding server.dat: {err}"));
+                    return;
+                },
+            };
+
+            let Some(mut root) = result.as_compound_mut() else {
+                backend_clone.send.send_error("Unable to get root compound");
                 return;
-            },
-        };
+            };
+            let Some(mut servers) = root.find_list_mut("servers", nbt::TAG_COMPOUND_ID) else {
+                backend_clone.send.send_error("Unable to get servers list");
+                return;
+            };
 
-        let Some(mut root) = result.as_compound_mut() else {
-            backend.send.send_error("Unable to get root compound");
-            return;
-        };
-        let Some(mut servers) = root.find_list_mut("servers", nbt::TAG_COMPOUND_ID) else {
-            backend.send.send_error("Unable to get servers list");
-            return;
-        };
+            if !servers.move_index(from_index, to_index) {
+                backend_clone.send.send_error("Unable to reorder servers, index out of range");
+                return;
+            }
 
-        if servers.move_index(from_index, to_index) {
             let bytes = nbt::encode::write_named(&result);
             if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
                 log::error!("Error while writing server.dat: {err:?}");
-                backend.send.send_error("Error while writing server.dat: {err}");
+                backend_clone.send.send_error(format!("Error while writing server.dat: {err}"));
+            }
+        })
+        .await;
+    }
+
+    pub async fn delete_server(backend: Arc<BackendState>, id: InstanceID, index: usize) {
+        let server_dat_path = {
+            let guard = backend.instance_state.read();
+            let Some(instance) = guard.instances.get(id) else {
+                return;
+            };
+            instance.server_dat_path.clone()
+        };
+        let backend_clone = backend.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if !server_dat_path.is_file() {
+                backend_clone.send.send_error("server.dat is not a file");
                 return;
             }
-        }
+
+            let raw = match std::fs::read(&server_dat_path) {
+                Ok(raw) => raw,
+                Err(err) => {
+                    log::error!("error while reading server.dat: {err:?}");
+                    backend_clone.send.send_error(format!("error reading server.dat: {err}"));
+                    return;
+                },
+            };
+            let mut nbt_data = raw.as_slice();
+            let mut result = match nbt::decode::read_named(&mut nbt_data) {
+                Ok(result) => result,
+                Err(err) => {
+                    log::error!("error while decoding server.dat: {err:?}");
+                    backend_clone.send.send_error(format!("error while decoding server.dat: {err}"));
+                    return;
+                },
+            };
+
+            let Some(mut root) = result.as_compound_mut() else {
+                backend_clone.send.send_error("unable to get root compound");
+                return;
+            };
+            let Some(mut servers) = root.find_list_mut("servers", nbt::TAG_COMPOUND_ID) else {
+                backend_clone.send.send_error("unable to get servers list");
+                return;
+            };
+
+            if !servers.remove_index(index) {
+                backend_clone.send.send_error("Unable to delete server, index out of range");
+                return;
+            }
+
+            let bytes = nbt::encode::write_named(&result);
+            if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
+                log::error!("error while writing server.dat: {err:?}");
+                backend_clone.send.send_error(format!("error while writing server.dat: {err}"));
+            }
+        })
+        .await;
     }
 
     fn load_servers_inner(
@@ -1386,7 +1447,7 @@ fn load_servers_summary(
 
     let mut summaries = Vec::with_capacity(servers.len());
 
-    for server in servers.iter() {
+    for (raw_index, server) in servers.iter().enumerate() {
         let server = server.as_compound().unwrap();
 
         if let Some(hidden) = server.find_byte("hidden")
@@ -1437,6 +1498,7 @@ fn load_servers_summary(
             pinging,
             status,
             ping,
+            raw_index,
         });
     }
 
