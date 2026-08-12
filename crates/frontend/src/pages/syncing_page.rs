@@ -36,7 +36,8 @@ impl SyncingPage {
             sync_state: None,
             pending: FxHashSet::default(),
             loading: FxHashSet::default(),
-            custom_input_state: cx.new(|cx| InputState::new(window, cx)),
+            custom_input_state: cx
+                .new(|cx| InputState::new(window, cx).placeholder(t::instance::sync::custom_placeholder())),
             _get_sync_state_task: Task::ready(()),
         };
 
@@ -395,54 +396,56 @@ impl Render for SyncingPage {
                 Some(self.create_entry(sync_state, name.clone(), state.is_file, label.into(), warning, info, cx))
             }))
             .child(
-                h_flex()
-                    .w_full()
-                    .gap_2()
-                    .child(Input::new(&self.custom_input_state).max_w_128())
-                    .child(Button::new("custom_file").label(t::instance::sync::sync_file()).on_click(cx.listener(
-                        |page, _, window, cx| {
-                            let input = page.custom_input_state.read(cx).value();
-                            let input = input.as_str().trim_ascii();
-                            if SafePath::new(input).is_some() {
-                                let name: Arc<str> = input.into();
-                                page.backend_handle.send(MessageToBackend::SetSyncing {
-                                    target: name.clone(),
-                                    is_file: true,
-                                    value: true,
-                                });
+                v_flex().gap_2().child(t::instance::sync::custom_hint()).child(
+                    h_flex()
+                        .w_full()
+                        .gap_2()
+                        .child(Input::new(&self.custom_input_state).max_w_128().small())
+                        .child(Button::new("custom_file").small().label(t::instance::sync::sync_file()).on_click(
+                            cx.listener(|page, _, window, cx| {
+                                let input = page.custom_input_state.read(cx).value();
+                                let input = input.as_str().trim_ascii();
+                                if SafePath::new(input).is_some() {
+                                    let name: Arc<str> = input.into();
+                                    page.backend_handle.send(MessageToBackend::SetSyncing {
+                                        target: name.clone(),
+                                        is_file: true,
+                                        value: true,
+                                    });
 
-                                page.loading.insert(name.clone());
-                                if page.pending.is_empty() {
-                                    page.pending.insert(name.clone());
-                                    page.update_sync_state(cx);
+                                    page.loading.insert(name.clone());
+                                    if page.pending.is_empty() {
+                                        page.pending.insert(name.clone());
+                                        page.update_sync_state(cx);
+                                    }
+
+                                    page.custom_input_state.update(cx, |state, cx| state.set_value("", window, cx));
                                 }
+                            }),
+                        ))
+                        .child(Button::new("custom_folder").small().label(t::instance::sync::sync_folder()).on_click(
+                            cx.listener(|page, _, window, cx| {
+                                let input = page.custom_input_state.read(cx).value();
+                                let input = input.as_str().trim_ascii();
+                                if SafePath::new(input).is_some() {
+                                    let name: Arc<str> = input.into();
+                                    page.backend_handle.send(MessageToBackend::SetSyncing {
+                                        target: name.clone(),
+                                        is_file: false,
+                                        value: true,
+                                    });
 
-                                page.custom_input_state.update(cx, |state, cx| state.set_value("", window, cx));
-                            }
-                        },
-                    )))
-                    .child(Button::new("custom_folder").label(t::instance::sync::sync_folder()).on_click(cx.listener(
-                        |page, _, window, cx| {
-                            let input = page.custom_input_state.read(cx).value();
-                            let input = input.as_str().trim_ascii();
-                            if SafePath::new(input).is_some() {
-                                let name: Arc<str> = input.into();
-                                page.backend_handle.send(MessageToBackend::SetSyncing {
-                                    target: name.clone(),
-                                    is_file: false,
-                                    value: true,
-                                });
+                                    page.loading.insert(name.clone());
+                                    if page.pending.is_empty() {
+                                        page.pending.insert(name.clone());
+                                        page.update_sync_state(cx);
+                                    }
 
-                                page.loading.insert(name.clone());
-                                if page.pending.is_empty() {
-                                    page.pending.insert(name.clone());
-                                    page.update_sync_state(cx);
+                                    page.custom_input_state.update(cx, |state, cx| state.set_value("", window, cx));
                                 }
-
-                                page.custom_input_state.update(cx, |state, cx| state.set_value("", window, cx));
-                            }
-                        },
-                    ))),
+                            }),
+                        )),
+                ),
             );
 
         content

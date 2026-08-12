@@ -162,6 +162,10 @@ pub enum MessageToBackend {
         id: InstanceID,
         pinned: bool,
     },
+    SetInstanceGroup {
+        id: InstanceID,
+        group: Option<Ustr>,
+    },
     KillInstance {
         id: InstanceID,
     },

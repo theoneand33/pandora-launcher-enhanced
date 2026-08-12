@@ -221,6 +221,7 @@ pub struct InstanceSettingsSubpage {
     #[cfg(target_os = "linux")]
     gamemode_available: bool,
     new_name_change_state: NewNameChangeState,
+    group_input_state: Entity<InputState>,
     icon: Option<EmbeddedOrRaw>,
     backend_handle: BackendHandle,
     _observe_loader_version_subscription: Option<Subscription>,
@@ -235,15 +236,49 @@ impl InstanceSettingsSubpage {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> Self {
-        let entry = instance.read(cx);
-        let instance_id = entry.id;
-        let instance_name = entry.name.clone();
-        let loader = entry.configuration.loader;
-        let preferred_loader_version =
-            entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
-        let account = entry.configuration.preferred_account;
-        let disable_file_syncing = entry.configuration.disable_file_syncing;
-        let sandbox = entry.configuration.sandbox;
+        let (
+            instance_id,
+            instance_name,
+            loader,
+            preferred_loader_version,
+            account,
+            disable_file_syncing,
+            sandbox,
+            memory,
+            wrapper_command,
+            jvm_flags,
+            jvm_binary,
+            instance_root_label,
+            icon,
+            initial_group,
+        ) = {
+            let entry = instance.read(cx);
+            (
+                entry.id,
+                entry.name.clone(),
+                entry.configuration.loader,
+                entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest"),
+                entry.configuration.preferred_account,
+                entry.configuration.disable_file_syncing,
+                entry.configuration.sandbox,
+                entry.configuration.memory.unwrap_or_default(),
+                entry.configuration.wrapper_command.clone().unwrap_or_default(),
+                entry.configuration.jvm_flags.clone().unwrap_or_default(),
+                entry.configuration.jvm_binary.clone().unwrap_or_default(),
+                PathLabel::new(entry.root_path.clone(), true),
+                if let Some(raw) = entry.icon.clone() {
+                    Some(EmbeddedOrRaw::Raw(raw))
+                } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
+                    Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
+                } else {
+                    None
+                },
+                entry.configuration.group.map(|g| g.as_str().to_string()).unwrap_or_default(),
+            )
+        };
+        #[cfg(target_os = "linux")]
+        let linux_wrapper = instance.read(cx).configuration.linux_wrapper.unwrap_or_default();
+        let system_libraries = instance.read(cx).configuration.system_libraries.clone().unwrap_or_default();
 
         let sandbox_available = if cfg!(target_os = "linux") {
             command::is_command_available("bwrap") && command::is_command_available("xdg-dbus-proxy")
@@ -251,29 +286,17 @@ impl InstanceSettingsSubpage {
             true
         };
 
-        let memory = entry.configuration.memory.unwrap_or_default();
-        let wrapper_command = entry.configuration.wrapper_command.clone().unwrap_or_default();
-        let jvm_flags = entry.configuration.jvm_flags.clone().unwrap_or_default();
-        let jvm_binary = entry.configuration.jvm_binary.clone().unwrap_or_default();
-        #[cfg(target_os = "linux")]
-        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
-        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
-
-        let instance_root_label = PathLabel::new(entry.root_path.clone(), true);
-
-        let icon = if let Some(raw) = entry.icon.clone() {
-            Some(EmbeddedOrRaw::Raw(raw))
-        } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
-            Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
-        } else {
-            None
-        };
-
         let glfw_path = system_libraries.glfw.get_or_auto(&*AUTO_LIBRARY_PATH_GLFW);
         let openal_path = system_libraries.openal.get_or_auto(&*AUTO_LIBRARY_PATH_OPENAL);
 
         let new_name_input_state = cx.new(|cx| InputState::new(window, cx).default_value(instance_name));
         cx.subscribe(&new_name_input_state, Self::on_new_name_input).detach();
+        let group_input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t::instance::group::placeholder())
+                .default_value(initial_group)
+        });
+        cx.subscribe(&group_input_state, Self::on_group_changed).detach();
 
         let minecraft_versions =
             FrontendMetadata::request(&data.metadata, MetadataRequest::MinecraftVersionManifest, cx);
@@ -366,6 +389,7 @@ impl InstanceSettingsSubpage {
             instance: instance.clone(),
             instance_id,
             new_name_input_state,
+            group_input_state,
             version_state: TypelessFrontendMetadataResult::Loading,
             version_select_state,
             account_items,
@@ -591,6 +615,22 @@ impl InstanceSettingsSubpage {
             }
 
             self.new_name_change_state = NewNameChangeState::Pending;
+        }
+    }
+
+    pub fn on_group_changed(&mut self, state: Entity<InputState>, event: &InputEvent, _cx: &mut Context<Self>) {
+        if let InputEvent::Change = event {
+            let raw = state.read(_cx).value();
+            let trimmed = raw.trim();
+            let group = if trimmed.is_empty() {
+                None
+            } else {
+                Some(ustr::Ustr::from(trimmed))
+            };
+            self.backend_handle.send(MessageToBackend::SetInstanceGroup {
+                id: self.instance_id,
+                group,
+            });
         }
     }
 
@@ -919,7 +959,8 @@ impl Render for InstanceSettingsSubpage {
                     row = row.child(el);
                 }
                 row
-            }));
+            }))
+            .child(crate::labelled(t::instance::group::label(), Input::new(&self.group_input_state).small()));
 
         let mut version_content = v_flex().gap_2();
 

@@ -26,6 +26,7 @@ use crate::{
 pub struct InstancesPage {
     instance_table: Entity<TableState<InstanceList>>,
     view_dropdown: Entity<SelectState<NamedDropdown<InstancesViewMode>>>,
+    group_dropdown: Entity<SelectState<NamedDropdown<Option<SharedString>>>>,
     search_state: Entity<InputState>,
 
     metadata: Entity<FrontendMetadata>,
@@ -73,9 +74,63 @@ impl InstancesPage {
         })
         .detach();
 
+        // ponytail: group filter is one Option<SharedString> field + dropdown; per-group locks if throughput matters.
+        let group_dropdown = cx.new(|cx| {
+            let items = Self::build_group_items(data.instances.read(cx), cx);
+            SelectState::new(NamedDropdown::new(items), Some(IndexPath::new(0)), window, cx)
+        });
+        let table_for_group = instance_table.clone();
+        cx.subscribe(
+            &group_dropdown,
+            move |_, _, event: &SelectEvent<NamedDropdown<Option<SharedString>>>, cx| {
+                let SelectEvent::Confirm(value) = event else {
+                    return;
+                };
+                let filter = value.as_ref().and_then(|v| v.item.clone());
+                table_for_group.update(cx, |table, cx| {
+                    table.delegate_mut().set_group_filter(filter);
+                    cx.notify();
+                });
+            },
+        )
+        .detach();
+
+        // rebuild group list when instances change
+        let weak_group = group_dropdown.downgrade();
+        let weak_table = instance_table.downgrade();
+        let weak_group2 = weak_group.clone();
+        let weak_table2 = weak_table.clone();
+        let weak_group3 = weak_group.clone();
+        let weak_table3 = weak_table.clone();
+        cx.subscribe_in(
+            &data.instances,
+            window,
+            move |_, instances, _event: &crate::entity::instance::InstanceAddedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group, &weak_table, &instances, window, cx);
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &data.instances,
+            window,
+            move |_, instances, _event: &crate::entity::instance::InstanceRemovedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group2, &weak_table2, &instances, window, cx);
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &data.instances,
+            window,
+            move |_, instances, _event: &crate::entity::instance::InstanceModifiedEvent, window, cx| {
+                Self::refresh_group_dropdown(&weak_group3, &weak_table3, &instances, window, cx);
+            },
+        )
+        .detach();
+
         Self {
             instance_table,
             view_dropdown,
+            group_dropdown,
             search_state,
             metadata: data.metadata.clone(),
             instances: data.instances.clone(),
@@ -107,6 +162,69 @@ fn create_instance_button(
         })
 }
 
+impl InstancesPage {
+    fn build_group_items(entries: &InstanceEntries, cx: &App) -> Vec<NamedDropdownItem<Option<SharedString>>> {
+        let mut items = vec![
+            NamedDropdownItem {
+                name: t::instance::group::all().into(),
+                item: None,
+            },
+            NamedDropdownItem {
+                name: t::instance::group::ungrouped().into(),
+                item: Some("__ungrouped__".into()),
+            },
+        ];
+        let mut groups: Vec<SharedString> = entries
+            .entries
+            .values()
+            .filter_map(|e| e.read(cx).configuration.group.map(|g| SharedString::from(g.as_str())))
+            .collect();
+        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        groups.dedup();
+        for g in groups {
+            let name = g.clone();
+            items.push(NamedDropdownItem { name, item: Some(g) });
+        }
+        items
+    }
+
+    fn refresh_group_dropdown(
+        weak_group: &WeakEntity<SelectState<NamedDropdown<Option<SharedString>>>>,
+        weak_table: &WeakEntity<TableState<InstanceList>>,
+        entries: &Entity<InstanceEntries>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(group_state) = weak_group.upgrade() else {
+            return;
+        };
+        let prev_selected: Option<SharedString> = group_state.read(cx).selected_value().and_then(|v| v.item.clone());
+        group_state.update(cx, |state, cx| {
+            let items = Self::build_group_items(entries.read(cx), cx);
+            let prev_str = prev_selected.as_deref();
+            let has_prev = match prev_str {
+                None => items.iter().any(|it| it.item.is_none()),
+                Some(prev) => items.iter().any(|it| it.item.as_deref() == Some(prev)),
+            };
+            let prev_idx = items.iter().position(|it| it.item.as_deref() == prev_str);
+            state.set_items(NamedDropdown::new(items), window, cx);
+            if has_prev {
+                if let Some(idx) = prev_idx {
+                    state.set_selected_index(Some(IndexPath::new(idx)), window, cx);
+                }
+            } else {
+                state.set_selected_index(Some(IndexPath::new(0)), window, cx);
+                if let Some(table) = weak_table.upgrade() {
+                    table.update(cx, |t, cx| {
+                        t.delegate_mut().set_group_filter(None);
+                        cx.notify();
+                    });
+                }
+            }
+        });
+    }
+}
+
 impl Page for InstancesPage {
     fn controls(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let create_instance = create_instance_button(
@@ -118,6 +236,8 @@ impl Page for InstancesPage {
         // wrapping in div makes it not take up the full space of the titlebar
         let select_view =
             div().child(Select::new(&self.view_dropdown).title_prefix(format!("{}: ", t::instance::view())));
+        let select_group =
+            div().child(Select::new(&self.group_dropdown).title_prefix(format!("{}: ", t::instance::group::label())));
 
         h_flex()
             .gap_3()
@@ -127,6 +247,7 @@ impl Page for InstancesPage {
                     .w_64()
                     .child(Input::new(&self.search_state).small().prefix(Icon::new(PandoraIcon::Search))),
             )
+            .child(select_group)
             .child(select_view)
     }
 

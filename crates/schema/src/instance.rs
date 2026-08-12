@@ -79,6 +79,12 @@ pub struct InstanceConfiguration {
     pub sandbox: bool,
     #[serde(default, deserialize_with = "crate::try_deserialize")]
     pub pinned: bool,
+    #[serde(
+        default,
+        deserialize_with = "crate::try_deserialize",
+        skip_serializing_if = "crate::skip_if_none"
+    )]
+    pub group: Option<Ustr>,
 }
 
 impl InstanceConfiguration {
@@ -100,6 +106,7 @@ impl InstanceConfiguration {
             show_shader_tab: false,
             sandbox: false,
             pinned: false,
+            group: None,
         }
     }
 }

@@ -22,6 +22,7 @@ pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
     filter: SharedString,
+    group_filter: Option<SharedString>,
     visible_cache: Vec<usize>,
     backend_handle: BackendHandle,
     _instance_added_subscription: Subscription,
@@ -78,6 +79,7 @@ impl InstanceList {
                 ],
                 items,
                 filter: SharedString::default(),
+                group_filter: None,
                 visible_cache: Vec::new(),
                 backend_handle: data.backend_handle.clone(),
                 _instance_added_subscription,
@@ -92,6 +94,22 @@ impl InstanceList {
     pub fn set_filter(&mut self, query: SharedString) {
         self.filter = query;
         self.rebuild_visible_cache();
+    }
+
+    pub fn set_group_filter(&mut self, group: Option<SharedString>) {
+        self.group_filter = group;
+        self.rebuild_visible_cache();
+    }
+
+    pub fn all_groups(&self) -> Vec<SharedString> {
+        let mut groups: Vec<SharedString> = self
+            .items
+            .iter()
+            .filter_map(|e| e.configuration.group.map(|g| SharedString::from(g.as_str())))
+            .collect();
+        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        groups.dedup();
+        groups
     }
 
     fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
@@ -110,15 +128,28 @@ impl InstanceList {
         if loader.contains(lower) {
             return true;
         }
+        if let Some(group) = entry.configuration.group.map(|g| g.as_str().to_lowercase())
+            && group.contains(lower)
+        {
+            return true;
+        }
         false
     }
 
-    fn compute_visible(items: &[InstanceEntry], filter: &str) -> Vec<usize> {
+    fn matches_group(entry: &InstanceEntry, group_filter: Option<&str>) -> bool {
+        match group_filter {
+            None => true,
+            Some("__ungrouped__") => entry.configuration.group.is_none(),
+            Some(g) => entry.configuration.group.is_some_and(|v| v.as_str() == g),
+        }
+    }
+
+    fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: Option<&str>) -> Vec<usize> {
         let lower = filter.to_lowercase();
         let mut out: Vec<usize> = items
             .iter()
             .enumerate()
-            .filter(|(_, e)| Self::matches_filter(e, &lower))
+            .filter(|(_, e)| Self::matches_filter(e, &lower) && Self::matches_group(e, group_filter))
             .map(|(i, _)| i)
             .collect();
         // pinned first, stable to preserve order from perform_sort
@@ -127,7 +158,8 @@ impl InstanceList {
     }
 
     fn rebuild_visible_cache(&mut self) {
-        self.visible_cache = Self::compute_visible(&self.items, &self.filter);
+        let group = self.group_filter.clone();
+        self.visible_cache = Self::compute_visible(&self.items, &self.filter, group.as_deref());
     }
 
     fn visible_indices(&self) -> &[usize] {
@@ -262,7 +294,19 @@ impl InstanceList {
                                         .child(edit_icon.clone().size_4()),
                                 ),
                         )
-                        .child(loader_and_version),
+                        .child(loader_and_version)
+                        .when_some(item.configuration.group, |this, group| {
+                            this.child(
+                                div()
+                                    .text_xs()
+                                    .px_1p5()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .bg(cx.theme().accent.opacity(0.15))
+                                    .text_color(cx.theme().accent)
+                                    .child(SharedString::from(group.as_str())),
+                            )
+                        }),
                 )
             })
             .child(h_flex().gap_2().child(play_button.flex_1().small()).child(

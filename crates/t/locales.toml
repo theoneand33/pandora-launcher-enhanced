@@ -3318,6 +3318,48 @@ sv = "Synka Litematic (schematic) folder"
 ru = "Синхронизировать папку Litematic (schematic)"
 fr = "Synchroniser le dossier « Litematic » (schémas)"
 
+[instance.sync.custom_placeholder]
+en = "e.g. kubejs or config/custom.toml"
+de = "z.B. kubejs oder config/custom.toml"
+hu = "pl. kubejs vagy config/custom.toml"
+sv = "t.ex. kubejs eller config/custom.toml"
+ru = "например kubejs или config/custom.toml"
+
+[instance.sync.custom_hint]
+en = "Folder is symlinked (all instances share one copy). File copies newest version when you launch."
+de = "Ordner wird verlinkt (alle Instanzen teilen eine Kopie). Datei kopiert die neueste Version beim Start."
+hu = "A mappa szimlinkelve van (minden példány egy példányt használ). A fájl a legújabbat másolja indításkor."
+sv = "Mappen är symlänkad (alla instanser delar en kopia). Filen kopierar nyaste versionen vid start."
+ru = "Папка создаёт симлинк (один экземпляр для всех). Файл копирует новейшую версию при запуске."
+
+[instance.group.label]
+en = "Group"
+de = "Gruppe"
+hu = "Csoport"
+sv = "Grupp"
+ru = "Группа"
+
+[instance.group.all]
+en = "All Groups"
+de = "Alle Gruppen"
+hu = "Minden csoport"
+sv = "Alla grupper"
+ru = "Все группы"
+
+[instance.group.ungrouped]
+en = "Ungrouped"
+de = "Ohne Gruppe"
+hu = "Csoport nélküli"
+sv = "Ogrupperad"
+ru = "Без группы"
+
+[instance.group.placeholder]
+en = "e.g. Favorites or modpacks"
+de = "z.B. Favoriten oder Modpacks"
+hu = "pl. Kedvencek vagy modpackok"
+sv = "t.ex. Favoriter eller modpacks"
+ru = "например Избранное или сборки"
+
 [settings.title]
 en = "Settings"
 pl = "Ustawienia"
