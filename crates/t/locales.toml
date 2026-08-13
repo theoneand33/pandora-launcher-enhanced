@@ -4284,16 +4284,13 @@ en = "P2P import done: ${name: String}"
 en = "Bind failed: ${error: String}"
 
 [instance.p2p.use_relay]
-en = "Share outside local network (via https://relay.theoneand33.dev)"
-pl = "Udostępnij poza siecią lokalną (przez https://relay.theoneand33.dev)"
-de = "Außerhalb des lokalen Netzwerks teilen (über https://relay.theoneand33.dev)"
-hu = "Megosztás helyi hálózaton kívül (https://relay.theoneand33.dev)"
-sv = "Dela utanför lokalt nätverk (via https://relay.theoneand33.dev)"
-ru = "Поделиться вне локальной сети (через https://relay.theoneand33.dev)"
-fr = "Partager hors réseau local (via https://relay.theoneand33.dev)"
-
-[instance.p2p.bare_token_needs_relay]
-en = "Bare token needs p2p_relay_url set in settings"
+en = "Share outside local network"
+pl = "Udostępnij poza siecią lokalną"
+de = "Außerhalb des lokalen Netzwerks teilen"
+hu = "Megosztás helyi hálózaton kívül"
+sv = "Dela utanför lokalt nätverk"
+ru = "Поделиться вне локальной сети"
+fr = "Partager hors réseau local"
 
 [settings.p2p.title]
 en = "P2P Sync"

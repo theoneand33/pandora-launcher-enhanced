@@ -18,6 +18,20 @@ use crate::{
 // Serve the bundle at GET /p2p/<token>. Token is the only auth.
 // The bundle is built with the same filter as ExportInstance.
 
+const DEFAULT_RELAY: &str = "https://relay.theoneand33.dev";
+
+// ponytail: configured relay wins, default is the shared fallback on both create and join.
+fn effective_relay(backend: &BackendState) -> String {
+    backend
+        .config
+        .write()
+        .get()
+        .p2p_relay_url
+        .clone()
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_RELAY.to_string())
+}
+
 #[derive(Debug)]
 struct P2pShare {
     path: Option<PathBuf>,
@@ -135,13 +149,13 @@ pub async fn create_p2p_share(
 
     let expires_at_ms = chrono::Utc::now().timestamp_millis() + Duration::from_secs(30 * 60).as_millis() as i64;
 
-    // ponytail: checkbox drives relay use; hardcoded relay for internet sharing
+    // ponytail: checkbox drives relay use; configured or default relay otherwise
     let relay_url: Option<String> = if use_relay {
-        Some("https://relay.theoneand33.dev".to_string())
+        Some(effective_relay(&backend))
     } else {
         None
     };
-    let pages_url: Option<String> = None;
+    let pages_url: Option<String> = backend.config.write().get().p2p_pages_url.clone();
 
     if let Some(relay) = relay_url.filter(|u| !u.trim().is_empty()) {
         let relay: Arc<str> = Arc::from(relay.trim_end_matches('/').to_string());
@@ -661,14 +675,8 @@ pub async fn join_p2p_share(
                 String::new()
             };
             if token.len() >= 8 {
-                let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
-                if let Some(relay) = relay {
-                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-                } else {
-                    modal_action.set_error_message(t::instance::p2p::bare_token_needs_relay().into());
-                    modal_action.set_finished();
-                    return;
-                }
+                let relay = effective_relay(&backend);
+                link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
             }
         } else {
             let token = if link.contains('/') {
@@ -691,15 +699,8 @@ pub async fn join_p2p_share(
                 && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '=');
             // If the whole input looks like a bare token, expand via relay
             if looks_like_token && link == token {
-                let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
-                if let Some(relay) = relay {
-                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-                } else {
-                    // bare token without relay cannot be resolved; keep original so Url::parse fails with helpful error
-                    modal_action.set_error_message(t::instance::p2p::bare_token_needs_relay().into());
-                    modal_action.set_finished();
-                    return;
-                }
+                let relay = effective_relay(&backend);
+                link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
             } else if link.contains('/') || link.contains(':') {
                 // Preserve host/path inputs such as LAN links, add scheme when missing
                 if !link.contains("://") {
@@ -713,10 +714,8 @@ pub async fn join_p2p_share(
         if let Some(token) = parsed.query_pairs().find(|(k, _)| k == "token").map(|(_, v)| v.to_string()) {
             let token = token.trim().to_string();
             if token.len() >= 8 {
-                if let Some(relay) = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty())
-                {
-                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-                }
+                let relay = effective_relay(&backend);
+                link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
             }
         }
     }
@@ -898,11 +897,6 @@ pub async fn join_p2p_share(
             extract_tracker.set_finished(ProgressTrackerFinishType::Error);
         },
     }
-}
-
-#[allow(dead_code)]
-pub async fn cancel_p2p_share(token: &str) {
-    cancel_share_inner(token).await;
 }
 
 pub async fn cancel_p2p_share_with_backend(backend: Arc<BackendState>, token: Arc<str>) {
