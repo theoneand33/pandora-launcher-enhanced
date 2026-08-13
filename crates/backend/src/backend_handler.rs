@@ -2472,6 +2472,35 @@ impl BackendState {
                 self.login_flow(&modal_action, Some(account)).await;
                 modal_action.set_finished();
             },
+            MessageToBackend::CreateP2pShare {
+                id,
+                options,
+                modal_action,
+            } => {
+                let backend = self.clone();
+                tokio::task::spawn(async move {
+                    crate::p2p_sync::create_p2p_share(backend, id, options, modal_action).await;
+                });
+            },
+            MessageToBackend::JoinP2pShare {
+                link,
+                target_name,
+                modal_action,
+            } => {
+                let backend = self.clone();
+                tokio::task::spawn(async move {
+                    crate::p2p_sync::join_p2p_share(backend, link, target_name, modal_action).await;
+                });
+            },
+            MessageToBackend::CancelP2pShare { token } => {
+                crate::p2p_sync::cancel_p2p_share(&token);
+            },
+            MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
+                self.config.write().modify(|cfg| {
+                    cfg.p2p_relay_url = relay_url;
+                    cfg.p2p_pages_url = pages_url;
+                });
+            },
             MessageToBackend::Quit => {
                 self.should_quit.store(true, Ordering::Relaxed);
             },

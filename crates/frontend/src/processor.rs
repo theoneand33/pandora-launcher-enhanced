@@ -261,6 +261,14 @@ impl Processor {
                     }
                 });
             },
+            MessageToFrontend::P2pShareCreated { .. } => {
+                self.with_main_window(message, cx, |_, message, window, cx| {
+                    let MessageToFrontend::P2pShareCreated { token, links, .. } = message else {
+                        unreachable!();
+                    };
+                    crate::modals::p2p_show::open_p2p_show(links, token, window, cx);
+                });
+            },
             MessageToFrontend::OpenOrFocusMainWindow => {
                 self.quit_coordinator.set_can_quit(false);
 

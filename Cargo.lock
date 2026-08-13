@@ -619,6 +619,7 @@ dependencies = [
  "futures",
  "hex",
  "hickory-resolver",
+ "httparse",
  "image",
  "indexmap 2.14.0",
  "junction",

@@ -781,7 +781,7 @@ impl Instance {
                 Err(err) => {
                     log::warn!("Failed to read directory entry in {:?}: {}", path, err);
                     None
-                }
+                },
             })
             .collect();
 

@@ -347,6 +347,23 @@ pub enum MessageToBackend {
         account: Uuid,
         modal_action: ModalAction,
     },
+    CreateP2pShare {
+        id: InstanceID,
+        options: ExportOptions,
+        modal_action: ModalAction,
+    },
+    JoinP2pShare {
+        link: String,
+        target_name: Option<String>,
+        modal_action: ModalAction,
+    },
+    CancelP2pShare {
+        token: Arc<str>,
+    },
+    SetP2pConfig {
+        relay_url: Option<String>,
+        pages_url: Option<String>,
+    },
     Quit,
 }
 
@@ -423,6 +440,11 @@ pub enum MessageToFrontend {
         update: UpdatePrompt,
     },
     OpenOrFocusMainWindow,
+    P2pShareCreated {
+        token: Arc<str>,
+        links: Arc<[Arc<str>]>,
+        expires_at_ms: i64,
+    },
 }
 
 #[derive(Debug, Default)]
