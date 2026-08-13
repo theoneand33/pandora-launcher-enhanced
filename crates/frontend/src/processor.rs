@@ -262,11 +262,24 @@ impl Processor {
                 });
             },
             MessageToFrontend::P2pShareCreated { .. } => {
-                self.with_main_window(message, cx, |_, message, window, cx| {
-                    let MessageToFrontend::P2pShareCreated { token, links, .. } = message else {
+                let backend_handle = self.data.backend_handle.clone();
+                self.with_main_window(message, cx, move |_, message, window, cx| {
+                    let MessageToFrontend::P2pShareCreated {
+                        token,
+                        links,
+                        expires_at_ms,
+                    } = message
+                    else {
                         unreachable!();
                     };
-                    crate::modals::p2p_show::open_p2p_show(links, token, window, cx);
+                    crate::modals::p2p_show::open_p2p_show(
+                        links,
+                        token,
+                        expires_at_ms,
+                        backend_handle.clone(),
+                        window,
+                        cx,
+                    );
                 });
             },
             MessageToFrontend::OpenOrFocusMainWindow => {

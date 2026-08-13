@@ -18,12 +18,9 @@ use crate::{
 // Serve the bundle at GET /p2p/<token>. Token is the only auth.
 // The bundle is built with the same filter as ExportInstance.
 
-#[allow(dead_code)]
 #[derive(Debug)]
 struct P2pShare {
-    path: PathBuf,
-    token: Arc<str>,
-    expires_at_ms: i64,
+    path: Option<PathBuf>,
     handle: tokio::task::JoinHandle<()>,
 }
 
@@ -153,9 +150,7 @@ pub async fn create_p2p_share(
                     shares().write().insert(
                         Arc::clone(&token_for_upload),
                         P2pShare {
-                            path: PathBuf::from("relay"),
-                            token: Arc::clone(&token_for_upload),
-                            expires_at_ms,
+                            path: None,
                             handle: tokio::task::spawn(async {}),
                         },
                     );
@@ -181,48 +176,11 @@ pub async fn create_p2p_share(
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                 },
-                Ok(r) => {
-                    let status = r.status();
-                    // Fallback to local share instead of hard failure
-                    let fallback = match create_local_share(
-                        &backend_for_upload,
-                        token_for_upload.clone(),
-                        bundle_for_upload.clone(),
-                        expires_at_ms,
-                        pages_clone,
-                    )
-                    .await
-                    {
-                        Ok(links) => links,
-                        Err(e) => {
-                            let _ = tokio::fs::remove_file(&bundle_for_upload).await;
-                            modal_for_upload.set_error_message(
-                                format!("relay returned {status} and local bind failed: {e}").into(),
-                            );
-                            modal_for_upload.set_finished();
-                            upload_tracker.set_finished(ProgressTrackerFinishType::Error);
-                            backend_for_upload
-                                .send
-                                .send_error(format!("Relay upload failed ({status}), local fallback also failed"));
-                            return;
-                        },
+                other => {
+                    let warning = match &other {
+                        Ok(r) => format!("Relay returned {} — using local link (LAN only)", r.status()),
+                        Err(e) => format!("Relay upload failed: {} — using local link", redact_error(&e.to_string())),
                     };
-                    // Surface relay failure but still provide working local link
-                    backend_for_upload
-                        .send
-                        .send_warning(format!("Relay returned {status} — using local link (LAN only)"));
-                    modal_for_upload.set_finished();
-                    upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
-                    backend_for_upload.send.send(MessageToFrontend::P2pShareCreated {
-                        token: token_for_upload,
-                        links: fallback,
-                        expires_at_ms,
-                    });
-                    backend_for_upload
-                        .send
-                        .send_success("Share ready (local) — keep launcher open (relay unavailable)");
-                },
-                Err(e) => {
                     let fallback = match create_local_share(
                         &backend_for_upload,
                         token_for_upload.clone(),
@@ -234,23 +192,27 @@ pub async fn create_p2p_share(
                     {
                         Ok(links) => links,
                         Err(bind_err) => {
-                            modal_for_upload.set_error_message(
-                                format!(
+                            let detail = match &other {
+                                Ok(r) => format!("relay returned {} and local bind failed: {bind_err}", r.status()),
+                                Err(e) => format!(
                                     "relay upload failed: {} (bind also failed: {bind_err})",
                                     redact_error(&e.to_string())
-                                )
-                                .into(),
-                            );
+                                ),
+                            };
+                            modal_for_upload.set_error_message(detail.into());
                             modal_for_upload.set_finished();
                             upload_tracker.set_finished(ProgressTrackerFinishType::Error);
                             let _ = tokio::fs::remove_file(&bundle_for_upload).await;
+                            if let Ok(r) = &other {
+                                backend_for_upload.send.send_error(format!(
+                                    "Relay upload failed ({}), local fallback also failed",
+                                    r.status()
+                                ));
+                            }
                             return;
                         },
                     };
-                    backend_for_upload.send.send_warning(format!(
-                        "Relay upload failed: {} — using local link",
-                        redact_error(&e.to_string())
-                    ));
+                    backend_for_upload.send.send_warning(warning);
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                     backend_for_upload.send.send(MessageToFrontend::P2pShareCreated {
@@ -287,7 +249,7 @@ async fn create_local_share(
     backend: &BackendState,
     token: Arc<str>,
     bundle_path: PathBuf,
-    expires_at_ms: i64,
+    _expires_at_ms: i64,
     pages_url: Option<String>,
 ) -> Result<Arc<[Arc<str>]>, String> {
     let p2p_dir = backend.directories.temp_dir.join("p2p");
@@ -317,9 +279,7 @@ async fn create_local_share(
     shares().write().insert(
         Arc::clone(&token),
         P2pShare {
-            path: bundle_path,
-            token: Arc::clone(&token),
-            expires_at_ms,
+            path: Some(bundle_path),
             handle,
         },
     );
@@ -354,7 +314,7 @@ fn create_bundle_blocking(
 
     let sync_target_paths = SyncTargetPaths::new(sync_targets);
     let mut files: Vec<(PathBuf, SafePath)> = Vec::new();
-    let walker = WalkDir::new(root_path).follow_links(true);
+    let walker = WalkDir::new(root_path).follow_links(false);
     for entry in walker.into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_dir() {
             continue;
@@ -442,7 +402,7 @@ async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_pa
             let header_end;
             loop {
                 if total >= buf.len() {
-                    let _ = write_404(&mut stream).await;
+                    let _ = write_status(&mut stream, 404).await;
                     return;
                 }
                 let Ok(n) = stream.read(&mut buf[total..]).await else {
@@ -457,30 +417,30 @@ async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_pa
                     break;
                 }
                 if total == buf.len() {
-                    let _ = write_404(&mut stream).await;
+                    let _ = write_status(&mut stream, 404).await;
                     return;
                 }
             }
             let mut headers = [httparse::EMPTY_HEADER; 32];
             let mut req = httparse::Request::new(&mut headers);
             let Ok(httparse::Status::Complete(_)) = req.parse(&buf[..header_end]) else {
-                let _ = write_404(&mut stream).await;
+                let _ = write_status(&mut stream, 404).await;
                 return;
             };
             // Only allow GET
             if req.method != Some("GET") {
-                let _ = write_405(&mut stream).await;
+                let _ = write_status(&mut stream, 405).await;
                 return;
             }
             let path = req.path.unwrap_or("/");
             // Strip query string before compare
             let path_no_query = path.split('?').next().unwrap_or(path);
             if path_no_query != expected {
-                let _ = write_404(&mut stream).await;
+                let _ = write_status(&mut stream, 404).await;
                 return;
             }
             let Ok(meta) = tokio::fs::metadata(&path_clone).await else {
-                let _ = write_404(&mut stream).await;
+                let _ = write_status(&mut stream, 404).await;
                 return;
             };
             let len = meta.len();
@@ -500,28 +460,19 @@ async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_pa
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
-    for i in 0..buf.len().saturating_sub(3) {
-        if &buf[i..i + 4] == b"\r\n\r\n" {
-            return Some(i + 4);
-        }
-    }
-    None
+    buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)
 }
 
-async fn write_404(stream: &mut tokio::net::TcpStream) -> std::io::Result<()> {
+async fn write_status(stream: &mut tokio::net::TcpStream, code: u16) -> std::io::Result<()> {
     use tokio::io::AsyncWriteExt;
-    stream
-        .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found")
-        .await
-}
-
-async fn write_405(stream: &mut tokio::net::TcpStream) -> std::io::Result<()> {
-    use tokio::io::AsyncWriteExt;
-    stream
-        .write_all(
-            b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 18\r\nConnection: close\r\n\r\nMethod Not Allowed",
-        )
-        .await
+    let resp = match code {
+        405 => {
+            b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 18\r\nConnection: close\r\n\r\nMethod Not Allowed"
+                as &[u8]
+        },
+        _ => b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found",
+    };
+    stream.write_all(resp).await
 }
 
 fn local_ipv4s() -> Vec<String> {
@@ -599,13 +550,9 @@ pub async fn join_p2p_share(
         if let Some(token) = parsed.query_pairs().find(|(k, _)| k == "token").map(|(_, v)| v.to_string()) {
             let token = token.trim().to_string();
             if token.len() >= 8 {
-                // if this is a pages host, prefer relay host for actual download
-                if parsed.path() == "/" || parsed.path().is_empty() {
-                    if let Some(relay) =
-                        backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty())
-                    {
-                        link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-                    }
+                if let Some(relay) = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty())
+                {
+                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
                 }
             }
         }
@@ -729,8 +676,9 @@ pub async fn join_p2p_share(
     }
     tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    tracker.set_title("Extracting share...".into());
-    tracker.notify();
+    let extract_tracker = ProgressTracker::new("Extracting share...".into(), backend.send.clone());
+    modal_action.trackers.push(extract_tracker.clone());
+    extract_tracker.notify();
 
     let name_raw = target_name.unwrap_or_else(|| "p2p-import".to_string());
     let sanitized = sanitize_filename::sanitize(&name_raw);
@@ -763,7 +711,7 @@ pub async fn join_p2p_share(
         Ok(Ok(())) => {
             backend.load_instance_from_path(&target_dir, true, true);
             let _ = std::fs::remove_file(&tmp_file);
-            tracker.set_finished(ProgressTrackerFinishType::Normal);
+            extract_tracker.set_finished(ProgressTrackerFinishType::Normal);
             modal_action.set_finished();
             backend.send.send_success(format!(
                 "P2P import done: {}",
@@ -775,14 +723,14 @@ pub async fn join_p2p_share(
             let _ = std::fs::remove_dir_all(&target_dir);
             modal_action.set_error_message(format!("Extract failed: {e}").into());
             modal_action.set_finished();
-            tracker.set_finished(ProgressTrackerFinishType::Error);
+            extract_tracker.set_finished(ProgressTrackerFinishType::Error);
         },
         Err(e) => {
             let _ = std::fs::remove_file(&tmp_file);
             let _ = std::fs::remove_dir_all(&target_dir);
             modal_action.set_error_message(format!("task failed: {e}").into());
             modal_action.set_finished();
-            tracker.set_finished(ProgressTrackerFinishType::Error);
+            extract_tracker.set_finished(ProgressTrackerFinishType::Error);
         },
     }
 }
@@ -794,9 +742,10 @@ pub fn cancel_p2p_share(token: &str) {
 fn cancel_share_inner(token: &str) {
     if let Some(share) = shares().write().remove(token) {
         share.handle.abort();
-        if share.path != PathBuf::from("relay") {
-            let _ = std::fs::remove_file(&share.path);
+        if let Some(path) = share.path {
+            let _ = std::fs::remove_file(&path);
         }
+        log::trace!("p2p share {} cancelled", &token.chars().take(8).collect::<String>());
     }
 }
 
@@ -839,27 +788,10 @@ fn extract_zip_to_instance(
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let name = entry.name().to_string();
 
-        if name.contains("..") {
-            continue;
-        }
         let Some(safe) = SafePath::new(&name) else {
             continue;
         };
         let out_path = safe.to_path(target_dir);
-
-        // Ensure out_path stays inside target_dir (SafePath already guarantees, but double-check)
-        if let Ok(canonical_target) = target_dir.canonicalize() {
-            if let Ok(canonical_parent) = out_path
-                .parent()
-                .unwrap_or(target_dir)
-                .canonicalize()
-                .or_else(|_| Ok::<_, std::io::Error>(target_dir.to_path_buf()))
-            {
-                if !canonical_parent.starts_with(&canonical_target) && out_path.parent().is_some() {
-                    continue;
-                }
-            }
-        }
 
         if entry.is_dir() {
             std::fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
