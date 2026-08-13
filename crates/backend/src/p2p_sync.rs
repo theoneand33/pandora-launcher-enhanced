@@ -9,7 +9,10 @@ use bridge::{
 use parking_lot::RwLock;
 use uuid::Uuid;
 
-use crate::BackendState;
+use crate::{
+    BackendState,
+    export::{SyncTargetPaths, is_export_junk, matches_sync_target, should_skip},
+};
 
 // ponytail: single ephemeral HTTP server per share, no new crate.
 // Serve the bundle at GET /p2p/<token>. Token is the only auth.
@@ -184,7 +187,7 @@ pub async fn create_p2p_share(
                     let fallback = match create_local_share(
                         &backend_for_upload,
                         token_for_upload.clone(),
-                        bundle_for_upload,
+                        bundle_for_upload.clone(),
                         expires_at_ms,
                         pages_clone,
                     )
@@ -192,6 +195,7 @@ pub async fn create_p2p_share(
                     {
                         Ok(links) => links,
                         Err(e) => {
+                            let _ = tokio::fs::remove_file(&bundle_for_upload).await;
                             modal_for_upload.set_error_message(
                                 format!("relay returned {status} and local bind failed: {e}").into(),
                             );
@@ -204,8 +208,9 @@ pub async fn create_p2p_share(
                         },
                     };
                     // Surface relay failure but still provide working local link
-                    modal_for_upload
-                        .set_error_message(format!("relay returned {status} — using local link (LAN only)").into());
+                    backend_for_upload
+                        .send
+                        .send_warning(format!("Relay returned {status} — using local link (LAN only)"));
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                     backend_for_upload.send.send(MessageToFrontend::P2pShareCreated {
@@ -213,7 +218,9 @@ pub async fn create_p2p_share(
                         links: fallback,
                         expires_at_ms,
                     });
-                    backend_for_upload.send.send_success("Share ready (local) — keep launcher open");
+                    backend_for_upload
+                        .send
+                        .send_success("Share ready (local) — keep launcher open (relay unavailable)");
                 },
                 Err(e) => {
                     let fallback = match create_local_share(
@@ -240,9 +247,10 @@ pub async fn create_p2p_share(
                             return;
                         },
                     };
-                    modal_for_upload.set_error_message(
-                        format!("relay upload failed: {} — using local link", redact_error(&e.to_string())).into(),
-                    );
+                    backend_for_upload.send.send_warning(format!(
+                        "Relay upload failed: {} — using local link",
+                        redact_error(&e.to_string())
+                    ));
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                     backend_for_upload.send.send(MessageToFrontend::P2pShareCreated {
@@ -418,111 +426,6 @@ fn create_bundle_blocking(
     Ok(bundle_path)
 }
 
-// ponytail: mirror export::SyncTargetPaths without importing private export module
-struct SyncTargetPaths {
-    files: Vec<SafePath>,
-    folders: Vec<SafePath>,
-}
-
-impl SyncTargetPaths {
-    fn new(sync_targets: &schema::backend_config::SyncTargets) -> Self {
-        let mut files = Vec::new();
-        let mut folders = Vec::new();
-        for target in sync_targets.files.iter() {
-            if let Some(path) = SafePath::new(target) {
-                files.push(path);
-            }
-        }
-        for target in sync_targets.folders.iter() {
-            if let Some(path) = SafePath::new(target) {
-                folders.push(path);
-            }
-        }
-        Self { files, folders }
-    }
-}
-
-fn matches_sync_target(rel_to_dot: &SafePath, targets: &SyncTargetPaths) -> bool {
-    for folder in &targets.folders {
-        if rel_to_dot == folder || rel_to_dot.starts_with(folder) {
-            return true;
-        }
-    }
-    for file in &targets.files {
-        if rel_to_dot == file {
-            return true;
-        }
-    }
-    false
-}
-
-fn is_export_junk(rel: &SafePath) -> bool {
-    let Some(file_name) = rel.file_name() else {
-        return false;
-    };
-    if file_name == ".DS_Store" || file_name.eq_ignore_ascii_case("thumbs.db") {
-        return true;
-    }
-    if file_name.starts_with(".pandora.") {
-        return true;
-    }
-    if file_name.starts_with('.') && file_name.ends_with(".aux.json") {
-        return true;
-    }
-    false
-}
-
-fn should_skip(rel: &SafePath, rel_to_dot: Option<&SafePath>, options: &ExportOptions) -> bool {
-    let rel_str = rel.as_str();
-    if rel_str == "icon.png" {
-        return false;
-    }
-    // filtered out regardless of location
-    if !options.include_logs {
-        if let Some(file_name) = rel.file_name() {
-            if file_name.to_ascii_lowercase().ends_with(".log") || file_name.to_ascii_lowercase().ends_with(".log.gz") {
-                return true;
-            }
-        }
-    }
-    if rel.starts_with(".fabric") || rel.starts_with("mods/.connector") || rel.starts_with("config/axiom/history") {
-        return true;
-    }
-    if !options.include_cache && matches!(rel_str, "usercache.json" | "usernamecache.json" | "realms_persistence.json")
-    {
-        return true;
-    }
-    if matches!(
-        rel_str,
-        "config/sodium-fingerprint.json"
-            | "config/flashback/.flashback.json.backup"
-            | "config/axiom/.axiom.json.backup"
-            | "config/axiom/.license"
-            | "servers.dat_old"
-    ) {
-        return true;
-    }
-    let rel_for_match = rel_to_dot.unwrap_or(rel);
-    let Some(first) = rel_for_match.as_ref().components().next() else {
-        return true;
-    };
-    let relative_path::Component::Normal(name) = first else {
-        return true;
-    };
-    match name {
-        "logs" | "crash-reports" => !options.include_logs,
-        ".cache" | "downloads" | ".fabric" => !options.include_cache,
-        "saves" => !options.include_saves,
-        "mods" => !options.include_mods,
-        "resourcepacks" => !options.include_resourcepacks,
-        "shaderpacks" => !options.include_shaders,
-        "config" => !options.include_configs,
-        "screenshots" => !options.include_screenshots,
-        "backups" => !options.include_backups,
-        _ => false,
-    }
-}
-
 async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_path: PathBuf) {
     let expected_path = format!("/p2p/{token}");
     loop {
@@ -674,24 +577,19 @@ pub async fn join_p2p_share(
         let looks_like_token =
             token.len() >= 8 && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '=');
         // If the whole input looks like a bare token, expand via relay
-        if looks_like_token && (link == token || link.contains("token=") || link.contains('/')) {
+        if looks_like_token && link == token {
             let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
             if let Some(relay) = relay {
                 link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-            } else if link == token {
+            } else {
                 // bare token without relay cannot be resolved; keep original so Url::parse fails with helpful error
                 modal_action.set_error_message("Bare token needs p2p_relay_url set in settings".into());
                 modal_action.set_finished();
                 return;
             }
-            // else: path-like without relay – let URL parse attempt with http fallback below
-            if !link.contains("://") && link.contains('/') {
-                // user pasted "host/p2p/token" without scheme – try https
-                link = format!("https://{}", link.trim_start_matches('/'));
-            }
-        } else if !looks_like_token {
-            // Not a token; maybe host without scheme like "192.168.1.5:1234/p2p/xxx"
-            if link.contains('/') || link.contains(':') {
+        } else if link.contains('/') || link.contains(':') {
+            // Preserve host/path inputs such as LAN links, add scheme when missing
+            if !link.contains("://") {
                 link = format!("http://{}", link.trim_start_matches('/'));
             }
         }
@@ -1051,7 +949,7 @@ mod tests {
         assert!(!should_skip(&rel, None, &opts));
         // .DS_Store is junk (handled separately)
         assert!(is_export_junk(&SafePath::new(".DS_Store").unwrap()));
-        assert!(is_export_junk(&SafePath::new(".minecraft/.DS_Store").unwrap()) == false || true); // file_name check catches it
+        assert!(is_export_junk(&SafePath::new(".minecraft/.DS_Store").unwrap()));
     }
 
     #[test]
