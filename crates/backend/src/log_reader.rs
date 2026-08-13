@@ -15,7 +15,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 use thiserror::Error;
 
-static REPLACEMENTS: LazyLock<[(Regex, &'static str); 7]> = LazyLock::new(|| {
+static REPLACEMENTS: LazyLock<[(Regex, &'static str); 9]> = LazyLock::new(|| {
     [
         // Access token replacements
         (regex::Regex::new(r#"SignedJWT: [^\s]+"#).unwrap(), "SignedJWT: *****"),
@@ -26,6 +26,9 @@ static REPLACEMENTS: LazyLock<[(Regex, &'static str); 7]> = LazyLock::new(|| {
         (regex::Regex::new(r#"\/Users\/[^/]+\/"#).unwrap(), "/Users/*****/"),
         (regex::Regex::new(r#"\\Users\\[^\\]+\\"#).unwrap(), "\\Users\\*****\\"),
         (regex::Regex::new(r#"\\\\Users\\\\[^/]+\\\\"#).unwrap(), "\\\\Users\\\\*****\\\\"),
+        // P2P token replacements — token is sole auth for /p2p/<token>
+        (regex::Regex::new(r#"/p2p/[^\s/?#"\'&]+"#).unwrap(), "/p2p/[redacted]"),
+        (regex::Regex::new(r#"token=[^\s&"'<>]+"#).unwrap(), "token=[redacted]"),
     ]
 });
 
@@ -1098,4 +1101,34 @@ impl LogReader {
 
 fn is_xml_whitespace(byte: u8) -> bool {
     matches!(byte, b'\r' | b'\n' | b'\t' | b' ')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redact_p2p_path_token() {
+        let s = "http://1.2.3.4:1234/p2p/secret-token other";
+        let out = replace(s);
+        assert!(out.contains("/p2p/[redacted]"), "got {out}");
+        assert!(!out.contains("secret-token"), "got {out}");
+    }
+
+    #[test]
+    fn redact_p2p_query_token() {
+        let s = "https://pages.example.com/?token=secret123&foo=bar";
+        let out = replace(s);
+        assert!(out.contains("token=[redacted]"), "got {out}");
+        assert!(!out.contains("secret123"), "got {out}");
+    }
+
+    #[test]
+    fn redact_p2p_both_formats() {
+        let s = "link http://host/p2p/abc-123?token=xyz plus https://relay.example.com/p2p/550e8400-e29b-41d4-a716-446655440000";
+        let out = replace(s);
+        assert!(!out.contains("abc-123"), "got {out}");
+        assert!(!out.contains("550e8400"), "got {out}");
+        assert!(out.contains("/p2p/[redacted]"), "got {out}");
+    }
 }

@@ -34,6 +34,7 @@ mod lockfile;
 mod log_reader;
 mod metadata;
 mod mod_metadata;
+mod p2p_sync;
 mod persistent;
 mod server_list_pinger;
 mod shortcut;

@@ -390,13 +390,13 @@ fn collect_files(
     Ok(files)
 }
 
-struct SyncTargetPaths {
+pub(crate) struct SyncTargetPaths {
     files: Vec<SafePath>,
     folders: Vec<SafePath>,
 }
 
 impl SyncTargetPaths {
-    fn new(sync_targets: &SyncTargets) -> Self {
+    pub(crate) fn new(sync_targets: &SyncTargets) -> Self {
         let mut files = Vec::new();
         let mut folders = Vec::new();
 
@@ -415,7 +415,7 @@ impl SyncTargetPaths {
     }
 }
 
-fn matches_sync_target(rel_to_dot_minecraft: &SafePath, sync_targets: &SyncTargetPaths) -> bool {
+pub(crate) fn matches_sync_target(rel_to_dot_minecraft: &SafePath, sync_targets: &SyncTargetPaths) -> bool {
     for folder in &sync_targets.folders {
         if rel_to_dot_minecraft == folder || rel_to_dot_minecraft.starts_with(folder) {
             return true;
@@ -447,7 +447,7 @@ static IGNORED_FILES: LazyLock<FxHashSet<&'static str>> = LazyLock::new(|| {
     set
 });
 
-fn should_skip(rel: &SafePath, rel_to_dot_minecraft: Option<&SafePath>, options: &ExportOptions) -> bool {
+pub(crate) fn should_skip(rel: &SafePath, rel_to_dot_minecraft: Option<&SafePath>, options: &ExportOptions) -> bool {
     // Exclude log artifacts regardless of where they are in the instance.
     if !options.include_logs {
         if let Some(file_name) = rel.file_name() {
@@ -492,7 +492,7 @@ fn should_skip(rel: &SafePath, rel_to_dot_minecraft: Option<&SafePath>, options:
     }
 }
 
-fn is_export_junk(rel: &SafePath) -> bool {
+pub(crate) fn is_export_junk(rel: &SafePath) -> bool {
     let Some(file_name) = rel.file_name() else {
         return false;
     };

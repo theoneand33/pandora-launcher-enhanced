@@ -231,9 +231,18 @@ impl Page for InstancesPage {
         let select_group =
             div().child(Select::new(&self.group_dropdown).title_prefix(format!("{}: ", t::instance::group::label())));
 
+        let backend_for_join = self.backend_handle.clone();
+        let join_p2p = Button::new("join_p2p")
+            .icon(PandoraIcon::Download)
+            .label(t::instance::p2p::join_title())
+            .on_click(move |_, window, cx| {
+                crate::modals::p2p_join::open_p2p_join(backend_for_join.clone(), window, cx);
+            });
+
         h_flex()
             .gap_3()
             .child(create_instance)
+            .child(join_p2p)
             .child(
                 div()
                     .w_64()

@@ -4142,3 +4142,185 @@ hu = "Minecraft Windows kivétellel omlott össze — nézd meg a Naplókat"
 sv = "Minecraft kraschade med Windows-undantag — se Loggar"
 ru = "Minecraft аварийно завершился с исключением Windows — смотри Логи"
 
+[instance.p2p.share_title]
+en = "Share Instance"
+pl = "Udostępnij instancję"
+de = "Instanz teilen"
+hu = "Példány megosztása"
+sv = "Dela instans"
+ru = "Поделиться экземпляром"
+fr = "Partager l'instance"
+[instance.p2p.share_action]
+en = "Create Link"
+pl = "Utwórz link"
+de = "Link erstellen"
+hu = "Link létrehozása"
+sv = "Skapa länk"
+ru = "Создать ссылку"
+fr = "Créer un lien"
+[instance.p2p.join_title]
+en = "Join from Link"
+pl = "Dołącz z linku"
+de = "Aus Link beitreten"
+hu = "Csatlakozás linkből"
+sv = "Gå med via länk"
+ru = "Присоединиться по ссылке"
+fr = "Rejoindre via lien"
+[instance.p2p.join_action]
+en = "Download"
+pl = "Pobierz"
+de = "Herunterladen"
+hu = "Letöltés"
+sv = "Ladda ner"
+ru = "Скачать"
+fr = "Télécharger"
+[instance.p2p.link]
+en = "Share link"
+pl = "Link udostępniania"
+de = "Freigabelink"
+hu = "Megosztási link"
+sv = "Delningslänk"
+ru = "Ссылка"
+fr = "Lien de partage"
+[instance.p2p.target_name]
+en = "New instance name"
+pl = "Nazwa nowej instancji"
+de = "Name der neuen Instanz"
+hu = "Új példány neve"
+sv = "Namn för ny instans"
+ru = "Имя нового экземпляра"
+fr = "Nom de la nouvelle instance"
+[instance.p2p.progress]
+en = "Syncing instance"
+pl = "Synchronizacja instancji"
+de = "Instanz wird synchronisiert"
+hu = "Példány szinkronizálása"
+sv = "Synkar instans"
+ru = "Синхронизация"
+fr = "Synchronisation"
+[instance.p2p.error]
+en = "P2P sync failed"
+pl = "Błąd synchronizacji P2P"
+de = "P2P-Sync fehlgeschlagen"
+hu = "P2P szinkron hiba"
+sv = "P2P-synk misslyckades"
+ru = "Ошибка P2P"
+fr = "Échec de synchronisation P2P"
+[instance.p2p.copy]
+en = "Copy"
+pl = "Kopiuj"
+de = "Kopieren"
+hu = "Másolás"
+sv = "Kopiera"
+ru = "Копировать"
+fr = "Copier"
+[instance.p2p.copied]
+en = "Copied"
+pl = "Skopiowano"
+de = "Kopiert"
+hu = "Másolva"
+sv = "Kopierad"
+ru = "Скопировано"
+fr = "Copié"
+[instance.p2p.copy_link]
+en = "Copy link"
+pl = "Kopiuj link"
+de = "Link kopieren"
+hu = "Link másolása"
+sv = "Kopiera länk"
+ru = "Копировать ссылку"
+fr = "Copier le lien"
+[instance.p2p.relay_hint]
+en = "Leave relay empty for LAN, or set relay + pages URL in Settings for internet links."
+pl = "Zostaw relay puste dla LAN"
+de = "Relay leer lassen für LAN"
+hu = "Hagyd üresen LAN-hoz"
+sv = "Lämna relay tom för LAN"
+ru = "Оставьте пустым для LAN"
+fr = "Laissez vide pour LAN"
+[instance.p2p.expires]
+en = "Expires in ${remaining: i64} min — keep launcher open"
+pl = "Wygasa za ${remaining: i64} min — nie zamykaj launchera"
+de = "Läuft in ${remaining: i64} Min ab — Launcher offen lassen"
+hu = "Lejár ${remaining: i64} perc múlva — ne zárd be az indítót"
+sv = "Går ut om ${remaining: i64} min — håll startprogrammet öppet"
+ru = "Истекает через ${remaining: i64} мин — не закрывайте лаунчер"
+fr = "Expire dans ${remaining: i64} min — gardez le lanceur ouvert"
+
+[instance.p2p.unknown_instance]
+en = "Unknown instance"
+
+[instance.p2p.bundle_too_large]
+en = "Bundle too large (2 GiB cap)"
+
+[instance.p2p.uploading_to_relay]
+en = "Uploading to relay..."
+
+[instance.p2p.downloading_share]
+en = "Downloading share"
+
+[instance.p2p.extracting_share]
+en = "Extracting share..."
+
+[instance.p2p.collecting_files]
+en = "Collecting files..."
+
+[instance.p2p.writing_bundle]
+en = "Writing bundle"
+
+[instance.p2p.share_uploaded]
+en = "Share uploaded — link works from anywhere"
+
+[instance.p2p.share_ready]
+en = "Share ready — keep launcher open"
+
+[instance.p2p.share_ready_local]
+en = "Share ready (local fallback) — keep launcher open"
+
+[instance.p2p.import_done]
+en = "P2P import done: ${name: String}"
+
+[instance.p2p.bind_failed]
+en = "Bind failed: ${error: String}"
+
+[settings.p2p.title]
+en = "P2P Sync"
+pl = "Synchronizacja P2P"
+de = "P2P-Sync"
+hu = "P2P szinkron"
+sv = "P2P-synk"
+ru = "P2P-синхронизация"
+fr = "Sync P2P"
+[settings.p2p.relay_url]
+en = "Relay URL (Coolify: https://relay.example.com)"
+pl = "URL przekaźnika"
+de = "Relay-URL"
+hu = "Relay URL"
+sv = "Relay-URL"
+ru = "URL релея"
+fr = "URL du relais"
+[settings.p2p.pages_url]
+en = "Pages URL (GitHub: https://user.github.io/pandora-sync)"
+pl = "URL strony"
+de = "Pages-URL"
+hu = "Pages URL"
+sv = "Pages-URL"
+ru = "URL страниц"
+fr = "URL Pages"
+[settings.p2p.hint]
+en = "Separate site lives in ~/pandora-sync. See its README for deploy."
+pl = "Witryna w ~/pandora-sync"
+de = "Website in ~/pandora-sync"
+hu = "Webhely: ~/pandora-sync"
+sv = "Webbplats i ~/pandora-sync"
+ru = "Сайт в ~/pandora-sync"
+fr = "Site dans ~/pandora-sync"
+[settings.p2p.invalid_url]
+en = "Relay or Pages URL must start with http:// or https://"
+pl = "URL przekaźnika lub Pages musi zaczynać się od http:// lub https://"
+de = "Relay- oder Pages-URL muss mit http:// oder https:// beginnen"
+hu = "A relay vagy Pages URL http:// vagy https:// előtaggal kezdődjön"
+sv = "Relay- eller Pages-URL måste börja med http:// eller https://"
+ru = "URL релея или Pages должен начинаться с http:// или https://"
+fr = "L'URL du relais ou de Pages doit commencer par http:// ou https://"
+

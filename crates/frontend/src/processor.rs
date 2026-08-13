@@ -261,6 +261,31 @@ impl Processor {
                     }
                 });
             },
+            MessageToFrontend::P2pShareCreated { .. } => {
+                let backend_handle = self.data.backend_handle.clone();
+                self.with_main_window(message, cx, move |_, message, window, cx| {
+                    let MessageToFrontend::P2pShareCreated {
+                        token,
+                        links,
+                        expires_at_ms,
+                    } = message
+                    else {
+                        unreachable!();
+                    };
+                    // Close the progress modal before showing the share links.
+                    // `show_modal` (generic.rs) auto-closes 2s after finish.
+                    // Without this, it would pop the new share dialog instead.
+                    window.close_dialog(cx);
+                    crate::modals::p2p_show::open_p2p_show(
+                        links,
+                        token,
+                        expires_at_ms,
+                        backend_handle.clone(),
+                        window,
+                        cx,
+                    );
+                });
+            },
             MessageToFrontend::OpenOrFocusMainWindow => {
                 self.quit_coordinator.set_can_quit(false);
 

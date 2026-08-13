@@ -2486,6 +2486,46 @@ impl BackendState {
                 self.login_flow(&modal_action, Some(account)).await;
                 modal_action.set_finished();
             },
+            MessageToBackend::CreateP2pShare {
+                id,
+                options,
+                modal_action,
+            } => {
+                let backend = self.clone();
+                tokio::task::spawn(async move {
+                    crate::p2p_sync::create_p2p_share(backend, id, options, modal_action).await;
+                });
+            },
+            MessageToBackend::JoinP2pShare {
+                link,
+                target_name,
+                modal_action,
+            } => {
+                let backend = self.clone();
+                tokio::task::spawn(async move {
+                    crate::p2p_sync::join_p2p_share(backend, link, target_name, modal_action).await;
+                });
+            },
+            MessageToBackend::CancelP2pShare { token } => {
+                tokio::task::spawn(async move { crate::p2p_sync::cancel_p2p_share(&token).await });
+            },
+            MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
+                let orig_relay = relay_url.clone();
+                let orig_pages = pages_url.clone();
+                let relay_url = relay_url.filter(|u| {
+                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                });
+                let pages_url = pages_url.filter(|u| {
+                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                });
+                if orig_relay.is_some() && relay_url.is_none() || orig_pages.is_some() && pages_url.is_none() {
+                    self.send.send_warning(t::settings::p2p::invalid_url());
+                }
+                self.config.write().modify(|cfg| {
+                    cfg.p2p_relay_url = relay_url;
+                    cfg.p2p_pages_url = pages_url;
+                });
+            },
             MessageToBackend::Quit => {
                 self.should_quit.store(true, Ordering::Relaxed);
             },

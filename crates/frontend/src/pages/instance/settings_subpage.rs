@@ -1495,6 +1495,20 @@ impl Render for InstanceSettingsSubpage {
                     }),
             )
             .child(
+                Button::new("p2p_share")
+                    .label(t::instance::p2p::share_action())
+                    .icon(PandoraIcon::Link)
+                    .overflow_x_hidden()
+                    .on_click({
+                        let instance = self.instance.clone();
+                        let backend_handle = self.backend_handle.clone();
+                        move |_: &ClickEvent, window, cx| {
+                            let id = instance.read(cx).id;
+                            crate::modals::p2p_share::open_p2p_share(id, backend_handle.clone(), window, cx);
+                        }
+                    }),
+            )
+            .child(
                 Button::new("duplicate")
                     .label(t::instance::duplicate_instance())
                     .icon(PandoraIcon::Copy)
