@@ -22,7 +22,7 @@ use crate::{
 struct P2pShare {
     path: Option<PathBuf>,
     handle: tokio::task::JoinHandle<()>,
-    relay_url: Option<String>,
+    relay_url: Option<Arc<str>>,
 }
 
 static SHARES: std::sync::LazyLock<RwLock<HashMap<Arc<str>, P2pShare>>> =
@@ -138,12 +138,12 @@ pub async fn create_p2p_share(
     let pages_url = backend.config.write().get().p2p_pages_url.clone();
 
     if let Some(relay) = relay_url.filter(|u| !u.trim().is_empty()) {
-        let relay = relay.trim_end_matches('/').to_string();
+        let relay: Arc<str> = Arc::from(relay.trim_end_matches('/').to_string());
         let token_for_upload = Arc::clone(&token);
         let bundle_for_upload = bundle_path.clone();
         let backend_for_upload = Arc::clone(&backend);
         let modal_for_upload = modal_action.clone();
-        let relay_clone = relay.clone();
+        let relay_clone = Arc::clone(&relay);
         let pages_clone = pages_url.clone();
 
         tokio::task::spawn(async move {

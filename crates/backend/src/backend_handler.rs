@@ -2518,6 +2518,8 @@ impl BackendState {
                         .map(|p| {
                             (p.scheme() == "http" || p.scheme() == "https")
                                 && p.host_str().is_some()
+                                && p.username().is_empty()
+                                && p.password().is_none()
                                 && p.query().is_none()
                                 && p.fragment().is_none()
                         })
@@ -2528,6 +2530,8 @@ impl BackendState {
                         .map(|p| {
                             (p.scheme() == "http" || p.scheme() == "https")
                                 && p.host_str().is_some()
+                                && p.username().is_empty()
+                                && p.password().is_none()
                                 && p.query().is_none()
                                 && p.fragment().is_none()
                         })
