@@ -31,25 +31,67 @@ fn shares() -> &'static RwLock<HashMap<Arc<str>, P2pShare>> {
     &SHARES
 }
 
+struct LimitedWriter<W> {
+    inner: W,
+    written: u64,
+    limit: u64,
+}
+
+impl<W> LimitedWriter<W> {
+    fn new(inner: W, limit: u64) -> Self {
+        Self {
+            inner,
+            written: 0,
+            limit,
+        }
+    }
+}
+
+impl<W: std::io::Write + std::io::Seek> std::io::Write for LimitedWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let pos = self.inner.stream_position().unwrap_or(self.written);
+        if pos.saturating_add(buf.len() as u64) > self.limit {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bundle too large (2 GiB cap)"));
+        }
+        let n = self.inner.write(buf)?;
+        let end = pos.saturating_add(n as u64);
+        if end > self.written {
+            self.written = end;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<W: std::io::Seek> std::io::Seek for LimitedWriter<W> {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        let p = self.inner.seek(pos)?;
+        if p > self.written {
+            self.written = p;
+        }
+        Ok(p)
+    }
+}
+
 pub async fn create_p2p_share(
     backend: Arc<BackendState>,
     id: InstanceID,
     options: ExportOptions,
     modal_action: ModalAction,
 ) {
-    let (root_path, dot_minecraft_path, sync_targets) = {
+    let (root_path, dot_minecraft_path) = {
         let guard = backend.instance_state.read();
         let Some(inst) = guard.instances.get(id) else {
             modal_action.set_error_message("Unknown instance".into());
             modal_action.set_finished();
             return;
         };
-        (
-            Arc::clone(&inst.root_path),
-            Arc::clone(&inst.dot_minecraft_path),
-            backend.config.write().get().sync_targets.clone(),
-        )
+        (Arc::clone(&inst.root_path), Arc::clone(&inst.dot_minecraft_path))
     };
+    let sync_targets = backend.config.write().get().sync_targets.clone();
 
     let token: Arc<str> = Uuid::new_v4().to_string().into();
     let token_clone = Arc::clone(&token);
@@ -157,7 +199,7 @@ pub async fn create_p2p_share(
                     let token_exp = Arc::clone(&token_for_upload);
                     tokio::task::spawn(async move {
                         tokio::time::sleep(Duration::from_secs(30 * 60)).await;
-                        cancel_share_inner(&token_exp);
+                        cancel_share_inner(&token_exp).await;
                     });
 
                     let mut links: Vec<Arc<str>> = Vec::new();
@@ -186,7 +228,6 @@ pub async fn create_p2p_share(
                         token_for_upload.clone(),
                         bundle_for_upload.clone(),
                         expires_at_ms,
-                        pages_clone,
                     )
                     .await
                     {
@@ -228,7 +269,7 @@ pub async fn create_p2p_share(
     }
 
     // Local-only mode
-    let links = match create_local_share(&backend, Arc::clone(&token), bundle_path, expires_at_ms, pages_url).await {
+    let links = match create_local_share(&backend, Arc::clone(&token), bundle_path, expires_at_ms).await {
         Ok(l) => l,
         Err(e) => {
             modal_action.set_error_message(format!("bind failed: {e}").into());
@@ -250,7 +291,6 @@ async fn create_local_share(
     token: Arc<str>,
     bundle_path: PathBuf,
     _expires_at_ms: i64,
-    _pages_url: Option<String>,
 ) -> Result<Arc<[Arc<str>]>, String> {
     let p2p_dir = backend.directories.temp_dir.join("p2p");
     let _ = std::fs::create_dir_all(&p2p_dir);
@@ -283,7 +323,7 @@ async fn create_local_share(
     let token_exp = Arc::clone(&token);
     tokio::task::spawn(async move {
         tokio::time::sleep(Duration::from_secs(30 * 60)).await;
-        cancel_share_inner(&token_exp);
+        cancel_share_inner(&token_exp).await;
     });
 
     Ok(links.into())
@@ -362,7 +402,8 @@ fn create_bundle_blocking(
     write_tracker.notify();
 
     let file = File::create(&bundle_path).map_err(|e| e.to_string())?;
-    let mut zip = ZipWriter::new(file);
+    let limited = LimitedWriter::new(file, 2 * 1024 * 1024 * 1024);
+    let mut zip = ZipWriter::new(limited);
     let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     let mut buf = vec![0u8; 128 * 1024];
     for (abs, rel) in &files {
@@ -372,63 +413,101 @@ fn create_bundle_blocking(
             return Err("Cancelled".into());
         }
         let mut input = File::open(abs).map_err(|e| e.to_string())?;
-        zip.start_file(rel.as_str(), opts).map_err(|e| e.to_string())?;
+        if let Err(e) = zip.start_file(rel.as_str(), opts) {
+            let msg = e.to_string();
+            if msg.contains("Bundle too large") {
+                drop(zip);
+                let _ = std::fs::remove_file(&bundle_path);
+                return Err(msg);
+            }
+            drop(zip);
+            let _ = std::fs::remove_file(&bundle_path);
+            return Err(msg);
+        }
         loop {
             use std::io::Read;
             let n = input.read(&mut buf).map_err(|e| e.to_string())?;
             if n == 0 {
                 break;
             }
-            zip.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+            if let Err(e) = zip.write_all(&buf[..n]) {
+                let msg = e.to_string();
+                drop(zip);
+                let _ = std::fs::remove_file(&bundle_path);
+                return Err(msg);
+            }
         }
         write_tracker.add_count(1);
         write_tracker.notify();
     }
-    zip.finish().map_err(|e| e.to_string())?;
+    if let Err(e) = zip.finish() {
+        let msg = e.to_string();
+        let _ = std::fs::remove_file(&bundle_path);
+        return Err(msg);
+    }
     write_tracker.set_finished(ProgressTrackerFinishType::Normal);
     Ok(bundle_path)
 }
 
 async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_path: PathBuf) {
     let expected_path = format!("/p2p/{token}");
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(16));
+    let mut join_set: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
     loop {
-        let (mut stream, _addr) = match listener.accept().await {
-            Ok(v) => v,
-            Err(e) => {
-                log::warn!("p2p accept failed: {e}");
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                continue;
-            },
-        };
-        let expected = expected_path.clone();
-        let path_clone = bundle_path.clone();
-        tokio::task::spawn(async move {
-            let mut buf = vec![0u8; 8192];
-            use tokio::io::AsyncReadExt;
-            // Read until end of headers (\r\n\r\n) or 8k cap
-            let mut total = 0usize;
-            let header_end;
-            loop {
-                if total >= buf.len() {
-                    let _ = write_status(&mut stream, 404).await;
-                    return;
-                }
-                let Ok(n) = stream.read(&mut buf[total..]).await else {
-                    return;
+        tokio::select! {
+            accept_res = listener.accept() => {
+                let (mut stream, _addr) = match accept_res {
+                    Ok(v) => v,
+                    Err(e) => {
+                        log::warn!("p2p accept failed: {e}");
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        continue;
+                    },
                 };
-                if n == 0 {
-                    return;
-                }
-                total += n;
-                if let Some(pos) = find_header_end(&buf[..total]) {
-                    header_end = pos;
-                    break;
-                }
-                if total == buf.len() {
-                    let _ = write_status(&mut stream, 404).await;
-                    return;
-                }
-            }
+                let permit = match semaphore.clone().try_acquire_owned() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        let _ = write_status(&mut stream, 503).await;
+                        continue;
+                    },
+                };
+                let expected = expected_path.clone();
+                let path_clone = bundle_path.clone();
+                join_set.spawn(async move {
+                    let _permit = permit;
+                    let mut buf = vec![0u8; 8192];
+                    use tokio::io::AsyncReadExt;
+                    // Read until end of headers (\r\n\r\n) or 8k cap with 5s timeout
+                    let header_end: usize = match tokio::time::timeout(Duration::from_secs(5), async {
+                        let mut total = 0usize;
+                        loop {
+                            if total >= buf.len() {
+                                let _ = write_status(&mut stream, 404).await;
+                                return None::<usize>;
+                            }
+                            let n = match stream.read(&mut buf[total..]).await {
+                                Ok(n) => n,
+                                Err(_) => return None,
+                            };
+                            if n == 0 {
+                                return None;
+                            }
+                            total += n;
+                            if let Some(pos) = find_header_end(&buf[..total]) {
+                                return Some(pos);
+                            }
+                            if total == buf.len() {
+                                let _ = write_status(&mut stream, 404).await;
+                                return None;
+                            }
+                        }
+                    })
+                    .await
+                    {
+                        Ok(Some(pos)) => pos,
+                        Ok(None) => return,
+                        Err(_) => return,
+                    };
             let mut headers = [httparse::EMPTY_HEADER; 32];
             let mut req = httparse::Request::new(&mut headers);
             let Ok(httparse::Status::Complete(_)) = req.parse(&buf[..header_end]) else {
@@ -463,7 +542,10 @@ async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_pa
                 return;
             };
             let _ = tokio::io::copy(&mut file, &mut stream).await;
-        });
+                });
+            },
+            _ = join_set.join_next(), if !join_set.is_empty() => {},
+        }
     }
 }
 
@@ -476,6 +558,10 @@ async fn write_status(stream: &mut tokio::net::TcpStream, code: u16) -> std::io:
     let resp = match code {
         405 => {
             b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 18\r\nConnection: close\r\n\r\nMethod Not Allowed"
+                as &[u8]
+        },
+        503 => {
+            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 19\r\nConnection: close\r\n\r\nService Unavailable"
                 as &[u8]
         },
         _ => b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found",
@@ -652,6 +738,7 @@ pub async fn join_p2p_share(
                     modal_action.set_error_message("Bundle too large (2 GiB cap)".into());
                     modal_action.set_finished();
                     tracker.set_finished(ProgressTrackerFinishType::Error);
+                    drop(file);
                     let _ = tokio::fs::remove_file(&tmp_file).await;
                     return;
                 }
@@ -659,6 +746,7 @@ pub async fn join_p2p_share(
                     modal_action.set_error_message(format!("write failed: {e}").into());
                     modal_action.set_finished();
                     tracker.set_finished(ProgressTrackerFinishType::Error);
+                    drop(file);
                     let _ = tokio::fs::remove_file(&tmp_file).await;
                     return;
                 }
@@ -669,6 +757,7 @@ pub async fn join_p2p_share(
                 modal_action.set_error_message(format!("stream error: {e}").into());
                 modal_action.set_finished();
                 tracker.set_finished(ProgressTrackerFinishType::Error);
+                drop(file);
                 let _ = tokio::fs::remove_file(&tmp_file).await;
                 return;
             },
@@ -743,15 +832,16 @@ pub async fn join_p2p_share(
     }
 }
 
-pub fn cancel_p2p_share(token: &str) {
-    cancel_share_inner(token);
+pub async fn cancel_p2p_share(token: &str) {
+    cancel_share_inner(token).await;
 }
 
-fn cancel_share_inner(token: &str) {
-    if let Some(share) = shares().write().remove(token) {
+async fn cancel_share_inner(token: &str) {
+    let share = { shares().write().remove(token) };
+    if let Some(share) = share {
         share.handle.abort();
         if let Some(path) = share.path {
-            let _ = std::fs::remove_file(&path);
+            let _ = tokio::fs::remove_file(&path).await;
         }
         log::trace!("p2p share {} cancelled", &token.chars().take(8).collect::<String>());
     }

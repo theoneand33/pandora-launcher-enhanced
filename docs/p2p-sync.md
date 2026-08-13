@@ -52,7 +52,7 @@ Future: `pandora-sync://` custom scheme that opens the launcher via OS URL handl
 2. Frontend sends `MessageToBackend::JoinP2pShare { link, target_name, modal_action }`.
 3. Backend `p2p_sync::join_p2p_share`:
    a. Validate link is http/https, parse with `url::Url`. Enforce `SafePath` on zip entry paths later; reject absolute paths. `SafePath` already rejects `..` traversal.
-   b. Download with `backend.http_client` streaming to `temp/p2p/download/<token>.zip` via `tokio::fs::File`. Support cancel via `modal_action.has_requested_cancel()`. Show ProgressTracker total from Content-Length.
+    b. Download with `backend.http_client` streaming to a unique temporary ZIP under `temp/p2p/download` (UUID-based filename, e.g. `temp/p2p/download/<uuid>.zip`) via `tokio::fs::File`. Support cancel via `modal_action.has_requested_cancel()`. Show ProgressTracker total from Content-Length.
    c. Verify file size limit (2 GiB hard cap) to avoid OOM. Unpack via `spawn_blocking` to a new instance dir `instances/<name>/.minecraft` (create folder). Zip bomb guards: 100k entry cap, 4 GiB uncompressed cap.
    d. Finish `ModalAction`, send success notification, send `Refresh`.
 

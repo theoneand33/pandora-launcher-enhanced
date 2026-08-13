@@ -2493,7 +2493,7 @@ impl BackendState {
                 });
             },
             MessageToBackend::CancelP2pShare { token } => {
-                tokio::task::spawn_blocking(move || crate::p2p_sync::cancel_p2p_share(&token));
+                tokio::task::spawn(async move { crate::p2p_sync::cancel_p2p_share(&token).await });
             },
             MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
                 let orig_relay = relay_url.clone();
