@@ -22,6 +22,7 @@ use crate::{
 struct P2pShare {
     path: Option<PathBuf>,
     handle: tokio::task::JoinHandle<()>,
+    relay_url: Option<String>,
 }
 
 static SHARES: std::sync::LazyLock<RwLock<HashMap<Arc<str>, P2pShare>>> =
@@ -201,12 +202,36 @@ pub async fn create_p2p_share(
                         P2pShare {
                             path: None,
                             handle: tokio::task::spawn(async {}),
+                            relay_url: Some(relay_clone.clone()),
                         },
                     );
                     let token_exp = Arc::clone(&token_for_upload);
+                    let backend_exp = Arc::clone(&backend_for_upload);
                     tokio::task::spawn(async move {
                         tokio::time::sleep(Duration::from_secs(30 * 60)).await;
-                        cancel_share_inner(&token_exp).await;
+                        let share = cancel_share_inner(&token_exp).await;
+                        if let Some(s) = share
+                            && let Some(relay) = s.relay_url
+                        {
+                            let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token_exp);
+                            match backend_exp.http_client.delete(&url).send().await {
+                                Ok(r) if r.status().is_success() => {},
+                                Ok(r) => {
+                                    log::error!("failed to delete p2p share from relay: relay returned {}", r.status());
+                                    backend_exp.send.send_error(format!(
+                                        "Failed to delete share from relay: relay returned {}",
+                                        r.status()
+                                    ));
+                                },
+                                Err(e) => {
+                                    log::error!(
+                                        "failed to delete p2p share from relay: {}",
+                                        redact_error(&e.to_string())
+                                    );
+                                    backend_exp.send.send_error("Failed to delete share from relay");
+                                },
+                            }
+                        }
                     });
 
                     let mut links: Vec<Arc<str>> = Vec::new();
@@ -324,6 +349,7 @@ async fn create_local_share(
         P2pShare {
             path: Some(bundle_path),
             handle,
+            relay_url: None,
         },
     );
 
@@ -874,22 +900,40 @@ pub async fn cancel_p2p_share(token: &str) {
 }
 
 pub async fn cancel_p2p_share_with_backend(backend: Arc<BackendState>, token: Arc<str>) {
-    cancel_share_inner(&token).await;
-    let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
-    if let Some(relay) = relay {
-        let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-        let _ = backend.http_client.delete(&url).send().await;
+    let share = cancel_share_inner(&token).await;
+    let Some(share) = share else {
+        return;
+    };
+    let Some(relay) = share.relay_url else {
+        return;
+    };
+    let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
+    match backend.http_client.delete(&url).send().await {
+        Ok(r) if r.status().is_success() => {},
+        Ok(r) => {
+            log::error!("failed to delete p2p share from relay: relay returned {}", r.status());
+            backend
+                .send
+                .send_error(format!("Failed to delete share from relay: relay returned {}", r.status()));
+        },
+        Err(e) => {
+            log::error!("failed to delete p2p share from relay: {}", redact_error(&e.to_string()));
+            backend.send.send_error("Failed to delete share from relay");
+        },
     }
 }
 
-async fn cancel_share_inner(token: &str) {
+async fn cancel_share_inner(token: &str) -> Option<P2pShare> {
     let share = { shares().write().remove(token) };
     if let Some(share) = share {
         share.handle.abort();
-        if let Some(path) = share.path {
-            let _ = tokio::fs::remove_file(&path).await;
+        if let Some(path) = &share.path {
+            let _ = tokio::fs::remove_file(path).await;
         }
         log::trace!("p2p share {} cancelled", &token.chars().take(8).collect::<String>());
+        Some(share)
+    } else {
+        None
     }
 }
 

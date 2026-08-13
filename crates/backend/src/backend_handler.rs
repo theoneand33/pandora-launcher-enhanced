@@ -2514,10 +2514,24 @@ impl BackendState {
                 let orig_relay = relay_url.clone();
                 let orig_pages = pages_url.clone();
                 let relay_url = relay_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                    url::Url::parse(u)
+                        .map(|p| {
+                            (p.scheme() == "http" || p.scheme() == "https")
+                                && p.host_str().is_some()
+                                && p.query().is_none()
+                                && p.fragment().is_none()
+                        })
+                        .unwrap_or(false)
                 });
                 let pages_url = pages_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                    url::Url::parse(u)
+                        .map(|p| {
+                            (p.scheme() == "http" || p.scheme() == "https")
+                                && p.host_str().is_some()
+                                && p.query().is_none()
+                                && p.fragment().is_none()
+                        })
+                        .unwrap_or(false)
                 });
                 if (orig_relay.is_some() && relay_url.is_none()) || (orig_pages.is_some() && pages_url.is_none()) {
                     self.send.send_warning(t::settings::p2p::invalid_url());
