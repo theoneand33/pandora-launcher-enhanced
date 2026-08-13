@@ -16,7 +16,7 @@ Non-goal: continuous background sync. Non-goal: DHT or libp2p.
 
 ## Choice — local HTTP bundle + relay for domain
 
-* Reuse the export pipeline (`export.rs:collect_files`, `write_zip`). A share is a temporary zip built from an instance with an `ExportOptions` filter. The host either serves the zip over an ephemeral HTTP server on a random port (LAN) or uploads it to a relay.
+* Bundle via `p2p_sync.rs:create_bundle_blocking` (same filter as `export.rs`, `follow_links(false)`, skip symlinks). A share is a temporary zip built from an instance with an `ExportOptions` filter. The host either serves the zip over an ephemeral HTTP server on a random port (LAN) or uploads it to a relay.
 * ponytail ceiling: two modes. LAN mode needs no server. Domain mode uses the separate website (this doc's split). The launcher never requires the domain to be a reverse proxy to the host; that was V1. Correct split: the domain website is independent.
 * Relay mode (separate website): launcher does `PUT /p2p/<token>` to `p2p_relay_url` (Coolify). The relay stores the zip 30 min. Link becomes `https://relay.example.com/p2p/<token>` and (optionally) `https://pages.example.com/?token=<token>` (GitHub Pages). The Pages site is static and only fetches from the relay. No binary touches GitHub.
 
@@ -38,9 +38,9 @@ Future: `pandora-sync://` custom scheme that opens the launcher via OS URL handl
 
 1. Frontend modal: pick Instance, tick parts (mods, config, resourcepacks, shaderpacks, saves, screenshots, etc). Reuse the same check boxes as `ExportInstance` (8 toggles plus `include_synced`).
 2. Frontend sends `MessageToBackend::CreateP2pShare { id, options, modal_action }`.
-3. Backend `p2p_sync::create_share`:
+3. Backend `p2p_sync::create_p2p_share`:
    a. Lock `instance_state`, snapshot `InstanceConfiguration` and root paths. Release lock.
-   b. `collect_files` on `spawn_blocking` (same filter as export, `follow_links(false)`, skip symlinks). Write filtered files to `temp/p2p/<token>.zip` with `write_zip`. Report progress through `ModalAction` trackers.
+   b. `create_bundle_blocking` on `spawn_blocking` (same filter as export, `follow_links(false)`, skip symlinks). Write filtered files to `temp/p2p/<token>.zip`. Report progress through `ModalAction` trackers.
    c. Bind `tokio::net::TcpListener` to `0.0.0.0:0`. Get port. Store entry `(token -> PathBuf)` in a process-wide `RwLock<HashMap>` with expiry task.
    d. Spawn `serve_p2p` task: loop `accept` with backoff on error, parse request head (8 KiB) with `httparse`, check `GET /p2p/<token>`. On match, stream the file with `tokio::fs::File`. On mismatch, 404. Log only token prefix (first 8 chars).
    e. Build link(s): one per local IPv4 (`local_ipv4s()`) plus `http://127.0.0.1:<port>/p2p/<token>` for local test. Send `MessageToFrontend::P2pShareCreated { token, links, expires_at }`. Also show notification "Share ready. Link expires in 30 min. Keep launcher open."
@@ -50,7 +50,7 @@ Future: `pandora-sync://` custom scheme that opens the launcher via OS URL handl
 
 1. Frontend modal: paste link (or token), optional instance name for new instance. Deferred: update of existing instance and merge vs replace toggle.
 2. Frontend sends `MessageToBackend::JoinP2pShare { link, target_name, modal_action }`.
-3. Backend `p2p_sync::join_share`:
+3. Backend `p2p_sync::join_p2p_share`:
    a. Validate link is http/https, parse with `url::Url`. Enforce `SafePath` on zip entry paths later; reject absolute paths. `SafePath` already rejects `..` traversal.
    b. Download with `backend.http_client` streaming to `temp/p2p/download/<token>.zip` via `tokio::fs::File`. Support cancel via `modal_action.has_requested_cancel()`. Show ProgressTracker total from Content-Length.
    c. Verify file size limit (2 GiB hard cap) to avoid OOM. Unpack via `spawn_blocking` to a new instance dir `instances/<name>/.minecraft` (create folder). Zip bomb guards: 100k entry cap, 4 GiB uncompressed cap.
@@ -82,6 +82,7 @@ The domain website lives outside the launcher repo and has two deployment target
 * **Coolify (`p2p_relay_url`):** self-hosted relay that stores zips. Spec: `PUT /p2p/<token>` stores (2 GiB cap, TTL 30 min), `GET /p2p/<token>` returns `application/zip`, `DELETE /p2p/<token>` optional. Implement as one binary (Axum) or Caddy + File API. See `~/pandora-sync/README.md` and `~/pandora-sync/relay/` for `docker-compose.yml`.
 
 Launcher config (`BackendConfig`):
+
 ```json
 { "p2p_relay_url": "https://relay.example.com", "p2p_pages_url": "https://username.github.io/pandora-sync" }
 ```
@@ -91,7 +92,7 @@ Launcher config (`BackendConfig`):
 ## Steps to ship
 
 1. `crates/bridge/src/message.rs`: `CreateP2pShare`, `JoinP2pShare { link, target_name }`, `CancelP2pShare`, and `P2pShareCreated { token, links, expires_at }`.
-2. `crates/backend/src/p2p_sync.rs`: `create_share`, `join_share`, `cancel_share`, `serve_p2p` (httparse + tokio fs) plus relay upload branch.
+2. `crates/backend/src/p2p_sync.rs`: `create_p2p_share`, `join_p2p_share`, `cancel_p2p_share`, `serve_p2p` (httparse + tokio fs) plus relay upload branch.
 3. `crates/schema/src/backend_config.rs`: `p2p_relay_url` + `p2p_pages_url`.
 4. `~/pandora-sync/` (separate git repo): `index.html` + `README.md` + `relay/` (Coolify). Deploy `index.html` to Pages, `relay/` to Coolify.
 5. `crates/frontend/src/modals/p2p_sync.rs` + `processor.rs` plumbing.

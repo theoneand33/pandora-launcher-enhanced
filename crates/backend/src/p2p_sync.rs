@@ -315,7 +315,11 @@ fn create_bundle_blocking(
     let sync_target_paths = SyncTargetPaths::new(sync_targets);
     let mut files: Vec<(PathBuf, SafePath)> = Vec::new();
     let walker = WalkDir::new(root_path).follow_links(false);
-    for entry in walker.into_iter().filter_map(|e| e.ok()) {
+    for entry in walker.into_iter() {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => return Err(format!("walk failed: {e}")),
+        };
         if entry.file_type().is_dir() {
             continue;
         }
