@@ -272,6 +272,10 @@ impl Processor {
                     else {
                         unreachable!();
                     };
+                    // Close the progress modal before showing the share links.
+                    // `show_modal` (generic.rs) auto-closes 2s after finish.
+                    // Without this, it would pop the new share dialog instead.
+                    window.close_dialog(cx);
                     crate::modals::p2p_show::open_p2p_show(
                         links,
                         token,
