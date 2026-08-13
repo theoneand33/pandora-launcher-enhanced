@@ -88,6 +88,7 @@ pub async fn create_p2p_share(
     id: InstanceID,
     options: ExportOptions,
     modal_action: ModalAction,
+    use_relay: bool,
 ) {
     let (root_path, dot_minecraft_path) = {
         let guard = backend.instance_state.read();
@@ -134,8 +135,13 @@ pub async fn create_p2p_share(
 
     let expires_at_ms = chrono::Utc::now().timestamp_millis() + Duration::from_secs(30 * 60).as_millis() as i64;
 
-    let relay_url = backend.config.write().get().p2p_relay_url.clone();
-    let pages_url = backend.config.write().get().p2p_pages_url.clone();
+    // ponytail: checkbox drives relay use; hardcoded relay for internet sharing
+    let relay_url: Option<String> = if use_relay {
+        Some("https://relay.theoneand33.dev".to_string())
+    } else {
+        None
+    };
+    let pages_url: Option<String> = None;
 
     if let Some(relay) = relay_url.filter(|u| !u.trim().is_empty()) {
         let relay: Arc<str> = Arc::from(relay.trim_end_matches('/').to_string());

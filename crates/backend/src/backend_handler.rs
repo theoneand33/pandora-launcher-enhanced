@@ -2490,10 +2490,11 @@ impl BackendState {
                 id,
                 options,
                 modal_action,
+                use_relay,
             } => {
                 let backend = self.clone();
                 tokio::task::spawn(async move {
-                    crate::p2p_sync::create_p2p_share(backend, id, options, modal_action).await;
+                    crate::p2p_sync::create_p2p_share(backend, id, options, modal_action, use_relay).await;
                 });
             },
             MessageToBackend::JoinP2pShare {

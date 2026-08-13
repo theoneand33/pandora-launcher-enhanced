@@ -355,6 +355,7 @@ pub enum MessageToBackend {
         id: InstanceID,
         options: ExportOptions,
         modal_action: ModalAction,
+        use_relay: bool,
     },
     JoinP2pShare {
         link: String,
