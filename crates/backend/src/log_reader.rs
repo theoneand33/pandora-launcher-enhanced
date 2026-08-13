@@ -10,10 +10,12 @@ use bridge::{
     message::{GameOutputMsg, MessageToFrontend},
 };
 use chrono::Utc;
-use memchr;
 use regex::Regex;
 use std::sync::LazyLock;
 use thiserror::Error;
+
+// Maximum size for accumulated buffers to prevent unbounded growth
+const MAX_ACCUMULATOR_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 static REPLACEMENTS: LazyLock<[(Regex, &'static str); 7]> = LazyLock::new(|| {
     [
@@ -88,6 +90,7 @@ pub fn start_game_output(stdout: PipeReader, stderr: Option<PipeReader>, fronten
         };
         let mut log_input = LogInput {
             buffer: Vec::new(),
+            pending_markup: Vec::new(),
             reader,
         };
 
@@ -152,6 +155,8 @@ enum HandleOutputError {
     UnmatchedElement(String),
     #[error("Receiver closed")]
     ReceiverClosed,
+    #[error("Invalid attribute: {0}")]
+    InvalidAttribute(String),
 }
 
 struct LogReader {
@@ -160,9 +165,10 @@ struct LogReader {
     empty_message: Arc<str>,
 }
 
-struct LogInput {
+struct LogInput<R: BufRead> {
     buffer: Vec<u8>,
-    reader: BufReader<PipeReader>,
+    pending_markup: Vec<u8>,
+    reader: R,
 }
 
 #[derive(Debug)]
@@ -198,7 +204,7 @@ enum NamedAttributeKey {
 }
 
 impl LogReader {
-    pub fn handle_output(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    pub fn handle_output<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         loop {
             let available = input.reader.fill_buf()?;
             if available.is_empty() {
@@ -258,7 +264,7 @@ impl LogReader {
         }
     }
 
-    fn read_markup(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_markup<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         let available = input.reader.fill_buf()?;
         if available.is_empty() {
             return Err(HandleOutputError::UnexpectedEof);
@@ -282,7 +288,7 @@ impl LogReader {
         Ok(())
     }
 
-    fn read_bang(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_bang<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         let available = input.reader.fill_buf()?;
         if available.is_empty() {
             return Err(HandleOutputError::UnexpectedEof);
@@ -290,12 +296,11 @@ impl LogReader {
         match available[0] {
             b'[' => self.read_cdata(input),
             b'-' => self.read_comment(input),
-            b'D' | b'd' => Self::skip_balanced_angle_brackets(1, input),
             _ => Self::skip_balanced_angle_brackets(1, input),
         }
     }
 
-    fn read_cdata(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_cdata<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         // consume '['
         input.reader.consume(1);
         // need "CDATA[" (6 bytes)
@@ -315,15 +320,12 @@ impl LogReader {
         }
         // collect until "]]>"
         let content = Self::collect_until(input, b"]]>")?;
-        // apply_cdata expects "[CDATA[" prefix
-        let mut full = Vec::with_capacity(7 + content.len());
-        full.extend_from_slice(b"[CDATA[");
-        full.extend_from_slice(&content);
-        self.apply_cdata(&full)?;
+        // prefix already validated, pass content directly
+        self.apply_cdata_content(&content)?;
         Ok(())
     }
 
-    fn read_comment(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_comment<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         // consume first '-'
         input.reader.consume(1);
         let available = input.reader.fill_buf()?;
@@ -338,12 +340,12 @@ impl LogReader {
         Ok(())
     }
 
-    fn read_processing_instruction(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_processing_instruction<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         Self::skip_until(input, b"?>")?;
         Ok(())
     }
 
-    fn skip_balanced_angle_brackets(mut depth: usize, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn skip_balanced_angle_brackets<R: BufRead>(mut depth: usize, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         loop {
             let available = input.reader.fill_buf()?;
             if available.is_empty() {
@@ -367,7 +369,7 @@ impl LogReader {
         }
     }
 
-    fn read_element(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_element<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         let tag_bytes = Self::read_tag_bytes(input)?;
         if tag_bytes.is_empty() {
             self.stack.push(LogOutputState::Unknown);
@@ -399,17 +401,18 @@ impl LogReader {
         if content_str.is_empty() {
             self.stack.push(LogOutputState::Unknown);
             if is_empty {
-                self.stack.pop();
+                self.apply_end_element(b"")?;
             }
             return Ok(());
         }
-        let name_len = content_str.find(|c: char| is_xml_whitespace(c as u8)).unwrap_or(content_str.len());
+        // Compute name_len using byte positions before passing to BytesStart
+        let name_len = content_str.bytes().position(|b| is_xml_whitespace(b)).unwrap_or(content_str.len());
         let bs = quick_xml::events::BytesStart::from_content(content_str, name_len);
         let name = bs.name();
         let read_attrs = self.apply_new_element(name.as_ref());
         if read_attrs == ReadAttributesForElement::Yes {
             for attr in bs.attributes().with_checks(false) {
-                let attr = attr.map_err(|_| HandleOutputError::InvalidCdata)?;
+                let attr = attr.map_err(|e| HandleOutputError::InvalidAttribute(format!("{:?}", e)))?;
                 let key = match attr.key.as_ref() {
                     b"logger" => NamedAttributeKey::Logger,
                     b"timestamp" => NamedAttributeKey::Timestamp,
@@ -422,12 +425,12 @@ impl LogReader {
             }
         }
         if is_empty {
-            self.stack.pop();
+            self.apply_end_element(name.as_ref())?;
         }
         Ok(())
     }
 
-    fn read_end_element(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_end_element<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         let tag_bytes = Self::read_tag_bytes(input)?;
         let mut end = tag_bytes.len();
         while end > 0 && is_xml_whitespace(tag_bytes[end - 1]) {
@@ -448,61 +451,70 @@ impl LogReader {
         Ok(())
     }
 
-    fn read_tag_bytes(input: &mut LogInput) -> Result<Vec<u8>, HandleOutputError> {
+    fn read_tag_bytes<R: BufRead>(input: &mut LogInput<R>) -> Result<Vec<u8>, HandleOutputError> {
         let mut out = Vec::new();
         let mut in_single = false;
         let mut in_double = false;
         loop {
-            let available = input.reader.fill_buf()?.to_vec();
+            let available = input.reader.fill_buf()?;
             if available.is_empty() {
                 return Err(HandleOutputError::UnexpectedEof);
             }
             let mut consumed = 0;
-            for &b in &available {
+            for &b in available {
                 if b == b'\'' && !in_double {
                     in_single = !in_single;
                 } else if b == b'"' && !in_single {
                     in_double = !in_double;
                 } else if b == b'>' && !in_single && !in_double {
+                    if out.len() + consumed > MAX_ACCUMULATOR_SIZE {
+                        return Err(HandleOutputError::UnexpectedEof);
+                    }
                     out.extend_from_slice(&available[..consumed]);
                     input.reader.consume(consumed + 1);
                     return Ok(out);
                 }
                 consumed += 1;
             }
-            out.extend_from_slice(&available);
+            if out.len() + available.len() > MAX_ACCUMULATOR_SIZE {
+                return Err(HandleOutputError::UnexpectedEof);
+            }
+            out.extend_from_slice(available);
             input.reader.consume(available.len());
         }
     }
 
-    fn collect_until(input: &mut LogInput, needle: &[u8]) -> Result<Vec<u8>, HandleOutputError> {
-        let mut accum = std::mem::take(&mut input.buffer);
+    fn collect_until<R: BufRead>(input: &mut LogInput<R>, needle: &[u8]) -> Result<Vec<u8>, HandleOutputError> {
+        let mut accum = std::mem::take(&mut input.pending_markup);
+        let finder = memchr::memmem::Finder::new(needle);
+        let mut search_offset = 0;
+
         loop {
-            if let Some(pos) = find_subsequence(&accum, needle) {
-                let result = accum[..pos].to_vec();
-                let tail = accum[pos + needle.len()..].to_vec();
-                input.buffer = tail;
+            // Check if needle is already in accumulated data
+            let search_start = search_offset.saturating_sub(needle.len().saturating_sub(1));
+            if let Some(pos) = finder.find(&accum[search_start..]) {
+                let actual_pos = search_start + pos;
+                let result = accum[..actual_pos].to_vec();
+                let tail = accum[actual_pos + needle.len()..].to_vec();
+                input.pending_markup = tail;
                 return Ok(result);
             }
-            let available = input.reader.fill_buf()?.to_vec();
+
+            search_offset = accum.len();
+            let available = input.reader.fill_buf()?;
             if available.is_empty() {
                 return Err(HandleOutputError::UnexpectedEof);
             }
-            for (i, &b) in available.iter().enumerate() {
-                accum.push(b);
-                if accum.ends_with(needle) {
-                    let result_len = accum.len() - needle.len();
-                    let result = accum[..result_len].to_vec();
-                    input.reader.consume(i + 1);
-                    input.buffer.clear();
-                    return Ok(result);
-                }
+            if accum.len() + available.len() > MAX_ACCUMULATOR_SIZE {
+                return Err(HandleOutputError::UnexpectedEof);
             }
-            input.reader.consume(available.len());
+            accum.extend_from_slice(available);
+            let consumed = available.len();
+            input.reader.consume(consumed);
         }
     }
 
-    fn skip_until(input: &mut LogInput, needle: &[u8]) -> Result<(), HandleOutputError> {
+    fn skip_until<R: BufRead>(input: &mut LogInput<R>, needle: &[u8]) -> Result<(), HandleOutputError> {
         let _ = Self::collect_until(input, needle)?;
         Ok(())
     }
@@ -511,7 +523,10 @@ impl LogReader {
         let Some(cdata) = cdata.strip_prefix(b"[CDATA[") else {
             return Err(HandleOutputError::InvalidCdata);
         };
+        self.apply_cdata_content(cdata)
+    }
 
+    fn apply_cdata_content(&mut self, cdata: &[u8]) -> Result<(), HandleOutputError> {
         let str = match str::from_utf8(cdata) {
             Ok(str) => Cow::Borrowed(str),
             Err(err) => Cow::Owned(format!("{}", HandleOutputError::Utf8Error(err))),
@@ -743,7 +758,7 @@ impl LogReader {
         }
     }
 
-    fn read_rest_of_line(&mut self, input: &mut LogInput) -> Result<(), HandleOutputError> {
+    fn read_rest_of_line<R: BufRead>(&mut self, input: &mut LogInput<R>) -> Result<(), HandleOutputError> {
         loop {
             let available = input.reader.fill_buf()?;
 
@@ -803,23 +818,44 @@ fn is_xml_whitespace(byte: u8) -> bool {
     matches!(byte, b'\r' | b'\n' | b'\t' | b' ')
 }
 
-fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|w| w == needle)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::Read;
+
+    /// A reader that forces small chunks to test buffer boundary conditions
+    struct ChunkedReader<'a> {
+        data: &'a [u8],
+        pos: usize,
+        chunk_size: usize,
+    }
+
+    impl<'a> ChunkedReader<'a> {
+        fn new(data: &'a [u8], chunk_size: usize) -> Self {
+            Self { data, pos: 0, chunk_size }
+        }
+    }
+
+    impl<'a> Read for ChunkedReader<'a> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pos >= self.data.len() {
+                return Ok(0);
+            }
+            let remaining = self.data.len() - self.pos;
+            let to_read = remaining.min(self.chunk_size).min(buf.len());
+            buf[..to_read].copy_from_slice(&self.data[self.pos..self.pos + to_read]);
+            self.pos += to_read;
+            Ok(to_read)
+        }
+    }
 
     fn run(data: &[u8]) -> Vec<GameOutputMsg> {
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (read, mut write) = std::io::pipe().unwrap();
-        write.write_all(data).unwrap();
-        drop(write);
+        let cursor = std::io::Cursor::new(data);
         let mut input = LogInput {
             buffer: Vec::new(),
-            reader: BufReader::new(read),
+            pending_markup: Vec::new(),
+            reader: cursor,
         };
         let mut reader = LogReader {
             stack: Vec::new(),
@@ -909,11 +945,102 @@ mod tests {
 
     #[test]
     fn cdata_split_across_chunks() {
-        // pipe will chunk, but we simulate by writing in two parts via pipe's buffering?
-        // Just ensure normal CDATA works; split is handled by fill_buf logic
+        // Use ChunkedReader to force buffer boundaries through collect_until
         let data = br#"<log4j:Event logger="a" timestamp="1" level="INFO" thread="t"><log4j:Message><![CDATA[split content]]></log4j:Message></log4j:Event>"#;
-        let msgs = run(data);
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let chunked = ChunkedReader::new(data, 5); // Small chunks to test boundaries
+        let mut input = LogInput {
+            buffer: Vec::new(),
+            pending_markup: Vec::new(),
+            reader: std::io::BufReader::new(chunked),
+        };
+        let mut reader = LogReader {
+            stack: Vec::new(),
+            sender,
+            empty_message: "<empty>".into(),
+        };
+        reader.handle_output(&mut input).unwrap();
+        drop(reader);
+        let mut msgs = Vec::new();
+        while let Ok(msg) = receiver.try_recv() {
+            msgs.push(msg);
+        }
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].text[0].as_ref(), "split content");
+    }
+
+    #[test]
+    fn delimiter_split_across_chunks() {
+        // Test splitting across ]]>, -->, and ?> delimiters
+        let data = b"<?xml version=\"1.0\"?><!-- test comment --><log4j:Event logger=\"a\" timestamp=\"1\" level=\"INFO\" thread=\"t\"><log4j:Message><![CDATA[content]]></log4j:Message></log4j:Event>";
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let chunked = ChunkedReader::new(data, 3); // Very small chunks to split delimiters
+        let mut input = LogInput {
+            buffer: Vec::new(),
+            pending_markup: Vec::new(),
+            reader: std::io::BufReader::new(chunked),
+        };
+        let mut reader = LogReader {
+            stack: Vec::new(),
+            sender,
+            empty_message: "<empty>".into(),
+        };
+        reader.handle_output(&mut input).unwrap();
+        drop(reader);
+        let mut msgs = Vec::new();
+        while let Ok(msg) = receiver.try_recv() {
+            msgs.push(msg);
+        }
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].text[0].as_ref(), "content");
+    }
+
+    #[test]
+    fn self_closing_event() {
+        let data = br#"<log4j:Event logger="a" timestamp="1" level="WARN" thread="t" />"#;
+        let msgs = run(data);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].level, GameOutputLogLevel::Warn);
+        assert_eq!(msgs[0].text[0].as_ref(), "<empty>");
+    }
+
+    #[test]
+    fn invalid_cdata_prefix() {
+        let data = b"<log4j:Event logger=\"a\" timestamp=\"1\" level=\"INFO\" thread=\"t\"><log4j:Message><![XDATA[bad]]></log4j:Message></log4j:Event>";
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let cursor = std::io::Cursor::new(data);
+        let mut input = LogInput {
+            buffer: Vec::new(),
+            pending_markup: Vec::new(),
+            reader: cursor,
+        };
+        let mut reader = LogReader {
+            stack: Vec::new(),
+            sender,
+            empty_message: "<empty>".into(),
+        };
+        let result = reader.handle_output(&mut input);
+        assert!(matches!(result, Err(HandleOutputError::InvalidCdata)));
+        drop(receiver);
+    }
+
+    #[test]
+    fn truncated_input() {
+        let data = b"<log4j:Event logger=\"a\" timestamp=\"1\" level=\"INFO\" thread=\"t\"><log4j:Message><![CDATA[incomplete";
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let cursor = std::io::Cursor::new(data);
+        let mut input = LogInput {
+            buffer: Vec::new(),
+            pending_markup: Vec::new(),
+            reader: cursor,
+        };
+        let mut reader = LogReader {
+            stack: Vec::new(),
+            sender,
+            empty_message: "<empty>".into(),
+        };
+        let result = reader.handle_output(&mut input);
+        assert!(matches!(result, Err(HandleOutputError::UnexpectedEof)));
+        drop(receiver);
     }
 }
