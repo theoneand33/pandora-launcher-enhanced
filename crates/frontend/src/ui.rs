@@ -3,10 +3,7 @@ use std::{collections::VecDeque, sync::Arc};
 use bridge::instance::InstanceID;
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, InteractiveElementExt, WindowExt, h_flex,
-    notification::{Notification, NotificationType},
-    scroll::ScrollableElement,
-    tooltip::Tooltip,
+    ActiveTheme as _, Icon, InteractiveElementExt, WindowExt, h_flex, scroll::ScrollableElement, tooltip::Tooltip,
     v_flex,
 };
 use rustc_hash::FxHashMap;
@@ -667,61 +664,6 @@ impl Render for LauncherUI {
     }
 }
 
-fn open_bug_report_url(window: &mut Window, cx: &mut App) {
-    let mut body = String::from(
-        r#"## Description of bug
-(Write here)
-
-## Steps to reproduce
-(Write here)
-
-## This issue is unique
-- [ ] I've searched the other issues and didn't see an issue describing the same bug
-
-## Environment
-"#,
-    );
-
-    use std::fmt::Write;
-    _ = writeln!(&mut body, "Version: {:?}", option_env!("PANDORA_RELEASE_VERSION"));
-    _ = writeln!(&mut body, "Distributor: {:?}", option_env!("PANDORA_DISTRIBUTION"));
-    _ = writeln!(&mut body, "OS: {} ({})", std::env::consts::OS, std::env::consts::ARCH);
-
-    if cfg!(target_os = "linux") {
-        if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
-            for line in os_release.lines() {
-                let line = line.trim_ascii();
-                if let Some(name) = line.strip_prefix("NAME=") {
-                    _ = writeln!(&mut body, "OS Name: {}", name);
-                } else if let Some(version) = line.strip_prefix("VERSION=") {
-                    _ = writeln!(&mut body, "OS Version: {}", version);
-                }
-            }
-        }
-
-        _ = writeln!(&mut body, "Desktop: {:?}", std::env::var_os("XDG_CURRENT_DESKTOP"));
-
-        if let Some(snap_name) = std::env::var_os("SNAP_NAME") {
-            _ = writeln!(&mut body, "Snap: {:?}", snap_name);
-        }
-        if let Some(snap_name) = std::env::var_os("FLATPAK_ID") {
-            _ = writeln!(&mut body, "Flatpak ID: {:?}", snap_name);
-        }
-        if std::env::var_os("APPIMAGE").is_some() {
-            body.push_str("AppImage: true\n");
-        }
-    }
-
-    let Some(github) = option_env!("GITHUB_REPOSITORY_URL") else {
-        let mut notification: Notification = (
-            NotificationType::Error,
-            SharedString::from("Unable to report bug, GITHUB_REPOSITORY_URL was not set at compile time"),
-        )
-            .into();
-        notification = notification.autohide(false);
-        window.push_notification(notification, cx);
-        return;
-    };
-
-    cx.open_url(&format!("{}/issues/new?body={}", github, urlencoding::encode(&body)));
+fn open_bug_report_url(_window: &mut Window, cx: &mut App) {
+    cx.open_url("https://github.com/theoneand33/pandora-launcher-enhanced/issues");
 }
