@@ -2496,6 +2496,12 @@ impl BackendState {
                 crate::p2p_sync::cancel_p2p_share(&token);
             },
             MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
+                let relay_url = relay_url.filter(|u| {
+                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                });
+                let pages_url = pages_url.filter(|u| {
+                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
+                });
                 self.config.write().modify(|cfg| {
                     cfg.p2p_relay_url = relay_url;
                     cfg.p2p_pages_url = pages_url;

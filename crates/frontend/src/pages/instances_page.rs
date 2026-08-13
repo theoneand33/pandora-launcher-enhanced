@@ -122,7 +122,7 @@ impl Page for InstancesPage {
         let backend_for_join = self.backend_handle.clone();
         let join_p2p = Button::new("join_p2p")
             .icon(PandoraIcon::Download)
-            .label(t::instance::p2p::join_action())
+            .label(t::instance::p2p::join_title())
             .on_click(move |_, window, cx| {
                 crate::modals::p2p_join::open_p2p_join(backend_for_join.clone(), window, cx);
             });

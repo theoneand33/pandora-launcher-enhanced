@@ -273,7 +273,7 @@ async fn create_local_share(
     }
     if let Some(pages) = pages_url.filter(|u| !u.trim().is_empty()) {
         let pages = pages.trim_end_matches('/').to_string();
-        links.push(format!("{pages}/?token={token} (needs relay)").into());
+        links.push(format!("{pages}/?token={token}").into());
     }
 
     shares().write().insert(
@@ -317,6 +317,9 @@ fn create_bundle_blocking(
     let walker = WalkDir::new(root_path).follow_links(false);
     for entry in walker.into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_dir() {
+            continue;
+        }
+        if entry.path_is_symlink() {
             continue;
         }
         let Ok(rel) = entry.path().strip_prefix(root_path) else {
@@ -389,8 +392,13 @@ fn create_bundle_blocking(
 async fn serve_p2p(listener: tokio::net::TcpListener, token: Arc<str>, bundle_path: PathBuf) {
     let expected_path = format!("/p2p/{token}");
     loop {
-        let Ok((mut stream, _addr)) = listener.accept().await else {
-            continue;
+        let (mut stream, _addr) = match listener.accept().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("p2p accept failed: {e}");
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            },
         };
         let expected = expected_path.clone();
         let path_clone = bundle_path.clone();
@@ -613,7 +621,7 @@ pub async fn join_p2p_share(
     let tmp_dir = backend.directories.temp_dir.join("p2p").join("download");
     let _ = std::fs::create_dir_all(&tmp_dir);
     let tmp_file = tmp_dir.join(format!("{}.zip", Uuid::new_v4()));
-    let mut file = match std::fs::File::create(&tmp_file) {
+    let mut file = match tokio::fs::File::create(&tmp_file).await {
         Ok(f) => f,
         Err(e) => {
             modal_action.set_error_message(format!("tmp create failed: {e}").into());
@@ -625,13 +633,13 @@ pub async fn join_p2p_share(
 
     let mut stream = resp.bytes_stream();
     use futures::StreamExt;
-    use std::io::Write;
+    use tokio::io::AsyncWriteExt;
     let mut downloaded: usize = 0;
     let cap: usize = 2 * 1024 * 1024 * 1024;
     while let Some(chunk) = stream.next().await {
         if modal_action.has_requested_cancel() {
             drop(file);
-            let _ = std::fs::remove_file(&tmp_file);
+            let _ = tokio::fs::remove_file(&tmp_file).await;
             modal_action.set_error_message("Cancelled".into());
             modal_action.set_finished();
             tracker.set_finished(ProgressTrackerFinishType::Fast);
@@ -644,14 +652,14 @@ pub async fn join_p2p_share(
                     modal_action.set_error_message("Bundle too large (2 GiB cap)".into());
                     modal_action.set_finished();
                     tracker.set_finished(ProgressTrackerFinishType::Error);
-                    let _ = std::fs::remove_file(&tmp_file);
+                    let _ = tokio::fs::remove_file(&tmp_file).await;
                     return;
                 }
-                if let Err(e) = file.write_all(&bytes) {
+                if let Err(e) = file.write_all(&bytes).await {
                     modal_action.set_error_message(format!("write failed: {e}").into());
                     modal_action.set_finished();
                     tracker.set_finished(ProgressTrackerFinishType::Error);
-                    let _ = std::fs::remove_file(&tmp_file);
+                    let _ = tokio::fs::remove_file(&tmp_file).await;
                     return;
                 }
                 tracker.set_count(downloaded);
@@ -661,7 +669,7 @@ pub async fn join_p2p_share(
                 modal_action.set_error_message(format!("stream error: {e}").into());
                 modal_action.set_finished();
                 tracker.set_finished(ProgressTrackerFinishType::Error);
-                let _ = std::fs::remove_file(&tmp_file);
+                let _ = tokio::fs::remove_file(&tmp_file).await;
                 return;
             },
         }
@@ -820,10 +828,15 @@ fn extract_zip_to_instance(
 
 fn redact_error(s: &str) -> String {
     if let Some(idx) = s.find("/p2p/") {
-        format!("{}[redacted]", &s[..idx])
-    } else {
-        s.to_string()
+        return format!("{}[redacted]", &s[..idx]);
     }
+    if let Some(idx) = s.find("?token=") {
+        return format!("{}[redacted]", &s[..idx]);
+    }
+    if let Some(idx) = s.find("&token=") {
+        return format!("{}[redacted]", &s[..idx]);
+    }
+    s.to_string()
 }
 
 #[cfg(test)]

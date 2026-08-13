@@ -28,7 +28,7 @@ http://<host>:<port>/p2p/<token>
 
 * `<host>` is a LAN IP or a domain that proxies to the host. The launcher lists all non-loopback IPv4 addresses and shows them with the link.
 * `<token>` is `Uuid::new_v4()` hex (122 bits). Unpredictable. No bearer header required. The token is the path. Possession of the link is authorization.
-* Token is single-use by default. The host deletes the bundle after the first successful download or after 30 minutes. The host can revoke with Cancel.
+* Token is valid for 30 minutes. The host serves the bundle for the full window (multiple downloads allowed) and deletes it on expiry. The host can revoke early with Cancel. Single-use is not enforced.
 
 Future: `pandora-sync://` custom scheme that opens the launcher via OS URL handler. Not required for V1.
 
@@ -40,22 +40,20 @@ Future: `pandora-sync://` custom scheme that opens the launcher via OS URL handl
 2. Frontend sends `MessageToBackend::CreateP2pShare { id, options, modal_action }`.
 3. Backend `p2p_sync::create_share`:
    a. Lock `instance_state`, snapshot `InstanceConfiguration` and root paths. Release lock.
-   b. `collect_files` on `spawn_blocking` (same filter as export). Write filtered files to `temp/p2p/<token>.zip` with `write_zip`. Report progress through `ModalAction` trackers.
-   c. Bind `tokio::net::TcpListener` to `0.0.0.0:0`. Get port. Store entry `(token -> PathBuf, expiry, permit)` in a process-wide `RwLock<HashMap>`.
-   d. Spawn `serve_p2p` task: loop `accept`, parse request head (4096 bytes) with `httparse`, check `GET /p2p/<token>` and optional `Range`. On match, stream the file with `tokio::fs::File` and chunked writes. On mismatch, 404. Log only token prefix (first 8 chars).
-   e. Build link(s): one per local IPv4 (`get_local_ips()`) plus `http://127.0.0.1:<port>/p2p/<token>` for local test. Send `MessageToFrontend::P2pShareCreated { token, links, expires_at }`. Also show notification "Share ready. Link expires in 30 min. Keep launcher open."
-4. Frontend shows copyable links, QR, Cancel button. Cancel sends `MessageToBackend::CancelP2pShare { token }`.
+   b. `collect_files` on `spawn_blocking` (same filter as export, `follow_links(false)`, skip symlinks). Write filtered files to `temp/p2p/<token>.zip` with `write_zip`. Report progress through `ModalAction` trackers.
+   c. Bind `tokio::net::TcpListener` to `0.0.0.0:0`. Get port. Store entry `(token -> PathBuf)` in a process-wide `RwLock<HashMap>` with expiry task.
+   d. Spawn `serve_p2p` task: loop `accept` with backoff on error, parse request head (8 KiB) with `httparse`, check `GET /p2p/<token>`. On match, stream the file with `tokio::fs::File`. On mismatch, 404. Log only token prefix (first 8 chars).
+   e. Build link(s): one per local IPv4 (`local_ipv4s()`) plus `http://127.0.0.1:<port>/p2p/<token>` for local test. Send `MessageToFrontend::P2pShareCreated { token, links, expires_at }`. Also show notification "Share ready. Link expires in 30 min. Keep launcher open."
+4. Frontend shows copyable links and Cancel button. Cancel sends `MessageToBackend::CancelP2pShare { token }`. QR is deferred.
 
 ### Join (peer)
 
-1. Frontend modal: paste link (or token), optional instance name for new instance versus update of existing instance. Toggle "merge mods" vs "replace mods".
+1. Frontend modal: paste link (or token), optional instance name for new instance. Deferred: update of existing instance and merge vs replace toggle.
 2. Frontend sends `MessageToBackend::JoinP2pShare { link, target_name, modal_action }`.
 3. Backend `p2p_sync::join_share`:
-   a. Validate link is http/https, parse with `url::Url`. Enforce `SafePath` on zip entry paths later; reject `..` and absolute paths.
-   b. Download with `reqwest_client` (or `backend.http_client`) streaming to `temp/p2p/download/<token>.zip`. Support cancel via `modal_action.has_requested_cancel()`. Show ProgressTracker total from Content-Length.
-   c. Verify file size limit (2 GiB hard cap) to avoid OOM. Unpack with same path as `CreateInstanceFromFile` but with selected-part semantics:
-      * If target is new instance: unzip to `instances/<name>/.minecraft` (create folder, write `info_v1.json` with source instance config). Reuse `install_content` / `launcher_import` path.
-      * If target is existing instance and part is mods only: clear `mods/` (or merge) then copy `mods/` from zip into `instances/<name>/.minecraft/mods/`. Mirror into `original_mods/` if the instance is running (reuse `frozen_mods_backup_path` logic).
+   a. Validate link is http/https, parse with `url::Url`. Enforce `SafePath` on zip entry paths later; reject absolute paths. `SafePath` already rejects `..` traversal.
+   b. Download with `backend.http_client` streaming to `temp/p2p/download/<token>.zip` via `tokio::fs::File`. Support cancel via `modal_action.has_requested_cancel()`. Show ProgressTracker total from Content-Length.
+   c. Verify file size limit (2 GiB hard cap) to avoid OOM. Unpack via `spawn_blocking` to a new instance dir `instances/<name>/.minecraft` (create folder). Zip bomb guards: 100k entry cap, 4 GiB uncompressed cap.
    d. Finish `ModalAction`, send success notification, send `Refresh`.
 
 ## Storage and lifecycle

@@ -257,8 +257,20 @@ impl Settings {
     fn save_p2p_config(&mut self, cx: &mut Context<Self>) {
         let relay = self.p2p_relay_input.read(cx).value().trim().to_string();
         let pages = self.p2p_pages_input.read(cx).value().trim().to_string();
-        let relay = if relay.is_empty() { None } else { Some(relay) };
-        let pages = if pages.is_empty() { None } else { Some(pages) };
+        let relay = if relay.is_empty() {
+            None
+        } else if relay.starts_with("http://") || relay.starts_with("https://") {
+            Some(relay)
+        } else {
+            return;
+        };
+        let pages = if pages.is_empty() {
+            None
+        } else if pages.starts_with("http://") || pages.starts_with("https://") {
+            Some(pages)
+        } else {
+            return;
+        };
         if let Some(cfg) = &mut self.backend_config {
             if cfg.p2p_relay_url == relay && cfg.p2p_pages_url == pages {
                 return;
