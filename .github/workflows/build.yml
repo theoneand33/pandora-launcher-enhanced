@@ -53,6 +53,9 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - name: Vendor dependencies
         run: ./vendor.sh
 
@@ -68,4 +71,6 @@ jobs:
         uses: rui314/setup-mold@v1
 
       - name: Run build command
+        env:
+          RUSTC_WRAPPER: sccache
         run: cargo build --release --offline --target ${{ matrix.platform.target }}
