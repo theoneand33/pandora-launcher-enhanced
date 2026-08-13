@@ -30,7 +30,7 @@ pub fn open_p2p_show(
             div()
                 .text_sm()
                 .text_color(_cx.theme().muted_foreground)
-                .child(format!("Expires in {remaining} min — keep launcher open")),
+                .child(t::instance::p2p::expires(remaining)),
         );
         let token_short = token.chars().take(8).collect::<String>();
         let token_for_cancel = token.clone();

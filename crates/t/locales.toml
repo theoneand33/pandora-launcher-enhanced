@@ -4176,6 +4176,8 @@ hu = "Hagyd üresen LAN-hoz"
 sv = "Lämna relay tom för LAN"
 ru = "Оставьте пустым для LAN"
 fr = "Laissez vide pour LAN"
+[instance.p2p.expires]
+en = "Expires in ${remaining: i64} min — keep launcher open"
 
 [settings.p2p.title]
 en = "P2P Sync"
@@ -4209,4 +4211,6 @@ hu = "Webhely: ~/pandora-sync"
 sv = "Webbplats i ~/pandora-sync"
 ru = "Сайт в ~/pandora-sync"
 fr = "Site dans ~/pandora-sync"
+[settings.p2p.invalid_url]
+en = "Relay or Pages URL must start with http:// or https://"
 
