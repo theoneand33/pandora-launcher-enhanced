@@ -4185,6 +4185,42 @@ sv = "Går ut om ${remaining: i64} min — håll startprogrammet öppet"
 ru = "Истекает через ${remaining: i64} мин — не закрывайте лаунчер"
 fr = "Expire dans ${remaining: i64} min — gardez le lanceur ouvert"
 
+[instance.p2p.unknown_instance]
+en = "Unknown instance"
+
+[instance.p2p.bundle_too_large]
+en = "Bundle too large (2 GiB cap)"
+
+[instance.p2p.uploading_to_relay]
+en = "Uploading to relay..."
+
+[instance.p2p.downloading_share]
+en = "Downloading share"
+
+[instance.p2p.extracting_share]
+en = "Extracting share..."
+
+[instance.p2p.collecting_files]
+en = "Collecting files..."
+
+[instance.p2p.writing_bundle]
+en = "Writing bundle"
+
+[instance.p2p.share_uploaded]
+en = "Share uploaded — link works from anywhere"
+
+[instance.p2p.share_ready]
+en = "Share ready — keep launcher open"
+
+[instance.p2p.share_ready_local]
+en = "Share ready (local fallback) — keep launcher open"
+
+[instance.p2p.import_done]
+en = "P2P import done: ${name: String}"
+
+[instance.p2p.bind_failed]
+en = "Bind failed: ${error: String}"
+
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"

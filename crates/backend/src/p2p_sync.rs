@@ -85,7 +85,7 @@ pub async fn create_p2p_share(
     let (root_path, dot_minecraft_path) = {
         let guard = backend.instance_state.read();
         let Some(inst) = guard.instances.get(id) else {
-            modal_action.set_error_message("Unknown instance".into());
+            modal_action.set_error_message(t::instance::p2p::unknown_instance().into());
             modal_action.set_finished();
             return;
         };
@@ -141,7 +141,8 @@ pub async fn create_p2p_share(
 
         tokio::task::spawn(async move {
             let url = format!("{relay_clone}/p2p/{token_for_upload}");
-            let upload_tracker = ProgressTracker::new("Uploading to relay...".into(), backend_for_upload.send.clone());
+            let upload_tracker =
+                ProgressTracker::new(t::instance::p2p::uploading_to_relay().into(), backend_for_upload.send.clone());
             modal_for_upload.trackers.push(upload_tracker.clone());
             upload_tracker.notify();
 
@@ -157,7 +158,7 @@ pub async fn create_p2p_share(
                 },
             };
             if file_len > 2 * 1024 * 1024 * 1024 {
-                modal_for_upload.set_error_message("Bundle too large (2 GiB cap)".into());
+                modal_for_upload.set_error_message(t::instance::p2p::bundle_too_large().into());
                 modal_for_upload.set_finished();
                 upload_tracker.set_finished(ProgressTrackerFinishType::Error);
                 let _ = tokio::fs::remove_file(&bundle_for_upload).await;
@@ -214,7 +215,7 @@ pub async fn create_p2p_share(
                         links: links.into(),
                         expires_at_ms,
                     });
-                    backend_for_upload.send.send_success("Share uploaded — link works from anywhere");
+                    backend_for_upload.send.send_success(t::instance::p2p::share_uploaded());
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                 },
@@ -261,7 +262,7 @@ pub async fn create_p2p_share(
                         links: fallback,
                         expires_at_ms,
                     });
-                    backend_for_upload.send.send_success("Share ready (local fallback) — keep launcher open");
+                    backend_for_upload.send.send_success(t::instance::p2p::share_ready_local());
                 },
             }
         });
@@ -272,7 +273,7 @@ pub async fn create_p2p_share(
     let links = match create_local_share(&backend, Arc::clone(&token), bundle_path, expires_at_ms).await {
         Ok(l) => l,
         Err(e) => {
-            modal_action.set_error_message(format!("bind failed: {e}").into());
+            modal_action.set_error_message(t::instance::p2p::bind_failed(e).into());
             modal_action.set_finished();
             return;
         },
@@ -282,7 +283,7 @@ pub async fn create_p2p_share(
         links,
         expires_at_ms,
     });
-    backend.send.send_success("Share ready — keep launcher open");
+    backend.send.send_success(t::instance::p2p::share_ready());
     modal_action.set_finished();
 }
 
@@ -345,7 +346,7 @@ fn create_bundle_blocking(
     if modal_action.has_requested_cancel() {
         return Err("Cancelled".into());
     }
-    let tracker = ProgressTracker::new("Collecting files...".into(), backend.send.clone());
+    let tracker = ProgressTracker::new(t::instance::p2p::collecting_files().into(), backend.send.clone());
     modal_action.trackers.push(tracker.clone());
 
     let sync_target_paths = SyncTargetPaths::new(sync_targets);
@@ -396,7 +397,7 @@ fn create_bundle_blocking(
     let _ = std::fs::create_dir_all(&p2p_dir);
     let bundle_path = p2p_dir.join(format!("{token}.zip"));
 
-    let write_tracker = ProgressTracker::new("Writing bundle".into(), backend.send.clone());
+    let write_tracker = ProgressTracker::new(t::instance::p2p::writing_bundle().into(), backend.send.clone());
     modal_action.trackers.push(write_tracker.clone());
     write_tracker.set_total(files.len());
     write_tracker.notify();
@@ -418,7 +419,7 @@ fn create_bundle_blocking(
             if msg.contains("Bundle too large") {
                 drop(zip);
                 let _ = std::fs::remove_file(&bundle_path);
-                return Err(msg);
+                return Err(t::instance::p2p::bundle_too_large().to_string());
             }
             drop(zip);
             let _ = std::fs::remove_file(&bundle_path);
@@ -432,6 +433,11 @@ fn create_bundle_blocking(
             }
             if let Err(e) = zip.write_all(&buf[..n]) {
                 let msg = e.to_string();
+                if msg.contains("Bundle too large") {
+                    drop(zip);
+                    let _ = std::fs::remove_file(&bundle_path);
+                    return Err(t::instance::p2p::bundle_too_large().to_string());
+                }
                 drop(zip);
                 let _ = std::fs::remove_file(&bundle_path);
                 return Err(msg);
@@ -442,6 +448,10 @@ fn create_bundle_blocking(
     }
     if let Err(e) = zip.finish() {
         let msg = e.to_string();
+        if msg.contains("Bundle too large") {
+            let _ = std::fs::remove_file(&bundle_path);
+            return Err(t::instance::p2p::bundle_too_large().to_string());
+        }
         let _ = std::fs::remove_file(&bundle_path);
         return Err(msg);
     }
@@ -673,7 +683,7 @@ pub async fn join_p2p_share(
         return;
     }
 
-    let tracker = ProgressTracker::new("Downloading share".into(), backend.send.clone());
+    let tracker = ProgressTracker::new(t::instance::p2p::downloading_share().into(), backend.send.clone());
     modal_action.trackers.push(tracker.clone());
 
     let resp = match backend.http_client.get(url.as_str()).send().await {
@@ -695,7 +705,7 @@ pub async fn join_p2p_share(
     // Early content-length check (2 GiB cap) before streaming
     if let Some(len) = resp.content_length() {
         if len > 2 * 1024 * 1024 * 1024 {
-            modal_action.set_error_message("Bundle too large (2 GiB cap)".into());
+            modal_action.set_error_message(t::instance::p2p::bundle_too_large().into());
             modal_action.set_finished();
             tracker.set_finished(ProgressTrackerFinishType::Error);
             return;
@@ -735,7 +745,7 @@ pub async fn join_p2p_share(
             Ok(bytes) => {
                 downloaded = downloaded.saturating_add(bytes.len());
                 if downloaded > cap {
-                    modal_action.set_error_message("Bundle too large (2 GiB cap)".into());
+                    modal_action.set_error_message(t::instance::p2p::bundle_too_large().into());
                     modal_action.set_finished();
                     tracker.set_finished(ProgressTrackerFinishType::Error);
                     drop(file);
@@ -773,7 +783,7 @@ pub async fn join_p2p_share(
     }
     tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    let extract_tracker = ProgressTracker::new("Extracting share...".into(), backend.send.clone());
+    let extract_tracker = ProgressTracker::new(t::instance::p2p::extracting_share().into(), backend.send.clone());
     modal_action.trackers.push(extract_tracker.clone());
     extract_tracker.notify();
 
@@ -810,9 +820,8 @@ pub async fn join_p2p_share(
             let _ = std::fs::remove_file(&tmp_file);
             extract_tracker.set_finished(ProgressTrackerFinishType::Normal);
             modal_action.set_finished();
-            backend.send.send_success(format!(
-                "P2P import done: {}",
-                target_dir.file_name().unwrap_or_default().to_string_lossy()
+            backend.send.send_success(t::instance::p2p::import_done(
+                target_dir.file_name().unwrap_or_default().to_string_lossy().to_string(),
             ));
         },
         Ok(Err(e)) => {
