@@ -20,6 +20,9 @@ use crate::{
 
 const DEFAULT_RELAY: &str = "https://relay.theoneand33.dev";
 
+// ponytail: ≤64 MiB per part, safely under Cloudflare's 100 MB free limit. No config knob.
+const PART_SIZE: u64 = 64 * 1024 * 1024;
+
 // ponytail: configured relay wins, default is the shared fallback on both create and join.
 fn effective_relay(backend: &BackendState) -> String {
     backend
@@ -192,8 +195,11 @@ pub async fn create_p2p_share(
                 return;
             }
 
-            let body = match tokio::fs::File::open(&bundle_for_upload).await {
-                Ok(f) => reqwest::Body::wrap_stream(tokio_util::io::ReaderStream::new(f)),
+            // Chunked upload: open once, PUT ≤64 MiB parts with part headers; relay assembles on the last part.
+            // Compatible fallback: no part headers is the old single-PUT path, so missing headers still work.
+            let total_parts = file_len.div_ceil(PART_SIZE).max(1) as usize;
+            let mut file = match tokio::fs::File::open(&bundle_for_upload).await {
+                Ok(f) => f,
                 Err(e) => {
                     modal_for_upload.set_error_message(format!("open bundle failed: {e}").into());
                     modal_for_upload.set_finished();
@@ -202,18 +208,50 @@ pub async fn create_p2p_share(
                     return;
                 },
             };
+            upload_tracker.set_total(file_len as usize);
 
-            let resp = backend_for_upload
-                .http_client
-                .put(&url)
-                .header("content-type", "application/zip")
-                .header("content-length", file_len.to_string())
-                .body(body)
-                .send()
-                .await;
+            use tokio::io::AsyncReadExt;
+            let mut buf = vec![0u8; PART_SIZE as usize];
+            let mut uploaded: u64 = 0;
+            let mut failure: Option<String> = None;
+            for part in 0..total_parts {
+                let n = match file.read(&mut buf).await {
+                    Ok(n) => n,
+                    Err(e) => {
+                        failure = Some(format!("Relay upload failed: {}", redact_error(&e.to_string())));
+                        break;
+                    },
+                };
+                let resp = backend_for_upload
+                    .http_client
+                    .put(&url)
+                    .header("content-type", "application/zip")
+                    .header("content-length", n.to_string())
+                    .header("x-part-index", part.to_string())
+                    .header("x-total-parts", total_parts.to_string())
+                    .body(buf[..n].to_vec())
+                    .send()
+                    .await;
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        uploaded = uploaded.saturating_add(n as u64);
+                        upload_tracker.set_count(uploaded as usize);
+                        upload_tracker.notify();
+                    },
+                    Ok(r) => {
+                        failure = Some(format!("Relay returned {}", r.status()));
+                        break;
+                    },
+                    Err(e) => {
+                        failure = Some(format!("Relay upload failed: {}", redact_error(&e.to_string())));
+                        break;
+                    },
+                }
+            }
+            drop(file);
 
-            match resp {
-                Ok(r) if r.status().is_success() => {
+            match failure {
+                None => {
                     // Keep bundle for expiry window if user cancels early; otherwise relay holds copy.
                     // Original file can be removed: relay is authoritative. Do not advertise dead local link.
                     let _ = tokio::fs::remove_file(&bundle_for_upload).await;
@@ -270,11 +308,8 @@ pub async fn create_p2p_share(
                     modal_for_upload.set_finished();
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                 },
-                other => {
-                    let warning = match &other {
-                        Ok(r) => format!("Relay returned {} — using local link (LAN only)", r.status()),
-                        Err(e) => format!("Relay upload failed: {} — using local link", redact_error(&e.to_string())),
-                    };
+                Some(failure) => {
+                    let warning = format!("{failure} — using local link (LAN only)");
                     let fallback = match create_local_share(
                         &backend_for_upload,
                         token_for_upload.clone(),
@@ -285,23 +320,12 @@ pub async fn create_p2p_share(
                     {
                         Ok(links) => links,
                         Err(bind_err) => {
-                            let detail = match &other {
-                                Ok(r) => format!("relay returned {} and local bind failed: {bind_err}", r.status()),
-                                Err(e) => format!(
-                                    "relay upload failed: {} (bind also failed: {bind_err})",
-                                    redact_error(&e.to_string())
-                                ),
-                            };
+                            let detail = format!("{failure} (local bind also failed: {bind_err})");
                             modal_for_upload.set_error_message(detail.into());
                             modal_for_upload.set_finished();
                             upload_tracker.set_finished(ProgressTrackerFinishType::Error);
                             let _ = tokio::fs::remove_file(&bundle_for_upload).await;
-                            if let Ok(r) = &other {
-                                backend_for_upload.send.send_error(format!(
-                                    "Relay upload failed ({}), local fallback also failed",
-                                    r.status()
-                                ));
-                            }
+                            backend_for_upload.send.send_error(format!("{failure}, local fallback also failed"));
                             return;
                         },
                     };
@@ -1087,5 +1111,15 @@ mod tests {
         assert_eq!(find_header_end(b"GET / HTTP/1.1\r\n\r\n"), Some(18));
         assert_eq!(find_header_end(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n"), Some(27));
         assert_eq!(find_header_end(b"GET / HTTP/1.1\r\n"), None);
+    }
+
+    #[test]
+    fn part_count_boundary() {
+        let count = |len: u64| len.div_ceil(PART_SIZE).max(1) as usize;
+        assert_eq!(count(0), 1);
+        assert_eq!(count(1), 1);
+        assert_eq!(count(PART_SIZE), 1);
+        assert_eq!(count(PART_SIZE + 1), 2);
+        assert_eq!(count(2 * PART_SIZE), 2);
     }
 }
