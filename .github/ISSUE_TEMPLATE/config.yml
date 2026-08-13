@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/Moulberry/PandoraLauncher/discussions
+    about: Use discussions for questions (upstream). For this fork, use issues only for bugs and feature requests.
