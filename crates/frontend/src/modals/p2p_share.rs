@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use bridge::{
     handle::BackendHandle,
     instance::InstanceID,
@@ -8,7 +6,7 @@ use bridge::{
 };
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme, Sizable, WindowExt,
+    ActiveTheme, WindowExt,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     h_flex, v_flex,

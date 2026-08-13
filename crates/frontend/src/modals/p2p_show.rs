@@ -1,9 +1,5 @@
 use gpui::{prelude::*, *};
-use gpui_component::{
-    Sizable, WindowExt,
-    button::{Button, ButtonVariants},
-    h_flex, v_flex,
-};
+use gpui_component::{Sizable, WindowExt, button::Button, h_flex, v_flex};
 use std::sync::Arc;
 
 pub fn open_p2p_show(links: Arc<[Arc<str>]>, token: Arc<str>, window: &mut Window, cx: &mut App) {

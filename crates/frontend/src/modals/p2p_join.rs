@@ -21,7 +21,7 @@ impl P2pJoinState {
         &mut self,
         dialog: gpui_component::dialog::Dialog,
         _window: &mut Window,
-        cx: &mut Context<Self>,
+        _cx: &mut Context<Self>,
     ) -> gpui_component::dialog::Dialog {
         dialog
             .title(t::instance::p2p::join_title())
