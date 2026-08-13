@@ -26,7 +26,7 @@ Non-goal: continuous background sync. Non-goal: DHT or libp2p.
 http://<host>:<port>/p2p/<token>
 ```
 
-* `<host>` is a LAN IP or a domain that proxies to the host. The launcher lists all non-loopback IPv4 addresses and shows them with the link.
+* `<host>` is a LAN IP or a domain that proxies to the host. The launcher shows the default-route IPv4 (`local_ipv4s()`) and `127.0.0.1` fallback with the link.
 * `<token>` is `Uuid::new_v4()` hex (122 bits). Unpredictable. No bearer header required. The token is the path. Possession of the link is authorization.
 * Token is valid for 30 minutes. The host serves the bundle for the full window (multiple downloads allowed) and deletes it on expiry. The host can revoke early with Cancel. Single-use is not enforced.
 
@@ -87,7 +87,7 @@ Launcher config (`BackendConfig`):
 { "p2p_relay_url": "https://relay.example.com", "p2p_pages_url": "https://username.github.io/pandora-sync" }
 ```
 * `p2p_relay_url` empty → LAN mode (ephemeral `0.0.0.0:0` server, link `http://<lan-ip>:<port>/p2p/<token>`).
-* `p2p_relay_url` set → launcher uploads via `PUT`, shows both `https://relay.../p2p/<token>` and `https://pages.../?token=<token>` plus a local fallback link.
+* `p2p_relay_url` set → launcher uploads via `PUT`, shows `https://relay.../p2p/<token>` (and `https://pages.../?token=<token>` if configured). On upload failure it falls back to LAN links.
 
 ## Steps to ship
 

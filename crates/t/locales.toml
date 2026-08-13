@@ -4178,6 +4178,12 @@ ru = "Оставьте пустым для LAN"
 fr = "Laissez vide pour LAN"
 [instance.p2p.expires]
 en = "Expires in ${remaining: i64} min — keep launcher open"
+pl = "Wygasa za ${remaining: i64} min — nie zamykaj launchera"
+de = "Läuft in ${remaining: i64} Min ab — Launcher offen lassen"
+hu = "Lejár ${remaining: i64} perc múlva — ne zárd be az indítót"
+sv = "Går ut om ${remaining: i64} min — håll startprogrammet öppet"
+ru = "Истекает через ${remaining: i64} мин — не закрывайте лаунчер"
+fr = "Expire dans ${remaining: i64} min — gardez le lanceur ouvert"
 
 [settings.p2p.title]
 en = "P2P Sync"
@@ -4213,4 +4219,10 @@ ru = "Сайт в ~/pandora-sync"
 fr = "Site dans ~/pandora-sync"
 [settings.p2p.invalid_url]
 en = "Relay or Pages URL must start with http:// or https://"
+pl = "URL przekaźnika lub Pages musi zaczynać się od http:// lub https://"
+de = "Relay- oder Pages-URL muss mit http:// oder https:// beginnen"
+hu = "A relay vagy Pages URL http:// vagy https:// előtaggal kezdődjön"
+sv = "Relay- eller Pages-URL måste börja med http:// eller https://"
+ru = "URL релея или Pages должен начинаться с http:// или https://"
+fr = "L'URL du relais ou de Pages doit commencer par http:// ou https://"
 

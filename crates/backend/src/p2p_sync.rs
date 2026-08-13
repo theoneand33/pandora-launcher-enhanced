@@ -250,7 +250,7 @@ async fn create_local_share(
     token: Arc<str>,
     bundle_path: PathBuf,
     _expires_at_ms: i64,
-    pages_url: Option<String>,
+    _pages_url: Option<String>,
 ) -> Result<Arc<[Arc<str>]>, String> {
     let p2p_dir = backend.directories.temp_dir.join("p2p");
     let _ = std::fs::create_dir_all(&p2p_dir);
@@ -270,10 +270,6 @@ async fn create_local_share(
     }
     if links.is_empty() {
         links.push(format!("http://127.0.0.1:{port}/p2p/{token}").into());
-    }
-    if let Some(pages) = pages_url.filter(|u| !u.trim().is_empty()) {
-        let pages = pages.trim_end_matches('/').to_string();
-        links.push(format!("{pages}/?token={token}").into());
     }
 
     shares().write().insert(
