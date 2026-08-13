@@ -4283,6 +4283,9 @@ en = "P2P import done: ${name: String}"
 [instance.p2p.bind_failed]
 en = "Bind failed: ${error: String}"
 
+[instance.p2p.bare_token_needs_relay]
+en = "Bare token needs p2p_relay_url set in settings"
+
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"

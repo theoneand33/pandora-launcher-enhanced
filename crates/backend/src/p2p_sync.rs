@@ -50,13 +50,16 @@ impl<W> LimitedWriter<W> {
 impl<W: std::io::Write + std::io::Seek> std::io::Write for LimitedWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let pos = self.inner.stream_position().unwrap_or(self.written);
-        if pos.saturating_add(buf.len() as u64) > self.limit {
+        if pos.saturating_add(buf.len() as u64) > self.limit || self.written > self.limit {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bundle too large (2 GiB cap)"));
         }
         let n = self.inner.write(buf)?;
         let end = pos.saturating_add(n as u64);
         if end > self.written {
             self.written = end;
+        }
+        if self.written > self.limit {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bundle too large (2 GiB cap)"));
         }
         Ok(n)
     }
@@ -69,6 +72,9 @@ impl<W: std::io::Write + std::io::Seek> std::io::Write for LimitedWriter<W> {
 impl<W: std::io::Seek> std::io::Seek for LimitedWriter<W> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         let p = self.inner.seek(pos)?;
+        if p > self.limit {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bundle too large (2 GiB cap)"));
+        }
         if p > self.written {
             self.written = p;
         }
@@ -294,7 +300,7 @@ async fn create_local_share(
     _expires_at_ms: i64,
 ) -> Result<Arc<[Arc<str>]>, String> {
     let p2p_dir = backend.directories.temp_dir.join("p2p");
-    let _ = std::fs::create_dir_all(&p2p_dir);
+    let _ = tokio::fs::create_dir_all(&p2p_dir).await;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
@@ -580,14 +586,18 @@ async fn write_status(stream: &mut tokio::net::TcpStream, code: u16) -> std::io:
 }
 
 fn local_ipv4s() -> Vec<String> {
+    use std::collections::HashSet;
     use std::net::UdpSocket;
+    let mut seen = HashSet::new();
     let mut out = Vec::new();
-    if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
-        let _ = sock.connect("8.8.8.8:80");
-        if let Ok(addr) = sock.local_addr() {
-            let ip = addr.ip().to_string();
-            if ip != "0.0.0.0" && !ip.starts_with("127.") {
-                out.push(ip);
+    for target in ["8.8.8.8:80", "1.1.1.1:80", "8.8.4.4:80"] {
+        if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+            let _ = sock.connect(target);
+            if let Ok(addr) = sock.local_addr() {
+                let ip = addr.ip().to_string();
+                if ip != "0.0.0.0" && !ip.starts_with("127.") && seen.insert(ip.clone()) {
+                    out.push(ip);
+                }
             }
         }
     }
@@ -603,49 +613,66 @@ pub async fn join_p2p_share(
     link = link.trim().to_string();
     // Handle bare token, pages URL ?token=, or host-less path
     if !link.contains("://") {
-        let token = if let Some(idx) = link.find("token=") {
-            link[idx + 6..]
-                .split('&')
-                .next()
-                .unwrap_or("")
-                .split('#')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string()
-        } else if link.contains('/') {
-            // take last path segment, strip query/fragment
-            link.split('/')
-                .last()
-                .unwrap_or(&link)
-                .split('?')
-                .next()
-                .unwrap_or(&link)
-                .split('#')
-                .next()
-                .unwrap_or(&link)
-                .trim()
-                .to_string()
-        } else {
-            link.clone()
-        };
-        let looks_like_token =
-            token.len() >= 8 && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '=');
-        // If the whole input looks like a bare token, expand via relay
-        if looks_like_token && link == token {
-            let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
-            if let Some(relay) = relay {
-                link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
+        // Direct token= query without host, e.g. "token=abc-123&foo=bar"
+        if link.starts_with("token=") || link.contains("?token=") || link.contains("&token=") {
+            let token = if let Some(idx) = link.find("token=") {
+                link[idx + 6..]
+                    .split('&')
+                    .next()
+                    .unwrap_or("")
+                    .split('#')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string()
             } else {
-                // bare token without relay cannot be resolved; keep original so Url::parse fails with helpful error
-                modal_action.set_error_message("Bare token needs p2p_relay_url set in settings".into());
-                modal_action.set_finished();
-                return;
+                String::new()
+            };
+            if token.len() >= 8 {
+                let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
+                if let Some(relay) = relay {
+                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
+                } else {
+                    modal_action.set_error_message(t::instance::p2p::bare_token_needs_relay().into());
+                    modal_action.set_finished();
+                    return;
+                }
             }
-        } else if link.contains('/') || link.contains(':') {
-            // Preserve host/path inputs such as LAN links, add scheme when missing
-            if !link.contains("://") {
-                link = format!("http://{}", link.trim_start_matches('/'));
+        } else {
+            let token = if link.contains('/') {
+                // take last path segment, strip query/fragment
+                link.split('/')
+                    .last()
+                    .unwrap_or(&link)
+                    .split('?')
+                    .next()
+                    .unwrap_or(&link)
+                    .split('#')
+                    .next()
+                    .unwrap_or(&link)
+                    .trim()
+                    .to_string()
+            } else {
+                link.clone()
+            };
+            let looks_like_token = token.len() >= 8
+                && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '=');
+            // If the whole input looks like a bare token, expand via relay
+            if looks_like_token && link == token {
+                let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
+                if let Some(relay) = relay {
+                    link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
+                } else {
+                    // bare token without relay cannot be resolved; keep original so Url::parse fails with helpful error
+                    modal_action.set_error_message(t::instance::p2p::bare_token_needs_relay().into());
+                    modal_action.set_finished();
+                    return;
+                }
+            } else if link.contains('/') || link.contains(':') {
+                // Preserve host/path inputs such as LAN links, add scheme when missing
+                if !link.contains("://") {
+                    link = format!("http://{}", link.trim_start_matches('/'));
+                }
             }
         }
     }
@@ -715,7 +742,7 @@ pub async fn join_p2p_share(
     tracker.notify();
 
     let tmp_dir = backend.directories.temp_dir.join("p2p").join("download");
-    let _ = std::fs::create_dir_all(&tmp_dir);
+    let _ = tokio::fs::create_dir_all(&tmp_dir).await;
     let tmp_file = tmp_dir.join(format!("{}.zip", Uuid::new_v4()));
     let mut file = match tokio::fs::File::create(&tmp_file).await {
         Ok(f) => f,
@@ -841,8 +868,18 @@ pub async fn join_p2p_share(
     }
 }
 
+#[allow(dead_code)]
 pub async fn cancel_p2p_share(token: &str) {
     cancel_share_inner(token).await;
+}
+
+pub async fn cancel_p2p_share_with_backend(backend: Arc<BackendState>, token: Arc<str>) {
+    cancel_share_inner(&token).await;
+    let relay = backend.config.write().get().p2p_relay_url.clone().filter(|u| !u.trim().is_empty());
+    if let Some(relay) = relay {
+        let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
+        let _ = backend.http_client.delete(&url).send().await;
+    }
 }
 
 async fn cancel_share_inner(token: &str) {
@@ -888,6 +925,7 @@ fn extract_zip_to_instance(
 
     std::fs::create_dir_all(target_dir).map_err(|e| e.to_string())?;
 
+    let mut total_written: u64 = 0;
     for i in 0..archive.len() {
         if modal.has_requested_cancel() {
             return Err("Cancelled".into());
@@ -915,8 +953,12 @@ fn extract_zip_to_instance(
                     break;
                 }
                 written = written.saturating_add(n as u64);
+                total_written = total_written.saturating_add(n as u64);
                 if written > 512 * 1024 * 1024 {
                     return Err(format!("Entry too large: {name}"));
+                }
+                if total_written > 4 * 1024 * 1024 * 1024 {
+                    return Err("Uncompressed size too large (4 GiB cap)".into());
                 }
                 out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
             }
