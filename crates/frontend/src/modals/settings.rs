@@ -46,7 +46,6 @@ struct Settings {
     proxy_password_input: Entity<InputState>,
     proxy_password_changed: bool,
     p2p_relay_input: Entity<InputState>,
-    p2p_pages_input: Entity<InputState>,
 }
 
 pub fn build_settings_sheet(
@@ -106,8 +105,6 @@ pub fn build_settings_sheet(
         });
 
         let p2p_relay_input = cx.new(|cx| InputState::new(window, cx).placeholder("https://relay.example.com"));
-        let p2p_pages_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("https://user.github.io/pandora-sync"));
 
         let mut settings = Settings {
             selected_tab: SettingsTab::Interface,
@@ -126,7 +123,6 @@ pub fn build_settings_sheet(
             proxy_password_input,
             proxy_password_changed: false,
             p2p_relay_input,
-            p2p_pages_input,
         };
 
         cx.subscribe(&settings.proxy_protocol_select, Settings::on_proxy_protocol_changed)
@@ -136,7 +132,6 @@ pub fn build_settings_sheet(
         cx.subscribe(&settings.proxy_username_input, Settings::on_proxy_input_changed).detach();
         cx.subscribe(&settings.proxy_password_input, Settings::on_proxy_password_changed).detach();
         cx.subscribe(&settings.p2p_relay_input, Settings::on_p2p_input_changed).detach();
-        cx.subscribe(&settings.p2p_pages_input, Settings::on_p2p_input_changed).detach();
 
         settings.update_backend_configuration(window, cx);
 
@@ -200,9 +195,6 @@ impl Settings {
                 settings.p2p_relay_input.update(cx, |input, cx| {
                     input.set_value(result.config.p2p_relay_url.as_deref().unwrap_or(""), window, cx);
                 });
-                settings.p2p_pages_input.update(cx, |input, cx| {
-                    input.set_value(result.config.p2p_pages_url.as_deref().unwrap_or(""), window, cx);
-                });
 
                 settings.backend_config = Some(result.config);
                 settings.get_configuration_task = None;
@@ -256,20 +248,14 @@ impl Settings {
 
     fn save_p2p_config(&mut self, cx: &mut Context<Self>) {
         let relay = self.p2p_relay_input.read(cx).value().trim().to_string();
-        let pages = self.p2p_pages_input.read(cx).value().trim().to_string();
         let relay = if relay.is_empty() { None } else { Some(relay) };
-        let pages = if pages.is_empty() { None } else { Some(pages) };
         if let Some(cfg) = &mut self.backend_config {
-            if cfg.p2p_relay_url == relay && cfg.p2p_pages_url == pages {
+            if cfg.p2p_relay_url == relay {
                 return;
             }
             cfg.p2p_relay_url = relay.clone();
-            cfg.p2p_pages_url = pages.clone();
         }
-        self.backend_handle.send(MessageToBackend::SetP2pConfig {
-            relay_url: relay,
-            pages_url: pages,
-        });
+        self.backend_handle.send(MessageToBackend::SetP2pConfig { relay_url: relay });
     }
 
     fn get_proxy_config(&self, cx: &App) -> ProxyConfig {
@@ -553,12 +539,6 @@ impl Settings {
                             .gap_1()
                             .child(t::settings::p2p::relay_url())
                             .child(Input::new(&self.p2p_relay_input)),
-                    )
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .child(t::settings::p2p::pages_url())
-                            .child(Input::new(&self.p2p_pages_input)),
                     )
                     .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t::settings::p2p::hint())),
             ))

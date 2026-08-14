@@ -2524,23 +2524,17 @@ impl BackendState {
                 let backend = self.clone();
                 tokio::task::spawn(async move { crate::p2p_sync::cancel_p2p_share_with_backend(backend, token).await });
             },
-            MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
+            MessageToBackend::SetP2pConfig { relay_url } => {
                 let orig_relay = relay_url.clone();
-                let orig_pages = pages_url.clone();
                 let relay_url = relay_url
                     .map(|u| u.trim().to_string())
                     .filter(|u| !u.is_empty())
                     .filter(|u| is_valid_p2p_url(u));
-                let pages_url = pages_url
-                    .map(|u| u.trim().to_string())
-                    .filter(|u| !u.is_empty())
-                    .filter(|u| is_valid_p2p_url(u));
-                if (orig_relay.is_some() && relay_url.is_none()) || (orig_pages.is_some() && pages_url.is_none()) {
+                if orig_relay.is_some() && relay_url.is_none() {
                     self.send.send_warning(t::settings::p2p::invalid_url());
                 }
                 self.config.write().modify(|cfg| {
                     cfg.p2p_relay_url = relay_url;
-                    cfg.p2p_pages_url = pages_url;
                 });
             },
             MessageToBackend::Quit => {

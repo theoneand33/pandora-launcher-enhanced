@@ -367,7 +367,6 @@ pub enum MessageToBackend {
     },
     SetP2pConfig {
         relay_url: Option<String>,
-        pages_url: Option<String>,
     },
     Quit,
 }

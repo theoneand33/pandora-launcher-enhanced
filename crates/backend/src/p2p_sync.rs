@@ -165,7 +165,6 @@ pub async fn create_p2p_share(
     } else {
         None
     };
-    let pages_url: Option<String> = backend.config.write().get().p2p_pages_url.clone();
 
     if let Some(relay) = relay_url.filter(|u| !u.trim().is_empty()) {
         let relay: Arc<str> = Arc::from(relay.trim_end_matches('/').to_string());
@@ -174,7 +173,6 @@ pub async fn create_p2p_share(
         let backend_for_upload = Arc::clone(&backend);
         let modal_for_upload = modal_action.clone();
         let relay_clone = Arc::clone(&relay);
-        let pages_clone = pages_url.clone();
 
         tokio::task::spawn(async move {
             let url = format!("{relay_clone}/p2p/{token_for_upload}");
@@ -317,12 +315,7 @@ pub async fn create_p2p_share(
                         }
                     });
 
-                    let mut links: Vec<Arc<str>> = Vec::new();
-                    links.push(format!("{relay}/p2p/{token_for_upload}").into());
-                    if let Some(pages) = pages_clone.filter(|u| !u.trim().is_empty()) {
-                        let pages = pages.trim_end_matches('/').to_string();
-                        links.push(format!("{pages}/?token={token_for_upload}").into());
-                    }
+                    let links: Vec<Arc<str>> = vec![format!("{relay}/p2p/{token_for_upload}").into()];
 
                     backend_for_upload.send.send(MessageToFrontend::P2pShareCreated {
                         token: token_for_upload,

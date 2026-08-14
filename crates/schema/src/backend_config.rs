@@ -35,12 +35,6 @@ pub struct BackendConfig {
         deserialize_with = "crate::try_deserialize"
     )]
     pub p2p_relay_url: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "crate::skip_if_default",
-        deserialize_with = "crate::try_deserialize"
-    )]
-    pub p2p_pages_url: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
