@@ -16,7 +16,7 @@ A fork of [Pandora Launcher](https://github.com/Moulberry/PandoraLauncher) with 
 - Offline/cracked Minecraft accounts with custom skin support via a local skin server using [authlib-injector](https://github.com/yushijinhun/authlib-injector).
 - Extended instance export options, allowing for inclusion of shaders, screenshots, and backups.
 - Improved UX.
-- P2P instance sync via expiring links
+- [Instance sharing via expiring links](https://github.com/theoneand33/pandora-sync).
 
 ## FAQ
 
