@@ -2513,12 +2513,18 @@ impl BackendState {
             MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
                 let orig_relay = relay_url.clone();
                 let orig_pages = pages_url.clone();
-                let relay_url = relay_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
-                });
-                let pages_url = pages_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u).map(|p| p.scheme() == "http" || p.scheme() == "https").unwrap_or(false)
-                });
+                // Reject userinfo so credentials never leak into the generated share links.
+                let valid_p2p_url = |u: &str| {
+                    url::Url::parse(u)
+                        .map(|p| {
+                            (p.scheme() == "http" || p.scheme() == "https")
+                                && p.username().is_empty()
+                                && p.password().is_none()
+                        })
+                        .unwrap_or(false)
+                };
+                let relay_url = relay_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty() && valid_p2p_url(u));
+                let pages_url = pages_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty() && valid_p2p_url(u));
                 if (orig_relay.is_some() && relay_url.is_none()) || (orig_pages.is_some() && pages_url.is_none()) {
                     self.send.send_warning(t::settings::p2p::invalid_url());
                 }
