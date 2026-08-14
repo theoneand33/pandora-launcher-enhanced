@@ -4298,6 +4298,21 @@ en = "Failed to delete share from relay"
 [instance.p2p.delete_failed_status]
 en = "Failed to delete share from relay: relay returned ${status: String}"
 
+[instance.p2p.upload_failed]
+en = "Relay upload failed: ${error: String}"
+
+[instance.p2p.upload_failed_status]
+en = "Relay returned ${status: String}"
+
+[instance.p2p.using_local_link]
+en = "${failure: String} — using local link (LAN only)"
+
+[instance.p2p.local_fallback_failed]
+en = "${failure: String}, local fallback also failed"
+
+[instance.p2p.relay_local_bind_failed]
+en = "${failure: String} (local bind also failed: ${error: String})"
+
 [instance.p2p.bad_link]
 en = "Bad link: ${error: String}"
 

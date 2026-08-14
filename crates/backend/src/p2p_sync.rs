@@ -222,13 +222,41 @@ pub async fn create_p2p_share(
             let mut uploaded: u64 = 0;
             let mut failure: Option<String> = None;
             for part in 0..total_parts {
-                let n = match file.read(&mut buf).await {
-                    Ok(n) => n,
-                    Err(e) => {
-                        failure = Some(format!("Relay upload failed: {}", redact_error(&e.to_string())));
-                        break;
-                    },
+                if failure.is_some() {
+                    break;
+                }
+                let expected = if part + 1 == total_parts {
+                    if file_len == 0 {
+                        0
+                    } else {
+                        let rem = file_len % PART_SIZE;
+                        if rem == 0 { PART_SIZE as usize } else { rem as usize }
+                    }
+                } else {
+                    PART_SIZE as usize
                 };
+                let mut filled = 0usize;
+                while filled < expected {
+                    match file.read(&mut buf[filled..expected]).await {
+                        Ok(0) => {
+                            failure = Some(t::instance::p2p::upload_failed(redact_error("unexpected EOF")).to_string());
+                            break;
+                        },
+                        Ok(n) => filled += n,
+                        Err(e) => {
+                            failure = Some(t::instance::p2p::upload_failed(redact_error(&e.to_string())).to_string());
+                            break;
+                        },
+                    }
+                }
+                if failure.is_some() {
+                    break;
+                }
+                let n = filled;
+                if uploaded + n as u64 > file_len {
+                    failure = Some(t::instance::p2p::upload_failed(redact_error("size mismatch")).to_string());
+                    break;
+                }
                 let resp = backend_for_upload
                     .http_client
                     .put(&url)
@@ -246,14 +274,20 @@ pub async fn create_p2p_share(
                         upload_tracker.notify();
                     },
                     Ok(r) => {
-                        failure = Some(format!("Relay returned {}", r.status()));
+                        failure = Some(t::instance::p2p::upload_failed_status(r.status().to_string()).to_string());
                         break;
                     },
                     Err(e) => {
-                        failure = Some(format!("Relay upload failed: {}", redact_error(&e.to_string())));
+                        failure = Some(t::instance::p2p::upload_failed(redact_error(&e.to_string())).to_string());
                         break;
                     },
                 }
+            }
+            if failure.is_none() && uploaded != file_len {
+                failure = Some(
+                    t::instance::p2p::upload_failed(redact_error(&format!("incomplete upload {uploaded}/{file_len}")))
+                        .to_string(),
+                );
             }
             drop(file);
 
@@ -300,7 +334,7 @@ pub async fn create_p2p_share(
                     upload_tracker.set_finished(ProgressTrackerFinishType::Normal);
                 },
                 Some(failure) => {
-                    let warning = format!("{failure} — using local link (LAN only)");
+                    let warning = t::instance::p2p::using_local_link(failure.clone()).to_string();
                     let fallback = match create_local_share(
                         &backend_for_upload,
                         token_for_upload.clone(),
@@ -311,12 +345,15 @@ pub async fn create_p2p_share(
                     {
                         Ok(links) => links,
                         Err(bind_err) => {
-                            let detail = format!("{failure} (local bind also failed: {bind_err})");
+                            let detail =
+                                t::instance::p2p::relay_local_bind_failed(failure.clone(), bind_err).to_string();
                             modal_for_upload.set_error_message(detail.into());
                             modal_for_upload.set_finished();
                             upload_tracker.set_finished(ProgressTrackerFinishType::Error);
                             let _ = tokio::fs::remove_file(&bundle_for_upload).await;
-                            backend_for_upload.send.send_error(format!("{failure}, local fallback also failed"));
+                            backend_for_upload
+                                .send
+                                .send_error(t::instance::p2p::local_fallback_failed(failure.clone()).to_string());
                             return;
                         },
                     };
