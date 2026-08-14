@@ -89,10 +89,17 @@ impl<W: std::io::Write + std::io::Seek> std::io::Write for LimitedWriter<W> {
 
 impl<W: std::io::Seek> std::io::Seek for LimitedWriter<W> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        let p = self.inner.seek(pos)?;
-        if p > self.limit {
+        // Resolve the absolute target first so a seek past the cap is rejected
+        // before the underlying stream moves.
+        let target: i128 = match pos {
+            std::io::SeekFrom::Start(off) => off as i128,
+            std::io::SeekFrom::Current(delta) => self.inner.stream_position()? as i128 + delta as i128,
+            std::io::SeekFrom::End(delta) => self.written as i128 + delta as i128,
+        };
+        if target < 0 || target > self.limit as i128 {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bundle too large (2 GiB cap)"));
         }
+        let p = self.inner.seek(std::io::SeekFrom::Start(target as u64))?;
         if p > self.written {
             self.written = p;
         }
@@ -658,6 +665,23 @@ fn local_ipv4s() -> Vec<String> {
     out
 }
 
+// ponytail: expand a bare token against the configured relay.
+fn extract_token_from_query(link: &str) -> String {
+    if let Some(idx) = link.find("token=") {
+        link[idx + 6..]
+            .split('&')
+            .next()
+            .unwrap_or("")
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    } else {
+        String::new()
+    }
+}
+
 pub async fn join_p2p_share(
     backend: Arc<BackendState>,
     mut link: String,
@@ -669,19 +693,7 @@ pub async fn join_p2p_share(
     if !link.contains("://") {
         // Direct token= query without host, e.g. "token=abc-123&foo=bar"
         if link.starts_with("token=") || link.contains("?token=") || link.contains("&token=") {
-            let token = if let Some(idx) = link.find("token=") {
-                link[idx + 6..]
-                    .split('&')
-                    .next()
-                    .unwrap_or("")
-                    .split('#')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string()
-            } else {
-                String::new()
-            };
+            let token = extract_token_from_query(&link);
             if token.len() >= 8 {
                 let relay = effective_relay(&backend);
                 link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
@@ -718,33 +730,33 @@ pub async fn join_p2p_share(
         }
     }
     // pages URL like https://pages.example.com/?token=XYZ -> rewrite to relay
-    if let Ok(parsed) = url::Url::parse(&link) {
-        if let Some(token) = parsed.query_pairs().find(|(k, _)| k == "token").map(|(_, v)| v.to_string()) {
-            let token = token.trim().to_string();
-            if token.len() >= 8 {
-                let relay = effective_relay(&backend);
-                link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
-            }
+    if let Ok(parsed) = url::Url::parse(&link)
+        && let Some(token) = parsed.query_pairs().find(|(k, _)| k == "token").map(|(_, v)| v.to_string())
+    {
+        let token = token.trim().to_string();
+        if token.len() >= 8 {
+            let relay = effective_relay(&backend);
+            link = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
         }
     }
 
     let url = match url::Url::parse(&link) {
         Ok(u) => u,
         Err(e) => {
-            modal_action.set_error_message(format!("Bad link: {e}").into());
+            modal_action.set_error_message(t::instance::p2p::bad_link(e.to_string()).into());
             modal_action.set_finished();
             return;
         },
     };
     if url.scheme() != "http" && url.scheme() != "https" {
-        modal_action.set_error_message("Link must be http or https".into());
+        modal_action.set_error_message(t::instance::p2p::link_scheme_invalid().into());
         modal_action.set_finished();
         return;
     }
     // Reject links that don't look like /p2p/<token> unless they carry ?token=
     let has_token_param = url.query_pairs().any(|(k, _)| k == "token");
     if !has_token_param && !url.path().starts_with("/p2p/") {
-        modal_action.set_error_message("Link must be /p2p/<token> or contain ?token=".into());
+        modal_action.set_error_message(t::instance::p2p::link_shape_invalid().into());
         modal_action.set_finished();
         return;
     }
@@ -1127,5 +1139,37 @@ mod tests {
         assert_eq!(count(PART_SIZE), 1);
         assert_eq!(count(PART_SIZE + 1), 2);
         assert_eq!(count(2 * PART_SIZE), 2);
+    }
+
+    #[test]
+    fn limited_writer_caps_total() {
+        use std::io::Write;
+        let mut w = LimitedWriter::new(std::io::Cursor::new(Vec::new()), 10);
+        assert!(w.write_all(&[0u8; 5]).is_ok());
+        assert!(w.write_all(&[0u8; 5]).is_ok());
+        assert!(w.write_all(&[0u8; 1]).is_err());
+    }
+
+    #[test]
+    fn limited_writer_seek_rejects_past_cap_before_moving() {
+        use std::io::{Seek, SeekFrom};
+        let mut w = LimitedWriter::new(std::io::Cursor::new(vec![0u8; 8]), 10);
+        assert!(w.seek(SeekFrom::Start(10)).is_ok());
+        // Past the cap: rejected, and the inner stream must not move.
+        assert!(w.seek(SeekFrom::Start(11)).is_err());
+        assert_eq!(w.inner.stream_position().unwrap(), 10);
+        // Backwards seeks within the file are valid.
+        assert!(w.seek(SeekFrom::Current(-3)).is_ok());
+        // Seeking before the start is invalid.
+        assert!(w.seek(SeekFrom::Current(-8)).is_err());
+    }
+
+    #[test]
+    fn extract_token_from_query_works() {
+        assert_eq!(extract_token_from_query("token=abc-123&foo=bar"), "abc-123");
+        assert_eq!(extract_token_from_query("?token=xyz#frag"), "xyz");
+        assert_eq!(extract_token_from_query("foo?token=a&b"), "a");
+        assert_eq!(extract_token_from_query("token="), "");
+        assert_eq!(extract_token_from_query("no token here"), "");
     }
 }

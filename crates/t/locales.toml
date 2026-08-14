@@ -4298,6 +4298,15 @@ en = "Failed to delete share from relay"
 [instance.p2p.delete_failed_status]
 en = "Failed to delete share from relay: relay returned ${status: String}"
 
+[instance.p2p.bad_link]
+en = "Bad link: ${error: String}"
+
+[instance.p2p.link_scheme_invalid]
+en = "Link must be http or https"
+
+[instance.p2p.link_shape_invalid]
+en = "Link must be /p2p/<token> or contain ?token="
+
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"
