@@ -540,7 +540,16 @@ impl Settings {
                             .child(t::settings::p2p::relay_url())
                             .child(Input::new(&self.p2p_relay_input)),
                     )
-                    .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t::settings::p2p::hint())),
+                    .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t::settings::p2p::hint()))
+                    .child(
+                        Button::new("open-pandora-sync")
+                            .info()
+                            .icon(PandoraIcon::Globe)
+                            .label("https://github.com/theoneand33/pandora-sync")
+                            .on_click(|_, _, cx| {
+                                cx.open_url("https://github.com/theoneand33/pandora-sync");
+                            }),
+                    ),
             ))
     }
 }
