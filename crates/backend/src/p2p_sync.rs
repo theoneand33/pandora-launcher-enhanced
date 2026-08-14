@@ -38,7 +38,7 @@ fn effective_relay(backend: &BackendState) -> String {
 #[derive(Debug)]
 struct P2pShare {
     path: Option<PathBuf>,
-    handle: tokio::task::JoinHandle<()>,
+    handle: Option<tokio::task::JoinHandle<()>>,
     relay_url: Option<Arc<str>>,
 }
 
@@ -259,7 +259,7 @@ pub async fn create_p2p_share(
                         Arc::clone(&token_for_upload),
                         P2pShare {
                             path: None,
-                            handle: tokio::task::spawn(async {}),
+                            handle: None,
                             relay_url: Some(relay_clone.clone()),
                         },
                     );
@@ -271,24 +271,8 @@ pub async fn create_p2p_share(
                         if let Some(s) = share
                             && let Some(relay) = s.relay_url
                         {
-                            let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token_exp);
-                            match backend_exp.http_client.delete(&url).send().await {
-                                Ok(r) if r.status().is_success() => {},
-                                Ok(r) => {
-                                    log::error!("failed to delete p2p share from relay: relay returned {}", r.status());
-                                    backend_exp.send.send_error(format!(
-                                        "Failed to delete share from relay: relay returned {}",
-                                        r.status()
-                                    ));
-                                },
-                                Err(e) => {
-                                    log::error!(
-                                        "failed to delete p2p share from relay: {}",
-                                        redact_error(&e.to_string())
-                                    );
-                                    backend_exp.send.send_error("Failed to delete share from relay");
-                                },
-                            }
+                            // ponytail: natural expiry is housekeeping, log-only. User-triggered cancels surface errors.
+                            let _ = delete_from_relay(&backend_exp, &relay, &token_exp).await;
                         }
                     });
 
@@ -392,7 +376,7 @@ async fn create_local_share(
         Arc::clone(&token),
         P2pShare {
             path: Some(bundle_path),
-            handle,
+            handle: Some(handle),
             relay_url: None,
         },
     );
@@ -931,31 +915,53 @@ pub async fn cancel_p2p_share_with_backend(backend: Arc<BackendState>, token: Ar
     let Some(relay) = share.relay_url else {
         return;
     };
+    if let Err(e) = delete_from_relay(&backend, &relay, &token).await {
+        match e {
+            RelayDeleteError::Status(status) => {
+                backend.send.send_error(t::instance::p2p::delete_failed_status(status.to_string()));
+            },
+            RelayDeleteError::Transport => {
+                backend.send.send_error(t::instance::p2p::delete_failed());
+            },
+        }
+    }
+}
+
+async fn delete_from_relay(backend: &BackendState, relay: &str, token: &str) -> Result<(), RelayDeleteError> {
     let url = format!("{}/p2p/{}", relay.trim_end_matches('/'), token);
     match backend.http_client.delete(&url).send().await {
-        Ok(r) if r.status().is_success() => {},
+        Ok(r) if r.status().is_success() || r.status() == reqwest::StatusCode::NOT_FOUND => Ok(()),
         Ok(r) => {
             log::error!("failed to delete p2p share from relay: relay returned {}", r.status());
-            backend
-                .send
-                .send_error(format!("Failed to delete share from relay: relay returned {}", r.status()));
+            Err(RelayDeleteError::Status(r.status()))
         },
         Err(e) => {
             log::error!("failed to delete p2p share from relay: {}", redact_error(&e.to_string()));
-            backend.send.send_error("Failed to delete share from relay");
+            Err(RelayDeleteError::Transport)
         },
     }
+}
+
+enum RelayDeleteError {
+    Status(reqwest::StatusCode),
+    Transport,
 }
 
 async fn cancel_share_inner(token: &str) -> Option<P2pShare> {
     let share = { shares().write().remove(token) };
     if let Some(share) = share {
-        share.handle.abort();
+        if let Some(handle) = share.handle {
+            handle.abort();
+        }
         if let Some(path) = &share.path {
             let _ = tokio::fs::remove_file(path).await;
         }
         log::trace!("p2p share {} cancelled", &token.chars().take(8).collect::<String>());
-        Some(share)
+        Some(P2pShare {
+            path: share.path,
+            handle: None,
+            relay_url: share.relay_url,
+        })
     } else {
         None
     }

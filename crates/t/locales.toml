@@ -4292,6 +4292,12 @@ sv = "Dela utanför lokalt nätverk"
 ru = "Поделиться вне локальной сети"
 fr = "Partager hors réseau local"
 
+[instance.p2p.delete_failed]
+en = "Failed to delete share from relay"
+
+[instance.p2p.delete_failed_status]
+en = "Failed to delete share from relay: relay returned ${status: String}"
+
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"

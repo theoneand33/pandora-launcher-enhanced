@@ -60,6 +60,19 @@ use crate::{
     skin_manager::SkinManager,
 };
 
+fn is_valid_p2p_url(u: &str) -> bool {
+    url::Url::parse(u)
+        .map(|p| {
+            (p.scheme() == "http" || p.scheme() == "https")
+                && p.host_str().is_some()
+                && p.username().is_empty()
+                && p.password().is_none()
+                && p.query().is_none()
+                && p.fragment().is_none()
+        })
+        .unwrap_or(false)
+}
+
 impl BackendState {
     pub async fn handle_message(self: &Arc<Self>, message: MessageToBackend) {
         match message {
@@ -2514,30 +2527,14 @@ impl BackendState {
             MessageToBackend::SetP2pConfig { relay_url, pages_url } => {
                 let orig_relay = relay_url.clone();
                 let orig_pages = pages_url.clone();
-                let relay_url = relay_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u)
-                        .map(|p| {
-                            (p.scheme() == "http" || p.scheme() == "https")
-                                && p.host_str().is_some()
-                                && p.username().is_empty()
-                                && p.password().is_none()
-                                && p.query().is_none()
-                                && p.fragment().is_none()
-                        })
-                        .unwrap_or(false)
-                });
-                let pages_url = pages_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).filter(|u| {
-                    url::Url::parse(u)
-                        .map(|p| {
-                            (p.scheme() == "http" || p.scheme() == "https")
-                                && p.host_str().is_some()
-                                && p.username().is_empty()
-                                && p.password().is_none()
-                                && p.query().is_none()
-                                && p.fragment().is_none()
-                        })
-                        .unwrap_or(false)
-                });
+                let relay_url = relay_url
+                    .map(|u| u.trim().to_string())
+                    .filter(|u| !u.is_empty())
+                    .filter(|u| is_valid_p2p_url(u));
+                let pages_url = pages_url
+                    .map(|u| u.trim().to_string())
+                    .filter(|u| !u.is_empty())
+                    .filter(|u| is_valid_p2p_url(u));
                 if (orig_relay.is_some() && relay_url.is_none()) || (orig_pages.is_some() && pages_url.is_none()) {
                     self.send.send_warning(t::settings::p2p::invalid_url());
                 }
@@ -3061,4 +3058,26 @@ async fn send_log_line(
         },
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_valid_p2p_url_rejects_bad_input() {
+        assert!(!is_valid_p2p_url("https://user:pass@relay.example.com"));
+        assert!(!is_valid_p2p_url("http://"));
+        assert!(!is_valid_p2p_url("https://relay.example.com?token=abc"));
+        assert!(!is_valid_p2p_url("https://relay.example.com#frag"));
+        assert!(!is_valid_p2p_url("ftp://relay.example.com"));
+        assert!(!is_valid_p2p_url("not a url"));
+    }
+
+    #[test]
+    fn is_valid_p2p_url_accepts_plain_http_https() {
+        assert!(is_valid_p2p_url("https://relay.example.com"));
+        assert!(is_valid_p2p_url("http://relay.example.com"));
+        assert!(is_valid_p2p_url("https://relay.example.com:8443"));
+    }
 }
