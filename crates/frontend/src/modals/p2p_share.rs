@@ -27,6 +27,7 @@ struct P2pShareState {
     include_logs: bool,
     include_cache: bool,
     include_synced: bool,
+    use_relay: bool,
 }
 
 impl P2pShareState {
@@ -153,6 +154,15 @@ impl P2pShareState {
                         this.include_synced = *v;
                         cx.notify();
                     })),
+            )
+            .child(
+                Checkbox::new("p2p_use_relay")
+                    .checked(self.use_relay)
+                    .label(t::instance::p2p::use_relay())
+                    .on_click(cx.listener(|this, v, _, cx| {
+                        this.use_relay = *v;
+                        cx.notify();
+                    })),
             );
 
         let hint = div()
@@ -180,6 +190,7 @@ impl P2pShareState {
                         let id = self.instance_id;
                         let handle = self.backend_handle.clone();
                         let options = self.build_options();
+                        let use_relay = self.use_relay;
                         move |_, window, cx| {
                             window.close_dialog(cx);
                             let modal = ModalAction::default();
@@ -194,6 +205,7 @@ impl P2pShareState {
                                 id,
                                 options: options.clone(),
                                 modal_action: modal,
+                                use_relay,
                             });
                         }
                     })),
@@ -215,6 +227,7 @@ pub fn open_p2p_share(instance_id: InstanceID, backend_handle: BackendHandle, wi
         include_logs: false,
         include_cache: false,
         include_synced: false,
+        use_relay: false,
     });
     window.open_dialog(cx, move |modal, window, cx| {
         cx.update_entity(&state, |state, cx| state.render(modal, window, cx))

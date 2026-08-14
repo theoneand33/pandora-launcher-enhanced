@@ -92,7 +92,7 @@ Launcher config (`BackendConfig`):
 ## Steps to ship
 
 1. `crates/bridge/src/message.rs`: `CreateP2pShare`, `JoinP2pShare { link, target_name }`, `CancelP2pShare`, and `P2pShareCreated { token, links, expires_at }`.
-2. `crates/backend/src/p2p_sync.rs`: `create_p2p_share`, `join_p2p_share`, `cancel_p2p_share`, `serve_p2p` (httparse + tokio fs) plus relay upload branch.
+2. `crates/backend/src/p2p_sync.rs`: `create_p2p_share`, `join_p2p_share`, `cancel_p2p_share_with_backend`, `serve_p2p` (httparse + tokio fs) plus relay upload branch.
 3. `crates/schema/src/backend_config.rs`: `p2p_relay_url` + `p2p_pages_url`.
 4. `~/pandora-sync/` (separate git repo): `index.html` + `README.md` + `relay/` (Coolify). Deploy `index.html` to Pages, `relay/` to Coolify.
 5. `crates/frontend/src/modals/p2p_sync.rs` + `processor.rs` plumbing.

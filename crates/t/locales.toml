@@ -4283,6 +4283,45 @@ en = "P2P import done: ${name: String}"
 [instance.p2p.bind_failed]
 en = "Bind failed: ${error: String}"
 
+[instance.p2p.use_relay]
+en = "Share outside local network"
+pl = "Udostępnij poza siecią lokalną"
+de = "Außerhalb des lokalen Netzwerks teilen"
+hu = "Megosztás helyi hálózaton kívül"
+sv = "Dela utanför lokalt nätverk"
+ru = "Поделиться вне локальной сети"
+fr = "Partager hors réseau local"
+
+[instance.p2p.delete_failed]
+en = "Failed to delete share from relay"
+
+[instance.p2p.delete_failed_status]
+en = "Failed to delete share from relay: relay returned ${status: String}"
+
+[instance.p2p.upload_failed]
+en = "Relay upload failed: ${error: String}"
+
+[instance.p2p.upload_failed_status]
+en = "Relay returned ${status: String}"
+
+[instance.p2p.using_local_link]
+en = "${failure: String} — using local link (LAN only)"
+
+[instance.p2p.local_fallback_failed]
+en = "${failure: String}, local fallback also failed"
+
+[instance.p2p.relay_local_bind_failed]
+en = "${failure: String} (local bind also failed: ${error: String})"
+
+[instance.p2p.bad_link]
+en = "Bad link: ${error: String}"
+
+[instance.p2p.link_scheme_invalid]
+en = "Link must be http or https"
+
+[instance.p2p.link_shape_invalid]
+en = "Link must be /p2p/<token> or contain ?token="
+
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"
