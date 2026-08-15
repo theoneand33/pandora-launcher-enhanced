@@ -251,17 +251,18 @@ impl Instance {
                 file_watching.watch_filesystem(this.saves_path.clone(), WatchTarget::InstanceSavesDir { id: this.id });
 
                 let (all_dirty, dirty_paths) = this.dirty_worlds.take();
+                let saves_path = this.saves_path.clone();
                 let future = if let Some(last) = &this.worlds
                     && !all_dirty
                 {
                     if !dirty_paths.is_empty() {
                         let last = last.clone();
-                        tokio::task::spawn_blocking(move || Self::load_worlds_dirty(dirty_paths, last))
+                        let saves_path = saves_path.clone();
+                        tokio::task::spawn_blocking(move || Self::load_worlds_dirty(dirty_paths, last, &saves_path))
                     } else {
                         return Some(last.clone());
                     }
                 } else {
-                    let saves_path = this.saves_path.clone();
                     tokio::task::spawn_blocking(move || Self::load_worlds_all(&saves_path))
                 };
 
@@ -308,6 +309,9 @@ impl Instance {
         let Ok(directory) = std::fs::read_dir(&saves_path) else {
             return [].into();
         };
+        let Some(canonical_saves) = canonical_worlds_dir(saves_path) else {
+            return [].into();
+        };
 
         let mut count = 0;
         let mut summaries = Vec::with_capacity(64);
@@ -322,7 +326,7 @@ impl Instance {
                 continue;
             };
             let path = entry.path();
-            if !path.is_dir() {
+            if !is_valid_world_path(&path, &canonical_saves) {
                 continue;
             }
 
@@ -346,6 +350,7 @@ impl Instance {
     fn load_worlds_dirty(
         dirty: FxHashSet<Arc<Path>>,
         last: Arc<[InstanceWorldSummary]>,
+        saves_path: &Path,
     ) -> Arc<[InstanceWorldSummary]> {
         log::debug!("Loading changed worlds");
         log::trace!("Changed worlds: {:?}", dirty);
@@ -354,24 +359,26 @@ impl Instance {
 
         let mut count = 0;
 
-        for path in dirty.iter() {
-            if count >= 64 {
-                break;
-            }
+        if let Some(canonical_saves) = canonical_worlds_dir(saves_path) {
+            for path in dirty.iter() {
+                if count >= 64 {
+                    break;
+                }
 
-            if !path.is_dir() {
-                continue;
-            }
+                if !is_valid_world_path(path, &canonical_saves) {
+                    continue;
+                }
 
-            count += 1;
+                count += 1;
 
-            match load_world_summary(path) {
-                Ok(summary) => {
-                    summaries.push(summary);
-                },
-                Err(err) => {
-                    log::error!("Error loading world summary: {:?}", err);
-                },
+                match load_world_summary(path) {
+                    Ok(summary) => {
+                        summaries.push(summary);
+                    },
+                    Err(err) => {
+                        log::error!("Error loading world summary: {:?}", err);
+                    },
+                }
             }
         }
 
@@ -1374,6 +1381,22 @@ fn read_disabled_children_for(summary: &ContentSummary, path: &Path) -> Option<A
     let aux_path = crate::pandora_aux_path(&summary.id, &summary.name, path)?;
     let aux: AuxiliaryContentMeta = crate::read_json(&aux_path).ok()?;
     Some(aux.disabled_children)
+}
+
+fn canonical_worlds_dir(saves_path: &Path) -> Option<PathBuf> {
+    saves_path.canonicalize().ok()
+}
+
+fn is_valid_world_path(path: &Path, canonical_saves: &Path) -> bool {
+    if path.symlink_metadata().map(|metadata| metadata.is_symlink()).unwrap_or(false) {
+        return false;
+    }
+    if !path.is_dir() {
+        return false;
+    }
+    path.canonicalize()
+        .map(|canonical| canonical.starts_with(canonical_saves))
+        .unwrap_or(false)
 }
 
 fn load_world_summary(path: &Path) -> anyhow::Result<InstanceWorldSummary> {

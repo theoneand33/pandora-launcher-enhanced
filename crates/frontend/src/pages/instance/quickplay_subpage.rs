@@ -269,7 +269,7 @@ impl ListDelegate for WorldsListDelegate {
         let id = self.id;
         let name = self.name.clone();
         let data = self.data.clone();
-        let target = summary.level_path.file_name().unwrap().to_owned();
+        let target = summary.level_path.file_name()?.to_owned();
         let item = ListItem::new(ix).p_1().child(
             h_flex()
                 .gap_1()

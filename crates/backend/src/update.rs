@@ -252,11 +252,21 @@ async fn install_update_inner(
         return Err("Unable to update, missing PANDORA_UPDATE_PUBKEY at compile time".into());
     };
 
-    let pubkey = base64::engine::general_purpose::STANDARD.decode(pubkey).unwrap();
-    let sig = base64::engine::general_purpose::STANDARD.decode(&*update.exe.sig).unwrap();
+    let pubkey = base64::engine::general_purpose::STANDARD
+        .decode(pubkey)
+        .map_err(|_| -> Arc<str> { "Unable to decode update public key".into() })?;
+    let sig = base64::engine::general_purpose::STANDARD
+        .decode(&*update.exe.sig)
+        .map_err(|_| -> Arc<str> { "Unable to decode update signature".into() })?;
 
-    let pk = minisign_verify::PublicKey::decode(std::str::from_utf8(&pubkey).unwrap()).unwrap();
-    let signature = minisign_verify::Signature::decode(std::str::from_utf8(&sig).unwrap()).unwrap();
+    let pubkey_str =
+        std::str::from_utf8(&pubkey).map_err(|_| -> Arc<str> { "Update public key is not valid UTF-8".into() })?;
+    let sig_str =
+        std::str::from_utf8(&sig).map_err(|_| -> Arc<str> { "Update signature is not valid UTF-8".into() })?;
+    let pk = minisign_verify::PublicKey::decode(pubkey_str)
+        .map_err(|e| -> Arc<str> { format!("Unable to decode update public key: {:?}", e).into() })?;
+    let signature = minisign_verify::Signature::decode(sig_str)
+        .map_err(|e| -> Arc<str> { format!("Unable to decode update signature: {:?}", e).into() })?;
 
     match pk.verify(&bytes, &signature, false) {
         Err(minisign_verify::Error::InvalidSignature) => {
