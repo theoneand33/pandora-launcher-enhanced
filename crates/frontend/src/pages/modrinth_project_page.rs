@@ -71,24 +71,26 @@ impl ModrinthProjectPage {
                 can_install_latest = true;
 
                 for content_folder in ContentFolder::iter() {
-                    for summary in instance_content[content_folder].read(cx).iter() {
-                        let ContentSource::ModrinthProject {
-                            project_id: other_project_id,
-                        } = &summary.content_source
-                        else {
-                            continue;
-                        };
+                    if let Some(content) = instance_content[content_folder].read(cx).clone() {
+                        for summary in content.iter() {
+                            let ContentSource::ModrinthProject {
+                                project_id: other_project_id,
+                            } = &summary.content_source
+                            else {
+                                continue;
+                            };
 
-                        if project_id.as_str() != &**other_project_id {
-                            continue;
+                            if project_id.as_str() != other_project_id.as_ref() {
+                                continue;
+                            }
+
+                            let installed_content = InstalledContent {
+                                content_id: summary.id,
+                                status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
+                            };
+                            all_installed_content.push(installed_content);
+                            specific_installed_content[content_folder].push(installed_content);
                         }
-
-                        let installed_content = InstalledContent {
-                            content_id: summary.id,
-                            status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                        };
-                        all_installed_content.push(installed_content);
-                        specific_installed_content[content_folder].push(installed_content);
                     }
 
                     let content = instance_content[content_folder].clone();
@@ -98,23 +100,24 @@ impl ModrinthProjectPage {
 
                         specific.clear();
 
-                        let content = entity.read(cx);
-                        for summary in content.iter() {
-                            let ContentSource::ModrinthProject {
-                                project_id: other_project_id,
-                            } = &summary.content_source
-                            else {
-                                continue;
-                            };
+                        if let Some(content) = entity.read(cx).clone() {
+                            for summary in content.iter() {
+                                let ContentSource::ModrinthProject {
+                                    project_id: other_project_id,
+                                } = &summary.content_source
+                                else {
+                                    continue;
+                                };
 
-                            if project_id.as_str() != &**other_project_id {
-                                continue;
+                                if project_id.as_str() != other_project_id.as_ref() {
+                                    continue;
+                                }
+
+                                specific.push(InstalledContent {
+                                    content_id: summary.id,
+                                    status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
+                                });
                             }
-
-                            specific.push(InstalledContent {
-                                content_id: summary.id,
-                                status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                            });
                         }
 
                         page.all_installed_content.clear();

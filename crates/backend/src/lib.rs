@@ -19,9 +19,12 @@ use uuid::Uuid;
 
 mod backend_filesystem;
 mod backend_handler;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 
 mod account;
 mod directories;
+mod duplicate;
 mod export;
 mod id_slab;
 mod install_content;
@@ -425,6 +428,62 @@ pub fn hard_link_or_copy(from: &Path, to: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+pub fn are_files_hard_linked(a: &Path, b: &Path) -> std::io::Result<bool> {
+    let metadata_a = std::fs::symlink_metadata(a)?;
+    let metadata_b = std::fs::symlink_metadata(b)?;
+
+    if !metadata_a.is_file() || !metadata_b.is_file() {
+        return Ok(false);
+    }
+    if metadata_a.len() != metadata_b.len() {
+        return Ok(false);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(metadata_a.dev() == metadata_b.dev() && metadata_a.ino() == metadata_b.ino())
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
+        let file_a = std::fs::File::open(a)?;
+        let file_b = std::fs::File::open(b)?;
+        let mut info_a = Default::default();
+        let mut info_b = Default::default();
+        unsafe {
+            GetFileInformationByHandle(HANDLE(file_a.as_raw_handle()), &mut info_a)?;
+            GetFileInformationByHandle(HANDLE(file_b.as_raw_handle()), &mut info_b)?;
+        }
+        Ok(info_a.dwVolumeSerialNumber == info_b.dwVolumeSerialNumber
+            && info_a.nFileIndexHigh == info_b.nFileIndexHigh
+            && info_a.nFileIndexLow == info_b.nFileIndexLow)
+    }
+    #[cfg(not(any(windows, unix)))]
+    compile_error!("Unsupported platform: can't check if files are hard linked");
+}
+
+pub(crate) fn has_multiple_hard_links(path: &Path) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        let metadata = std::fs::symlink_metadata(path).ok()?;
+        use std::os::unix::fs::MetadataExt;
+        Some(metadata.nlink() > 1)
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
+        let file = std::fs::File::open(path).ok()?;
+        let mut info = Default::default();
+        unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }.ok()?;
+        Some(info.nNumberOfLinks > 1)
+    }
+    #[cfg(not(any(windows, unix)))]
+    compile_error!("Unsupported platform: can't check for multiple hard links");
 }
 
 pub fn rename_with_fallback_across_devices(from: &Path, to: &Path) -> std::io::Result<()> {

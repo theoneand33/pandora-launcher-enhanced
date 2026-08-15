@@ -1,8 +1,6 @@
 use std::{
-    cell::RefCell,
     collections::BTreeSet,
     ops::Range,
-    rc::Rc,
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
@@ -39,10 +37,7 @@ use strum::IntoEnumIterator;
 use ustr::Ustr;
 
 use crate::{
-    component::{
-        error_alert::ErrorAlert,
-        mod_action_dropdown::{ModAction, render_mod_action_dropdown},
-    },
+    component::error_alert::ErrorAlert,
     entity::{
         DataEntities,
         instance::ContentStates,
@@ -53,42 +48,6 @@ use crate::{
     interface_config::InterfaceConfig,
     pages::page::Page,
 };
-
-fn show_vanilla_change_to_fabric_modal(
-    install_for_id: InstanceID,
-    backend_handle: bridge::handle::BackendHandle,
-    on_yes: impl FnOnce(&mut Window, &mut App) + 'static,
-    window: &mut Window,
-    cx: &mut App,
-) {
-    let on_yes = Rc::new(RefCell::new(Some(on_yes)));
-    window.open_dialog(cx, move |dialog, _, _| {
-        let on_yes = on_yes.clone();
-        let backend_handle = backend_handle.clone();
-        dialog.title("Switch to Fabric?").child(
-            v_flex()
-                .gap_2()
-                .child("This instance is Vanilla. Installing this will switch it to Fabric so mods can load.")
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .child(Button::new("yes").success().label("Switch to Fabric").on_click(move |_, window, cx| {
-                            window.close_all_dialogs(cx);
-                            backend_handle.send(MessageToBackend::SetInstanceLoader {
-                                id: install_for_id,
-                                loader: Loader::Fabric,
-                            });
-                            if let Some(on_yes) = on_yes.borrow_mut().take() {
-                                on_yes(window, cx);
-                            }
-                        }))
-                        .child(Button::new("no").label(t::common::cancel()).on_click(|_, window, cx| {
-                            window.close_dialog(cx);
-                        })),
-                ),
-        )
-    });
-}
 
 pub struct CurseforgeSearchPage {
     data: DataEntities,
@@ -115,7 +74,6 @@ pub struct CurseforgeSearchPage {
     search_error: Option<SharedString>,
     image_cache: Entity<RetainAllImageCache>,
     content_states: Option<ContentStates>,
-    open_dropdown_id: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -181,7 +139,7 @@ impl CurseforgeSearchPage {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut project_type = InterfaceConfig::get(cx).curseforge_page_class_id;
-        if project_type == CurseforgeClassId::Other {
+        if project_type == CurseforgeClassId::Other || project_type == CurseforgeClassId::Datapack {
             project_type = CurseforgeClassId::Mod;
             InterfaceConfig::get_mut(cx).curseforge_page_class_id = CurseforgeClassId::Mod;
         }
@@ -192,8 +150,7 @@ impl CurseforgeSearchPage {
                 CurseforgeClassId::Modpack => t::instance::content::search::modpack(),
                 CurseforgeClassId::Resourcepack => t::instance::content::search::resourcepack(),
                 CurseforgeClassId::Shader => t::instance::content::search::shader(),
-                CurseforgeClassId::Datapack => "Search datapacks...",
-                _ => t::instance::content::search::file(),
+                _ => t::common::search(),
             };
             InputState::new(window, cx).placeholder(placeholder).clean_on_escape()
         });
@@ -220,21 +177,24 @@ impl CurseforgeSearchPage {
                 for content_folder in ContentFolder::iter() {
                     let mut specific_installed_content: FxHashMap<u32, Vec<InstalledContent>> = FxHashMap::default();
 
-                    for summary in instance_content[content_folder].read(cx).iter() {
-                        let ContentSource::CurseforgeProject { project_id: project } = summary.content_source else {
-                            continue;
-                        };
+                    if let Some(content) = instance_content[content_folder].read(cx) {
+                        for summary in content.iter() {
+                            let ContentSource::CurseforgeProject { project_id: project } = summary.content_source
+                            else {
+                                continue;
+                            };
 
-                        let installed_content = InstalledContent {
-                            content_id: summary.id,
-                            status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                        };
+                            let installed_content = InstalledContent {
+                                content_id: summary.id,
+                                status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
+                            };
 
-                        let installed = all_installed_content_by_project.entry(project).or_default();
-                        installed.push(installed_content);
+                            let installed = all_installed_content_by_project.entry(project).or_default();
+                            installed.push(installed_content);
 
-                        let installed = specific_installed_content.entry(project).or_default();
-                        installed.push(installed_content);
+                            let installed = specific_installed_content.entry(project).or_default();
+                            installed.push(installed_content);
+                        }
                     }
 
                     specific_installed_content_by_project[content_folder] = specific_installed_content;
@@ -245,18 +205,19 @@ impl CurseforgeSearchPage {
 
                         specific.clear();
 
-                        let content = entity.read(cx);
-                        for summary in content.iter() {
-                            let ContentSource::CurseforgeProject { project_id: project } = summary.content_source
-                            else {
-                                continue;
-                            };
+                        if let Some(content) = entity.read(cx) {
+                            for summary in content.iter() {
+                                let ContentSource::CurseforgeProject { project_id: project } = summary.content_source
+                                else {
+                                    continue;
+                                };
 
-                            let installed = specific.entry(project).or_default();
-                            installed.push(InstalledContent {
-                                content_id: summary.id,
-                                status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                            })
+                                let installed = specific.entry(project).or_default();
+                                installed.push(InstalledContent {
+                                    content_id: summary.id,
+                                    status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
+                                })
+                            }
                         }
 
                         page.all_installed_content_by_project.clear();
@@ -266,6 +227,7 @@ impl CurseforgeSearchPage {
                                 installed.extend_from_slice(value.as_slice());
                             }
                         }
+                        cx.notify();
                     })
                     .detach();
                 }
@@ -299,7 +261,6 @@ impl CurseforgeSearchPage {
             search_error: None,
             image_cache: RetainAllImageCache::new(cx),
             content_states,
-            open_dropdown_id: None,
         };
         page.load_more(cx);
         page
@@ -340,8 +301,7 @@ impl CurseforgeSearchPage {
                 CurseforgeClassId::Modpack => t::instance::content::search::modpack(),
                 CurseforgeClassId::Resourcepack => t::instance::content::search::resourcepack(),
                 CurseforgeClassId::Shader => t::instance::content::search::shader(),
-                CurseforgeClassId::Datapack => "Search datapacks...",
-                _ => t::instance::content::search::file(),
+                _ => t::common::search(),
             };
             state.set_placeholder(placeholder, window, cx)
         });
@@ -521,17 +481,14 @@ impl CurseforgeSearchPage {
     }
 
     fn render_items(&mut self, visible_range: Range<usize>, _window: &mut Window, cx: &mut Context<Self>) -> Vec<Div> {
-        let background = cx.theme().background;
-        let border = cx.theme().border;
-        let muted_foreground = cx.theme().muted_foreground;
-        let _accent = cx.theme().accent;
+        let theme = cx.theme();
         let mut should_load_more = false;
         let items = visible_range
             .map(|index| {
                 let Some(hit) = self.hits.get(index) else {
                     if let Some(search_error) = self.search_error.clone() {
                         return div().pl_3().pt_3().child(ErrorAlert::new(
-                            t::instance::content::requesting_from_error("CurseForge").into(),
+                            t::instance::content::requesting_from_error("Curseforge").into(),
                             search_error,
                         ));
                     } else {
@@ -569,7 +526,7 @@ impl CurseforgeSearchPage {
                 let description = SharedString::new(hit.summary.clone());
                 let tag_separator = SharedString::new("•");
 
-                let author_line = div().text_color(muted_foreground).text_sm().pb_px().child(author);
+                let author_line = div().text_color(theme.muted_foreground).text_sm().pb_px().child(author);
 
                 let mut is_categories_empty = true;
                 let categories = hit.categories.iter().filter_map(|category| {
@@ -587,46 +544,78 @@ impl CurseforgeSearchPage {
                     h_flex().gap_1().child(PandoraIcon::Download).child(format_downloads(hit.download_count));
 
                 let primary_action = self.get_primary_action(hit.id, cx);
-                let installed_content = self.all_installed_content_by_project.get(&hit.id);
-                let is_installed = installed_content.is_some() && !installed_content.unwrap().is_empty();
-                let installed_content_ids = installed_content
-                    .map(|installed| installed.iter().map(|content| content.content_id).collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let dropdown_id = Rc::new(format!("dropdown-{}", index));
 
-                let action_button = if is_installed {
-                    let data = self.data.clone();
-                    let hit = hit.clone();
-                    let install_for = self.install_for.clone();
-                    let installed_content_ids = installed_content_ids.clone();
-                    let is_open = self.open_dropdown_id.as_ref().map(|s| s.as_str()) == Some(&*dropdown_id);
-                    let accent = _accent;
+                let install_button = Button::new(("install", index))
+                    .label(primary_action.text())
+                    .icon(primary_action.icon())
+                    .with_variant(primary_action.button_variant())
+                    .on_click({
+                        let data = self.data.clone();
+                        let hit = hit.clone();
+                        let install_for = self.install_for.clone();
 
-                    let mut actions = vec![ModAction::Reinstall, ModAction::Remove];
+                        move |_, window, cx| {
+                            cx.stop_propagation();
 
-                    // Only show Update Check if can_install_latest is true
-                    if self.can_install_latest {
-                        actions.insert(1, ModAction::UpdateCheck);
-                    }
-
-                    render_mod_action_dropdown(
-                        (*dropdown_id).clone().into(),
-                        actions,
-                        Rc::new(move |action, window, cx| {
-                            match action {
-                                ModAction::Reinstall => {
-                                    if hit.class_id.is_some() && hit.class_id != Some(0) {
+                            if hit.class_id.is_some() && hit.class_id != Some(0) {
+                                match primary_action {
+                                    PrimaryAction::Install | PrimaryAction::Reinstall => {
                                         crate::modals::curseforge_install::open(
                                             hit.clone(),
-                                            install_for.clone(),
+                                            install_for,
                                             &data,
                                             window,
                                             cx,
                                         );
-                                    }
-                                },
-                                ModAction::UpdateCheck => {
-                                    if let Some(install_for) = install_for {
+                                    },
+                                    PrimaryAction::InstallLatest => {
+                                        let Some(install_for) = install_for else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
+                                            return;
+                                        };
+
+                                        let Some(entry) = data.instances.read(cx).entries.get(&install_for) else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
+                                            return;
+                                        };
+
+                                        let instance = entry.read(cx);
+                                        let loader = instance.configuration.loader;
+                                        let minecraft_version = instance.configuration.minecraft_version;
+
+                                        let content_install = ContentInstall {
+                                            target: InstallTarget::Instance(instance.id),
+                                            loader,
+                                            minecraft_version,
+                                            files: [ContentInstallFile {
+                                                replace_old: None,
+                                                path: bridge::install::ContentInstallPath::Automatic,
+                                                download: ContentDownload::Curseforge {
+                                                    project_id: hit.id,
+                                                    install_dependencies: true,
+                                                },
+                                                content_source: ContentSource::CurseforgeProject { project_id: hit.id },
+                                                reason: ContentInstallReason::Standalone,
+                                            }]
+                                            .into(),
+                                        };
+
+                                        crate::root::start_install(content_install, &data.backend_handle, window, cx);
+                                    },
+                                    PrimaryAction::CheckForUpdates | PrimaryAction::ErrorCheckingForUpdates => {
+                                        let Some(install_for) = install_for else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
+                                            return;
+                                        };
                                         let modal_action = ModalAction::default();
                                         data.backend_handle.send(MessageToBackend::UpdateCheck {
                                             instance: install_for,
@@ -638,203 +627,40 @@ impl CurseforgeSearchPage {
                                             t::instance::content::update::check::error().into(),
                                             modal_action,
                                         );
-                                    }
-                                },
-                                ModAction::Remove => {
-                                    if let Some(install_for) = install_for {
-                                        if installed_content_ids.is_empty() {
+                                    },
+                                    PrimaryAction::UpToDate => {},
+                                    PrimaryAction::Update(ref ids) => {
+                                        let Some(install_for) = install_for else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
                                             return;
-                                        }
-
-                                        if InterfaceConfig::get(cx).quick_delete_mods {
-                                            data.backend_handle.send(MessageToBackend::DeleteContent {
-                                                id: install_for,
-                                                content_ids: installed_content_ids.clone(),
-                                            });
-                                        } else {
-                                            crate::modals::delete_content::open_delete_content(
-                                                install_for,
-                                                installed_content_ids.clone(),
-                                                SharedString::new(hit.name.clone()),
-                                                data.backend_handle.clone(),
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    }
-                                },
-                                ModAction::OpenPage => {
-                                    // CurseForge doesn't have in-launcher project page like Modrinth
-                                    // Could open external browser in the future
-                                },
-                            }
-                        }),
-                        is_open,
-                        {
-                            let dropdown_id = dropdown_id.clone();
-                            let page_entity = cx.entity().clone();
-                            Rc::new(move |_window, cx| {
-                                let dropdown_id = dropdown_id.clone();
-                                page_entity.update(cx, |page, cx| {
-                                    page.open_dropdown_id =
-                                        if page.open_dropdown_id.as_ref().map(|s| s.as_str()) == Some(&*dropdown_id) {
-                                            None
-                                        } else {
-                                            Some((**dropdown_id).to_string())
                                         };
-                                    cx.notify();
-                                });
-                            })
-                        },
-                        accent,
-                    )
-                    .into_any_element()
-                } else {
-                    Button::new(("install", index))
-                        .label(primary_action.text())
-                        .icon(primary_action.icon())
-                        .with_variant(primary_action.button_variant())
-                        .on_click({
-                            let data = self.data.clone();
-                            let hit = hit.clone();
-                            let install_for = self.install_for.clone();
-
-                            move |_, window, cx| {
-                                cx.stop_propagation();
-
-                                if hit.class_id.is_some() && hit.class_id != Some(0) {
-                                    match primary_action {
-                                        PrimaryAction::Install | PrimaryAction::Reinstall => {
-                                            crate::modals::curseforge_install::open(
-                                                hit.clone(),
-                                                install_for,
-                                                &data,
-                                                window,
-                                                cx,
-                                            );
-                                        },
-                                        PrimaryAction::InstallLatest => {
-                                            let Some(install_for) = install_for else {
-                                                window.push_notification(
-                                                    (NotificationType::Error, "Unable to find instance"),
-                                                    cx,
-                                                );
-                                                return;
-                                            };
-
-                                            let Some(entry) = data.instances.read(cx).entries.get(&install_for) else {
-                                                window.push_notification(
-                                                    (NotificationType::Error, "Unable to find instance"),
-                                                    cx,
-                                                );
-                                                return;
-                                            };
-
-                                            let instance = entry.read(cx);
-                                            let loader = instance.configuration.loader;
-                                            let project_type =
-                                                hit.class_id.map(CurseforgeClassId::from_u32).unwrap_or_default();
-                                            let minecraft_version = instance.configuration.minecraft_version;
-                                            if loader == Loader::Vanilla && project_type.mod_or_modpack() {
-                                                let data = data.clone();
-                                                let project_id = hit.id;
-                                                show_vanilla_change_to_fabric_modal(
-                                                    install_for,
-                                                    data.backend_handle.clone(),
-                                                    move |window, cx| {
-                                                        let content_install = ContentInstall {
-                                                            target: InstallTarget::Instance(install_for),
-                                                            loader: Loader::Fabric,
-                                                            minecraft_version,
-                                                            files: [ContentInstallFile {
-                                                                replace_old: None,
-                                                                path: bridge::install::ContentInstallPath::Automatic,
-                                                                download: ContentDownload::Curseforge {
-                                                                    project_id,
-                                                                    install_dependencies: true,
-                                                                },
-                                                                content_source: ContentSource::CurseforgeProject {
-                                                                    project_id,
-                                                                },
-                                                                reason: ContentInstallReason::Standalone,
-                                                            }]
-                                                            .into(),
-                                                        };
-
-                                                        crate::root::start_install(
-                                                            content_install,
-                                                            &data.backend_handle,
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    },
-                                                    window,
-                                                    cx,
-                                                );
-                                                return;
-                                            }
-
-                                            let content_install = ContentInstall {
-                                                target: InstallTarget::Instance(instance.id),
-                                                loader,
-                                                minecraft_version,
-                                                files: [ContentInstallFile {
-                                                    replace_old: None,
-                                                    path: bridge::install::ContentInstallPath::Automatic,
-                                                    download: ContentDownload::Curseforge {
-                                                        project_id: hit.id,
-                                                        install_dependencies: true,
-                                                    },
-                                                    content_source: ContentSource::CurseforgeProject {
-                                                        project_id: hit.id,
-                                                    },
-                                                    reason: ContentInstallReason::Standalone,
-                                                }]
-                                                .into(),
-                                            };
-
-                                            crate::root::start_install(
-                                                content_install,
-                                                &data.backend_handle,
-                                                window,
-                                                cx,
-                                            );
-                                        },
-                                        PrimaryAction::CheckForUpdates => {
+                                        for id in ids {
                                             let modal_action = ModalAction::default();
-                                            data.backend_handle.send(MessageToBackend::UpdateCheck {
-                                                instance: install_for.unwrap(),
+                                            data.backend_handle.send(MessageToBackend::UpdateContent {
+                                                instance: install_for,
+                                                content_id: *id,
                                                 modal_action: modal_action.clone(),
                                             });
                                             crate::modals::generic::show_notification(
                                                 window,
                                                 cx,
-                                                t::instance::content::update::check::error().into(),
+                                                t::instance::content::update::error().into(),
                                                 modal_action,
                                             );
-                                        },
-                                        PrimaryAction::ErrorCheckingForUpdates => {},
-                                        PrimaryAction::UpToDate => {},
-                                        PrimaryAction::Update(ref ids) => {
-                                            crate::root::update_multiple_mods(
-                                                install_for.unwrap(),
-                                                ids.clone(),
-                                                &data.backend_handle,
-                                                window,
-                                                cx,
-                                            );
-                                        },
-                                    }
-                                } else {
-                                    window.push_notification(
-                                        (NotificationType::Error, t::instance::content::install::unknown_type()),
-                                        cx,
-                                    );
+                                        }
+                                    },
                                 }
+                            } else {
+                                window.push_notification(
+                                    (NotificationType::Error, t::instance::content::install::unknown_type()),
+                                    cx,
+                                );
                             }
-                        })
-                        .into_any_element()
-                };
+                        }
+                    });
 
                 let item = h_flex()
                     .rounded_lg()
@@ -842,15 +668,15 @@ impl CurseforgeSearchPage {
                     .py_2()
                     .gap_4()
                     .h_32()
-                    .bg(background)
-                    .border_color(border)
+                    .bg(theme.background)
+                    .border_color(theme.border)
                     .border_1()
                     .size_full()
                     .child(image.rounded_lg().size_16().min_w_16().min_h_16())
                     .child(
                         v_flex()
                             .h(px(104.0))
-                            .flex_grow_1()
+                            .flex_grow(1.0)
                             .gap_1()
                             .overflow_hidden()
                             .child(h_flex().gap_1().items_end().line_clamp(1).text_lg().child(name).child(author_line))
@@ -858,13 +684,13 @@ impl CurseforgeSearchPage {
                             .child(
                                 h_flex()
                                     .text_sm()
-                                    .text_color(muted_foreground)
+                                    .text_color(theme.muted_foreground)
                                     .gap_1()
                                     .child(PandoraIcon::Tags)
                                     .children(categories),
                             ),
                     )
-                    .child(v_flex().items_end().child(downloads).child(action_button));
+                    .child(v_flex().items_end().child(downloads).child(install_button));
 
                 div().pl_3().pt_3().child(item)
             })
@@ -1021,17 +847,11 @@ impl Render for CurseforgeSearchPage {
                     .label(t::instance::content::shaders())
                     .selected(filter_project_type == CurseforgeClassId::Shader),
             )
-            .child(
-                Button::new("datapacks")
-                    .label("Datapacks")
-                    .selected(filter_project_type == CurseforgeClassId::Datapack),
-            )
             .on_click(cx.listener(|page, clicked: &Vec<usize>, window, cx| match clicked[0] {
                 0 => page.set_project_type(CurseforgeClassId::Mod, window, cx),
                 1 => page.set_project_type(CurseforgeClassId::Modpack, window, cx),
                 2 => page.set_project_type(CurseforgeClassId::Resourcepack, window, cx),
                 3 => page.set_project_type(CurseforgeClassId::Shader, window, cx),
-                4 => page.set_project_type(CurseforgeClassId::Datapack, window, cx),
                 _ => {},
             }));
 
@@ -1082,7 +902,6 @@ impl Render for CurseforgeSearchPage {
             CurseforgeClassId::Modpack => FILTER_MODPACK_CATEGORIES,
             CurseforgeClassId::Resourcepack => FILTER_RESOURCEPACK_CATEGORIES,
             CurseforgeClassId::Shader => FILTER_SHADERPACK_CATEGORIES,
-            CurseforgeClassId::Datapack => FILTER_DATAPACK_CATEGORIES,
             _ => &[],
         };
 
@@ -1262,5 +1081,3 @@ const FILTER_RESOURCEPACK_CATEGORIES: &[(&'static str, u32)] = &[
 
 const FILTER_SHADERPACK_CATEGORIES: &[(&'static str, u32)] =
     &[("Fantasy", 6554), ("Realistic", 6553), ("Vanilla", 6555)];
-
-const FILTER_DATAPACK_CATEGORIES: &[(&'static str, u32)] = &[("Data Packs", 5193)];

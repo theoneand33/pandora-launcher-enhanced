@@ -396,6 +396,7 @@ impl InstallDialog {
         let Some(selected_mod_version) = selected_mod_version else {
             return modal.child(content);
         };
+        let selected_mod_version = selected_mod_version.version;
 
         let required_dependencies = selected_mod_version
             .dependencies
@@ -415,12 +416,13 @@ impl InstallDialog {
                     let mut existing_projects = FxHashSet::default();
 
                     for existing_content in instance.read(cx).content.values() {
-                        let existing_content = existing_content.read(cx);
-                        for summary in existing_content.iter() {
-                            let ContentSource::ModrinthProject { project_id } = &summary.content_source else {
-                                continue;
-                            };
-                            existing_projects.insert(project_id.clone());
+                        if let Some(existing_content) = existing_content.read(cx) {
+                            for summary in existing_content.iter() {
+                                let ContentSource::ModrinthProject { project_id } = &summary.content_source else {
+                                    continue;
+                                };
+                                existing_projects.insert(project_id.clone());
+                            }
                         }
                     }
 
@@ -461,9 +463,7 @@ impl InstallDialog {
                             RelativePath::new("resourcepacks").join(&*install_file.filename)
                         },
                         ModrinthProjectType::Shader => RelativePath::new("shaderpacks").join(&*install_file.filename),
-                        ModrinthProjectType::Datapack => {
-                            RelativePath::new("saves").join("World").join("datapacks").join(&*install_file.filename)
-                        },
+                        ModrinthProjectType::Datapack => RelativePath::new("datapacks").join(&*install_file.filename),
                         ModrinthProjectType::Other => {
                             window.push_notification(
                                 (NotificationType::Error, t::instance::content::install::unable_install_other()),
@@ -519,8 +519,10 @@ impl InstallDialog {
 
                     let mut hash = [0u8; 20];
                     let Ok(_) = hex::decode_to_slice(&*install_file.hashes.sha1, &mut hash) else {
-                        let warning =
-                            format!("File {} has invalid sha1: {}", install_file.filename, install_file.hashes.sha1);
+                        let warning = t::instance::content::install::file_invalid_sha1(
+                            &install_file.filename,
+                            &install_file.hashes.sha1,
+                        );
                         window.push_notification((NotificationType::Error, SharedString::new(warning)), cx);
                         return;
                     };
@@ -560,7 +562,7 @@ impl InstallDialog {
             ModrinthProjectType::Modpack => t::instance::content::install::new_instance_with::modpack(),
             ModrinthProjectType::Resourcepack => t::instance::content::install::new_instance_with::resourcepack(),
             ModrinthProjectType::Shader => t::instance::content::install::new_instance_with::shader(),
-            ModrinthProjectType::Datapack => "Create new instance with this datapack",
+            ModrinthProjectType::Datapack => t::instance::content::install::new_instance_with::file(),
             ModrinthProjectType::Other => t::instance::content::install::new_instance_with::file(),
         };
 
@@ -580,7 +582,8 @@ impl InstallDialog {
                             .child(
                                 Select::new(instances)
                                     .placeholder(t::instance::none_selected())
-                                    .title_prefix(format!("{}: ", t::instance::label())),
+                                    .title_prefix(format!("{}: ", t::instance::label()))
+                                    .search_placeholder(t::common::search()),
                             )
                             .when(self.unsupported_instances > 0, |content| {
                                 content.child(t::instance::incompatible(self.unsupported_instances))
@@ -658,6 +661,7 @@ impl InstallDialog {
         Select::new(select_state)
             .disabled(self.fixed_minecraft_version.is_some())
             .title_prefix(format!("{}: ", t::instance::game_version()))
+            .search_placeholder(t::common::search())
             .into_any_element()
     }
 
@@ -837,11 +841,14 @@ impl InstallDialog {
             ModrinthProjectType::Modpack => format!("{}: ", t::instance::content::version::modpack()),
             ModrinthProjectType::Resourcepack => format!("{}: ", t::instance::content::version::resourcepack()),
             ModrinthProjectType::Shader => format!("{}: ", t::instance::content::version::shader()),
-            ModrinthProjectType::Datapack => "Datapack version: ".to_string(),
+            ModrinthProjectType::Datapack => format!("{}: ", t::instance::content::version::file()),
             ModrinthProjectType::Other => format!("{}: ", t::instance::content::version::file()),
         };
 
-        Select::new(mod_version_select_state).title_prefix(mod_version_prefix).into_any_element()
+        Select::new(mod_version_select_state)
+            .title_prefix(mod_version_prefix)
+            .search_placeholder(t::common::search())
+            .into_any_element()
     }
 }
 
@@ -851,14 +858,20 @@ struct ModVersionItem {
     version: ModrinthProjectVersion,
 }
 
+impl PartialEq for ModVersionItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 impl SelectItem for ModVersionItem {
-    type Value = ModrinthProjectVersion;
+    type Value = Self;
 
     fn title(&self) -> SharedString {
         self.name.clone()
     }
 
     fn value(&self) -> &Self::Value {
-        &self.version
+        self
     }
 }
