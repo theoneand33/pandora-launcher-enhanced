@@ -208,7 +208,6 @@ impl Render for InstancePage {
                 .unwrap();
         }
 
-        // Update live game output
         if let InstanceSubpage::LiveGameOutput(current_output) = &self.subpage
             && let Some(desired_output) = &live_output_clone
             && current_output != desired_output

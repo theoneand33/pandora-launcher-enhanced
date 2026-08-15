@@ -139,7 +139,7 @@ impl CurseforgeSearchPage {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut project_type = InterfaceConfig::get(cx).curseforge_page_class_id;
-        if project_type == CurseforgeClassId::Other {
+        if project_type == CurseforgeClassId::Other || project_type == CurseforgeClassId::Datapack {
             project_type = CurseforgeClassId::Mod;
             InterfaceConfig::get_mut(cx).curseforge_page_class_id = CurseforgeClassId::Mod;
         }
@@ -227,6 +227,7 @@ impl CurseforgeSearchPage {
                                 installed.extend_from_slice(value.as_slice());
                             }
                         }
+                        cx.notify();
                     })
                     .detach();
                 }
@@ -607,7 +608,7 @@ impl CurseforgeSearchPage {
 
                                         crate::root::start_install(content_install, &data.backend_handle, window, cx);
                                     },
-                                    PrimaryAction::CheckForUpdates => {
+                                    PrimaryAction::CheckForUpdates | PrimaryAction::ErrorCheckingForUpdates => {
                                         let Some(install_for) = install_for else {
                                             window.push_notification(
                                                 (NotificationType::Error, t::instance::unable_to_find()),
@@ -627,7 +628,6 @@ impl CurseforgeSearchPage {
                                             modal_action,
                                         );
                                     },
-                                    PrimaryAction::ErrorCheckingForUpdates => {},
                                     PrimaryAction::UpToDate => {},
                                     PrimaryAction::Update(ref ids) => {
                                         let Some(install_for) = install_for else {
