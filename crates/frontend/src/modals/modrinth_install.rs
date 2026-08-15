@@ -408,15 +408,21 @@ impl InstallDialog {
                     .cloned()
                     .collect::<Vec<_>>();
 
-                // Ignore projects that are already installed
+                // Ignore projects that are already installed, once their content is loaded
                 if !required.is_empty()
                     && let InstallTarget::Instance(instance_id) = &install_target
                     && let Some(instance) = self.data.instances.read(cx).entries.get(instance_id)
                 {
-                    let mut existing_projects = FxHashSet::default();
+                    let instance = instance.read(cx);
+                    instance.content_states.observe_all();
 
-                    for existing_content in instance.read(cx).content.values() {
-                        if let Some(existing_content) = existing_content.read(cx) {
+                    if instance.content.values().all(|content| content.read(cx).is_some()) {
+                        let mut existing_projects = FxHashSet::default();
+
+                        for existing_content in instance.content.values() {
+                            let Some(existing_content) = existing_content.read(cx) else {
+                                continue;
+                            };
                             for summary in existing_content.iter() {
                                 let ContentSource::ModrinthProject { project_id } = &summary.content_source else {
                                     continue;
@@ -424,9 +430,10 @@ impl InstallDialog {
                                 existing_projects.insert(project_id.clone());
                             }
                         }
-                    }
 
-                    required.retain(|dep| !dep.project_id.as_ref().is_some_and(|id| existing_projects.contains(id)));
+                        required
+                            .retain(|dep| !dep.project_id.as_ref().is_some_and(|id| existing_projects.contains(id)));
+                    }
                 }
 
                 required
