@@ -70,12 +70,11 @@ impl P2pShowState {
             let link_text = link.to_string();
             col = col.child(h_flex().gap_2().child(div().flex_1().text_sm().child(link_text)).child(
                 Button::new(("copy", idx)).label(label).icon(icon).small().on_click(cx.listener(
-                    move |this, _, window, cx| {
+                    move |this, _, _, cx| {
                         let link = this.links[idx].clone();
                         cx.write_to_clipboard(ClipboardItem::new_string(link.to_string()));
                         this.copied = Some((CopiedTarget::Row(idx), Instant::now()));
                         cx.notify();
-                        window.request_animation_frame();
                     },
                 )),
             ));
@@ -115,7 +114,7 @@ impl P2pShowState {
                 h_flex()
                     .gap_2()
                     .child(Button::new("copy_link").label(primary_label).icon(primary_icon).on_click(cx.listener(
-                        move |this, _, window, cx| {
+                        move |this, _, _, cx| {
                             let link = primary_link.clone();
                             if link.is_empty() {
                                 return;
@@ -123,7 +122,6 @@ impl P2pShowState {
                             cx.write_to_clipboard(ClipboardItem::new_string(link.to_string()));
                             this.copied = Some((CopiedTarget::Primary, Instant::now()));
                             cx.notify();
-                            window.request_animation_frame();
                         },
                     )))
                     .child(Button::new("cancel_share").label(t::common::cancel()).danger().on_click({
