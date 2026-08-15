@@ -226,8 +226,8 @@ fn render_play_button(item: &InstanceEntry, index: usize, data: DataEntities) ->
             .on_click(move |_, window, cx| {
                 root::start_instance(id, name.clone(), None, &data, window, cx);
             }),
-        InstanceStatus::Launching => Button::new(("launching", index)).warning().label("..."),
-        InstanceStatus::Stopping => Button::new(("launching", index)).danger().label("..."),
+        InstanceStatus::Launching => Button::new(("launching", index)).warning().label(t::instance::start::starting()),
+        InstanceStatus::Stopping => Button::new(("stopping", index)).danger().label(t::instance::start::stopping()),
         InstanceStatus::Running => {
             Button::new(("kill_instance", index)).danger().label(t::instance::kill()).on_click({
                 let backend_handle = data.backend_handle.clone();

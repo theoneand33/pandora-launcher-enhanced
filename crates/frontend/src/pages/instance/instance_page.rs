@@ -190,14 +190,27 @@ impl Render for InstancePage {
             });
         }
 
-        let entry = self.instance.read(cx);
-        let show_shader_tab =
-            entry.configuration.show_shader_tab || matches!(self.subpage, InstanceSubpage::Shaders(_));
-        let show_live_game_output = entry.live_game_output.is_some();
+        let (show_shader_tab, show_live_game_output, live_output_clone) = {
+            let entry = self.instance.read(cx);
+            (
+                entry.configuration.show_shader_tab || matches!(self.subpage, InstanceSubpage::Shaders(_)),
+                entry.live_game_output.is_some(),
+                entry.live_game_output.clone(),
+            )
+        };
+
+        // If the live output was cleared (relaunch) while we still show the Live tab,
+        // reset to Quickplay to avoid an out-of-range selected_index.
+        if matches!(self.subpage, InstanceSubpage::LiveGameOutput(_)) && !show_live_game_output {
+            InterfaceConfig::get_mut(cx).instance_subpage = InstanceSubpageType::Quickplay;
+            self.subpage = InstanceSubpageType::Quickplay
+                .create(&self.instance, &self.data, self.data.backend_handle.clone(), window, cx)
+                .unwrap();
+        }
 
         // Update live game output
         if let InstanceSubpage::LiveGameOutput(current_output) = &self.subpage
-            && let Some(desired_output) = &entry.live_game_output
+            && let Some(desired_output) = &live_output_clone
             && current_output != desired_output
         {
             self.subpage = InstanceSubpage::LiveGameOutput(desired_output.clone());

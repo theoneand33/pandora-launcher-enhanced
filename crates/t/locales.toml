@@ -4373,6 +4373,20 @@ ru = "Создание дубликата экземпляра"
 [instance.duplicate.error]
 en = "Error duplicating instance"
 ru = "Не удалось создать дубликат экземпляра"
+[instance.duplicate.error_path]
+en = "Unable to duplicate instance, name must not be a path: ${name: &str}"
+[instance.duplicate.error_invalid]
+en = "Unable to duplicate instance, name is invalid: ${name: &str}"
+[instance.duplicate.error_exists]
+en = "Unable to duplicate instance, name is already used"
+[instance.duplicate.error_unknown_id]
+en = "Unable to duplicate instance, unknown id"
+[instance.duplicate.error_create_dir]
+en = "Unable to create instance directory: ${err: &str}"
+[instance.duplicate.copying_files]
+en = "Copying instance files..."
+[instance.duplicate.cancelling]
+en = "Cancelling..."
 [settings.windows.live_game_output_display]
 en = "Live game output display"
 [settings.windows.live_game_output_display.tab_on_instance_page]

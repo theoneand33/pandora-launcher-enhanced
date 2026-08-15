@@ -171,7 +171,7 @@ impl CurseforgeSearchPage {
                 let instance_content = instance.content.clone();
                 let loader = instance.configuration.loader;
                 let minecraft_version = instance.configuration.minecraft_version;
-                can_install_latest = loader != Loader::Vanilla;
+                can_install_latest = true;
                 filter_version = Some(minecraft_version);
 
                 for content_folder in ContentFolder::iter() {

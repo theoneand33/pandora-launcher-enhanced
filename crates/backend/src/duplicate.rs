@@ -139,7 +139,11 @@ fn duplicate_with_content_library(
 
     for directory in directories {
         check_cancel()?;
-        _ = fs::create_dir(to.join(directory));
+        if let Err(err) = fs::create_dir(to.join(directory))
+            && err.kind() != ErrorKind::AlreadyExists
+        {
+            return Err(err);
+        }
     }
 
     let mut files_done = 0_u64;
@@ -209,7 +213,7 @@ fn duplicate_with_content_library(
 
 pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name: &str, modal_action: ModalAction) {
     if !crate::is_single_component_path_str(name) {
-        modal_action.set_error_message(format!("Unable to duplicate instance, name must not be a path: {name}").into());
+        modal_action.set_error_message(t::instance::duplicate::error_path(name).into());
         modal_action.set_finished();
         return;
     }
@@ -220,12 +224,12 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
             ..Default::default()
         },
     ) {
-        modal_action.set_error_message(format!("Unable to duplicate instance, name is invalid: {name}").into());
+        modal_action.set_error_message(t::instance::duplicate::error_invalid(name).into());
         modal_action.set_finished();
         return;
     }
     if backend.instance_state.read().instances.iter().any(|i| i.name == name) {
-        modal_action.set_error_message("Unable to duplicate instance, name is already used".to_string().into());
+        modal_action.set_error_message(t::instance::duplicate::error_exists().into());
         modal_action.set_finished();
         return;
     }
@@ -233,7 +237,7 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
     let source = {
         let state = backend.instance_state.read();
         let Some(instance) = state.instances.get(id) else {
-            modal_action.set_error_message("Unable to duplicate instance, unknown id".to_string().into());
+            modal_action.set_error_message(t::instance::duplicate::error_unknown_id().into());
             modal_action.set_finished();
             return;
         };
@@ -243,33 +247,42 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
     let dest = backend.directories.instances_dir.join(name);
 
     if let Err(err) = fs::create_dir(&dest) {
-        modal_action.set_error_message(format!("Unable to create instance directory: {err}").into());
+        modal_action.set_error_message(t::instance::duplicate::error_create_dir(&err.to_string()).into());
         modal_action.set_finished();
         return;
     }
 
-    let tracker = ProgressTracker::new("Copying instance files...".into(), backend.send.clone());
+    let tracker = ProgressTracker::new(t::instance::duplicate::copying_files().into(), backend.send.clone());
     modal_action.trackers.push(tracker.clone());
 
-    let result = duplicate_with_content_library(
-        &source,
-        &dest,
-        &backend.directories.content_library_dir,
-        &|current, total| {
-            tracker.set_count(current as usize);
-            tracker.set_total(total as usize);
-            tracker.notify();
-        },
-        &|| {
-            if modal_action.has_requested_cancel() {
-                tracker.set_title("Cancelling...".into());
-                tracker.notify();
-                Err(Error::new(ErrorKind::Interrupted, "Operation cancelled"))
-            } else {
-                Ok(())
-            }
-        },
-    );
+    let source_clone = source.clone();
+    let dest_clone = dest.clone();
+    let content_library_dir = backend.directories.content_library_dir.clone();
+    let tracker_clone = tracker.clone();
+    let modal_action_clone = modal_action.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        duplicate_with_content_library(
+            &source_clone,
+            &dest_clone,
+            &content_library_dir,
+            &|current, total| {
+                tracker_clone.set_count(current as usize);
+                tracker_clone.set_total(total as usize);
+                tracker_clone.notify();
+            },
+            &|| {
+                if modal_action_clone.has_requested_cancel() {
+                    tracker_clone.set_title(t::instance::duplicate::cancelling().into());
+                    tracker_clone.notify();
+                    Err(Error::new(ErrorKind::Interrupted, "Operation cancelled"))
+                } else {
+                    Ok(())
+                }
+            },
+        )
+    })
+    .await
+    .unwrap_or_else(|err| Err(Error::new(ErrorKind::Other, format!("Join error: {err}"))));
 
     match result {
         Ok(()) => {

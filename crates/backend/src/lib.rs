@@ -19,6 +19,8 @@ use uuid::Uuid;
 
 mod backend_filesystem;
 mod backend_handler;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 
 mod account;
 mod directories;
@@ -446,9 +448,18 @@ pub fn are_files_hard_linked(a: &Path, b: &Path) -> std::io::Result<bool> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
-        Ok(metadata_a.volume_serial_number() == metadata_b.volume_serial_number()
-            && metadata_a.file_index() == metadata_b.file_index())
+        use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
+        let file_a = std::fs::File::open(a)?;
+        let file_b = std::fs::File::open(b)?;
+        let mut info_a = Default::default();
+        let mut info_b = Default::default();
+        unsafe {
+            GetFileInformationByHandle(file_a.as_raw_handle(), &mut info_a)?;
+            GetFileInformationByHandle(file_b.as_raw_handle(), &mut info_b)?;
+        }
+        Ok(info_a.dwVolumeSerialNumber == info_b.dwVolumeSerialNumber
+            && info_a.nFileIndexHigh == info_b.nFileIndexHigh
+            && info_a.nFileIndexLow == info_b.nFileIndexLow)
     }
     #[cfg(not(any(windows, unix)))]
     compile_error!("Unsupported platform: can't check if files are hard linked");
@@ -463,9 +474,11 @@ pub(crate) fn has_multiple_hard_links(path: &Path) -> Option<bool> {
     }
     #[cfg(windows)]
     {
-        let metadata = std::fs::symlink_metadata(path).ok()?;
-        use std::os::windows::fs::MetadataExt;
-        metadata.number_of_links()? > 1
+        use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
+        let file = std::fs::File::open(path).ok()?;
+        let mut info = Default::default();
+        unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) }.ok()?;
+        Some(info.nNumberOfLinks > 1)
     }
     #[cfg(not(any(windows, unix)))]
     compile_error!("Unsupported platform: can't check for multiple hard links");
