@@ -1636,6 +1636,7 @@ async fn do_java_runtime_load(
                 #[cfg(unix)]
                 executable,
                 downloads,
+                ..
             } => {
                 let mut expected_hash = [0u8; 20];
                 let Ok(_) = hex::decode_to_slice(downloads.raw.sha1.as_str(), &mut expected_hash) else {
