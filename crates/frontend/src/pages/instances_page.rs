@@ -79,11 +79,18 @@ impl Page for InstancesPage {
                     cx,
                 );
             }));
+        let p2p_join = Button::new("p2p_join")
+            .info()
+            .icon(PandoraIcon::Link)
+            .label(t::instance::p2p::join_action())
+            .on_click(cx.listener(|this, _, window, cx| {
+                crate::modals::p2p_join::open_p2p_join(this.backend_handle.clone(), window, cx);
+            }));
         // wrapping in div makes it not take up the full space of the titlebar
         let select_view =
             div().child(Select::new(&self.view_dropdown).title_prefix(format!("{}: ", t::instance::view_mode())));
 
-        h_flex().gap_3().child(create_instance).child(select_view)
+        h_flex().gap_3().child(create_instance).child(p2p_join).child(select_view)
     }
 
     fn scrollable(&self, cx: &App) -> bool {

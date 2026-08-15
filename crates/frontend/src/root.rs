@@ -178,8 +178,9 @@ pub fn start_instance(
 
     // Remove any stale live game outputs
     if let Some(instance_entry) = data.instances.read(cx).entries.get(&id).cloned() {
-        instance_entry.update(cx, |entry, _| {
+        instance_entry.update(cx, |entry, cx| {
             entry.live_game_output = None;
+            cx.notify();
         });
     };
 
@@ -238,14 +239,25 @@ pub fn start_instance(
                         return;
                     };
 
-                    instance_entry.update(cx, |entry, _| {
+                    instance_entry.update(cx, |entry, cx| {
                         entry.live_game_output = Some(game_output_root);
+                        cx.notify();
                     });
 
                     let config = InterfaceConfig::get(cx);
-                    if matches!(config.main_page, PageType::InstancePage { .. })
-                        && config.instance_subpage != InstanceSubpageType::LiveGameOutput
-                    {
+                    let is_matching_instance = match &config.main_page {
+                        PageType::InstancePage { name } => {
+                            if let Some(current_id) =
+                                crate::entity::instance::InstanceEntries::find_id_by_name(&data.instances, name, cx)
+                            {
+                                current_id == id
+                            } else {
+                                false
+                            }
+                        },
+                        _ => false,
+                    };
+                    if is_matching_instance && config.instance_subpage != InstanceSubpageType::LiveGameOutput {
                         InterfaceConfig::get_mut(cx).instance_subpage = InstanceSubpageType::LiveGameOutput;
                     }
                 });

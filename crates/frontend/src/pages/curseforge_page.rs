@@ -608,9 +608,16 @@ impl CurseforgeSearchPage {
                                         crate::root::start_install(content_install, &data.backend_handle, window, cx);
                                     },
                                     PrimaryAction::CheckForUpdates => {
+                                        let Some(install_for) = install_for else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
+                                            return;
+                                        };
                                         let modal_action = ModalAction::default();
                                         data.backend_handle.send(MessageToBackend::UpdateCheck {
-                                            instance: install_for.unwrap(),
+                                            instance: install_for,
                                             modal_action: modal_action.clone(),
                                         });
                                         crate::modals::generic::show_notification(
@@ -623,10 +630,17 @@ impl CurseforgeSearchPage {
                                     PrimaryAction::ErrorCheckingForUpdates => {},
                                     PrimaryAction::UpToDate => {},
                                     PrimaryAction::Update(ref ids) => {
+                                        let Some(install_for) = install_for else {
+                                            window.push_notification(
+                                                (NotificationType::Error, t::instance::unable_to_find()),
+                                                cx,
+                                            );
+                                            return;
+                                        };
                                         for id in ids {
                                             let modal_action = ModalAction::default();
                                             data.backend_handle.send(MessageToBackend::UpdateContent {
-                                                instance: install_for.unwrap(),
+                                                instance: install_for,
                                                 content_id: *id,
                                                 modal_action: modal_action.clone(),
                                             });

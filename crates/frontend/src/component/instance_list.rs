@@ -11,7 +11,9 @@ use gpui_component::{
 use crate::{
     entity::{
         DataEntities,
-        instance::{InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceRemovedEvent},
+        instance::{
+            InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceMovedToTopEvent, InstanceRemovedEvent,
+        },
     },
     png_render_cache, root, ui,
 };
@@ -23,6 +25,7 @@ pub struct InstanceList {
     _instance_added_subscription: Subscription,
     _instance_removed_subscription: Subscription,
     _instance_modified_subscription: Subscription,
+    _instance_moved_to_top_subscription: Subscription,
 }
 
 impl InstanceList {
@@ -51,6 +54,22 @@ impl InstanceList {
                         cx.notify();
                     }
                 });
+            let _instance_moved_to_top_subscription =
+                cx.subscribe::<_, InstanceMovedToTopEvent>(&instances, |table, _, event, cx| {
+                    let delegate = table.delegate_mut();
+                    let is_sorted = delegate
+                        .columns
+                        .iter()
+                        .any(|c| matches!(c.sort, Some(ColumnSort::Ascending) | Some(ColumnSort::Descending)));
+                    if is_sorted {
+                        return;
+                    }
+                    if let Some(pos) = delegate.items.iter().position(|e| e.id == event.instance.id) {
+                        let item = delegate.items.remove(pos);
+                        delegate.items.insert(0, item);
+                        cx.notify();
+                    }
+                });
             let instance_list = Self {
                 columns: vec![
                     Column::new("controls", "").width(150.).fixed_left().movable(false).resizable(false),
@@ -71,6 +90,7 @@ impl InstanceList {
                 _instance_added_subscription,
                 _instance_removed_subscription,
                 _instance_modified_subscription,
+                _instance_moved_to_top_subscription,
             };
             TableState::new(instance_list, window, cx)
         })
@@ -152,7 +172,14 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) {
-        if let Some(col) = self.columns.get_mut(col_ix) {
+        for (ix, col) in self.columns.iter_mut().enumerate() {
+            if ix == col_ix {
+                col.sort = Some(sort);
+            } else if col.sort.is_some() {
+                col.sort = Some(ColumnSort::Default);
+            }
+        }
+        if let Some(col) = self.columns.get(col_ix) {
             match col.key.as_ref() {
                 "name" => self.items.sort_by(|a, b| match sort {
                     ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),

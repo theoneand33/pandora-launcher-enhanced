@@ -21,6 +21,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     list::{ListDelegate, ListItem, ListState},
+    spinner::Spinner,
     switch::Switch,
     v_flex,
 };
@@ -89,7 +90,7 @@ pub struct ContentListDelegate {
     backend_handle: BackendHandle,
     sort_key: InstanceContentSortKey,
     enabled_first: bool,
-    outdated_only: bool,
+    pub loaded: bool,
     content: Vec<InstanceContentSummary>,
     searched: Option<Vec<SummaryOrChild>>,
     children: Vec<Vec<ContentEntryChild>>,
@@ -121,7 +122,7 @@ impl ContentListDelegate {
             backend_handle,
             sort_key,
             enabled_first,
-            outdated_only: false,
+            loaded: false,
             content: Vec::new(),
             searched: None,
             children: Vec::new(),
@@ -141,14 +142,9 @@ impl ContentListDelegate {
         self.enabled_first = enabled_first;
     }
 
-    pub fn set_outdated_only(&mut self, v: bool) {
-        self.outdated_only = v;
-    }
-
     /// Returns IDs of visible summaries for the current tab. Scope is the active
-    /// tab only and respects both search and outdated filters: when a search query
-    /// is active, only matching summaries are returned; when outdated-only is on,
-    /// only updatable summaries were inserted into `self.content`.
+    /// tab only and respects search filtering: when a search query is active,
+    /// only matching summaries are returned.
     pub fn content_ids(&self) -> Vec<InstanceContentID> {
         if let Some(searched) = &self.searched {
             searched
@@ -673,15 +669,8 @@ impl ContentListDelegate {
     }
 
     pub fn set_content(&mut self, new_content: &[InstanceContentSummary]) {
-        // ponytail: outdated filter is applied at delegate level so search+filter combine correctly.
-        let owned_filtered: Option<Vec<InstanceContentSummary>> = self.outdated_only.then(|| {
-            new_content
-                .iter()
-                .filter(|s| s.update.can_update(self.for_loader, self.for_version.as_str()))
-                .cloned()
-                .collect()
-        });
-        let src: &[InstanceContentSummary] = owned_filtered.as_deref().unwrap_or(new_content);
+        self.loaded = true;
+        let src: &[InstanceContentSummary] = new_content;
         let last_mods_len = self.content.len();
 
         struct Item {
@@ -968,6 +957,19 @@ impl ContentListDelegate {
 
 impl ListDelegate for ContentListDelegate {
     type Item = ListItem;
+
+    fn loading(&self, _cx: &App) -> bool {
+        !self.loaded
+    }
+
+    fn render_loading(&mut self, _window: &mut Window, cx: &mut Context<ListState<Self>>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .h_1_2()
+            .items_center()
+            .justify_center()
+            .child(Spinner::new().color(cx.theme().muted_foreground).with_size(px(36.0)))
+    }
 
     fn items_count(&self, _section: usize, _cx: &App) -> usize {
         if let Some(searched) = &self.searched {

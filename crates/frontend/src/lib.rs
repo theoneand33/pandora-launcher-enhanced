@@ -351,13 +351,14 @@ pub(crate) fn get_unique_instance_name(original_name: &str, existing_names: &[&s
     if !existing_names.iter().any(|n| *n == original_name) {
         return original_name.to_string();
     }
-    for i in 1..100 {
+    let mut i = 1;
+    loop {
         let numbered = format!("{original_name} ({i})");
         if !existing_names.iter().any(|n| *n == &numbered) {
             return numbered;
         }
+        i += 1;
     }
-    String::new()
 }
 
 #[inline]

@@ -55,7 +55,8 @@ impl InstanceQuickplaySubpage {
             data: data.clone(),
             loaded: worlds.is_some(),
             worlds: worlds.clone().unwrap_or_default(),
-            searched: worlds.unwrap_or_default(),
+            searched: worlds.clone().unwrap_or_default(),
+            search_query: String::new(),
         };
 
         let servers = instance.servers.read(cx).clone().map(|l| l.to_vec());
@@ -77,9 +78,7 @@ impl InstanceQuickplaySubpage {
             cx.observe(&worlds, |list: &mut ListState<WorldsListDelegate>, worlds, cx| {
                 let worlds = worlds.read(cx).clone().map(|l| l.to_vec());
                 let delegate = list.delegate_mut();
-                delegate.loaded = worlds.is_some();
-                delegate.worlds = worlds.clone().unwrap_or_default();
-                delegate.searched = worlds.unwrap_or_default();
+                delegate.set_worlds(worlds);
                 cx.notify();
             })
             .detach();
@@ -219,6 +218,7 @@ pub struct WorldsListDelegate {
     loaded: bool,
     worlds: Vec<InstanceWorldSummary>,
     searched: Vec<InstanceWorldSummary>,
+    search_query: String,
 }
 
 impl ListDelegate for WorldsListDelegate {
@@ -298,9 +298,26 @@ impl ListDelegate for WorldsListDelegate {
     }
 
     fn perform_search(&mut self, query: &str, _window: &mut Window, _cx: &mut Context<ListState<Self>>) -> Task<()> {
-        self.searched = self.worlds.iter().filter(|w| w.title.contains(query)).cloned().collect();
+        self.search_query = query.to_string();
+        self.searched = self.apply_search(query);
 
         Task::ready(())
+    }
+}
+
+impl WorldsListDelegate {
+    fn set_worlds(&mut self, worlds: Option<Vec<InstanceWorldSummary>>) {
+        self.loaded = worlds.is_some();
+        self.worlds = worlds.clone().unwrap_or_default();
+        self.searched = self.apply_search(&self.search_query.clone());
+    }
+
+    fn apply_search(&self, query: &str) -> Vec<InstanceWorldSummary> {
+        if query.is_empty() {
+            self.worlds.clone()
+        } else {
+            self.worlds.iter().filter(|w| w.title.contains(query)).cloned().collect()
+        }
     }
 }
 
@@ -513,11 +530,16 @@ impl ServersListDelegate {
         if !self.can_reorder() {
             return;
         }
-
+        let Some(from_raw) = self.searched.get(from_index).map(|s| s.raw_index) else {
+            return;
+        };
+        let Some(to_raw) = self.searched.get(to_index).map(|s| s.raw_index) else {
+            return;
+        };
         self.data.backend_handle.send(MessageToBackend::ReorderServers {
             id: self.id,
-            from_index,
-            to_index,
+            from_index: from_raw,
+            to_index: to_raw,
         });
         cx.notify();
     }

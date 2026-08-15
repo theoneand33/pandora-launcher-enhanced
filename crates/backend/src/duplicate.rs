@@ -79,7 +79,7 @@ fn duplicate_with_content_library(
         return Err(ErrorKind::NotADirectory.into());
     }
     if !to.is_dir() {
-        return Err(ErrorKind::AlreadyExists.into());
+        return Err(ErrorKind::NotADirectory.into());
     }
 
     let mut directories = Vec::new();
@@ -160,18 +160,15 @@ fn duplicate_with_content_library(
 
         // If the source_path was hard linked from the content library
         // We will make the duplicated file also hard linked
-        if crate::has_multiple_hard_links(source_path).unwrap_or(true) {
-            if let Ok(hash) = hash_file(source_path, &mut buf, check_cancel) {
-                if let Some(lib_path) = find_content_library_path(content_library_dir, hash, source_path) {
-                    if crate::are_files_hard_linked(&source_path, &lib_path).unwrap_or(false) {
-                        if crate::hard_link_or_copy(&lib_path, &dest).is_ok() {
-                            files_done += 1;
-                            progress(files_done, total_files);
-                            continue;
-                        }
-                    }
-                }
-            }
+        if crate::has_multiple_hard_links(source_path).unwrap_or(true)
+            && let Ok(hash) = hash_file(source_path, &mut buf, check_cancel)
+            && let Some(lib_path) = find_content_library_path(content_library_dir, hash, source_path)
+            && crate::are_files_hard_linked(source_path, &lib_path).unwrap_or(false)
+            && crate::hard_link_or_copy(&lib_path, &dest).is_ok()
+        {
+            files_done += 1;
+            progress(files_done, total_files);
+            continue;
         }
 
         copy_file(source_path, &dest, &mut buf, check_cancel)?;
