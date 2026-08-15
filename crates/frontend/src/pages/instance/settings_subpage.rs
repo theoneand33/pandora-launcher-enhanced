@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    sync::{Arc, OnceLock},
-};
+use std::{path::Path, sync::Arc};
 
 use bridge::{
     handle::BackendHandle,
@@ -9,7 +6,7 @@ use bridge::{
     message::{EmbeddedOrRaw, MessageToBackend},
     meta::MetadataRequest,
 };
-use gpui::{Focusable as _, prelude::*, *};
+use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
@@ -32,7 +29,6 @@ use schema::{
     loader::Loader,
     version_manifest::MinecraftVersionManifest,
 };
-
 use strum::IntoEnumIterator;
 use uuid::Uuid;
 
@@ -57,116 +53,6 @@ use crate::{
     png_render_cache,
 };
 
-// ponytail: parses /proc/meminfo or sysctl; fallback None — upgrade to sysinfo crate if cross-platform accuracy matters.
-fn total_memory_mib() -> Option<u32> {
-    static CACHE: OnceLock<Option<u32>> = OnceLock::new();
-    *CACHE.get_or_init(|| {
-        #[cfg(target_os = "linux")]
-        {
-            if let Ok(text) = std::fs::read_to_string("/proc/meminfo")
-                && let Some(line) = text.lines().find(|l| l.starts_with("MemTotal:"))
-                && let Some(kb_str) = line.split_whitespace().nth(1)
-                && let Ok(kb) = kb_str.parse::<u64>()
-            {
-                return Some((kb / 1024) as u32);
-            }
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(out) = std::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output()
-                && out.status.success()
-                && let Ok(bytes) = String::from_utf8_lossy(&out.stdout).trim().parse::<u64>()
-            {
-                return Some((bytes / 1024 / 1024) as u32);
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // Minimal FFI for GlobalMemoryStatusEx without adding a crate.
-            #[repr(C)]
-            struct MemoryStatusEx {
-                length: u32,
-                memory_load: u32,
-                total_phys: u64,
-                avail_phys: u64,
-                total_page_file: u64,
-                avail_page_file: u64,
-                total_virtual: u64,
-                avail_virtual: u64,
-                avail_extended_virtual: u64,
-            }
-            unsafe extern "system" {
-                fn GlobalMemoryStatusEx(lp_buffer: *mut MemoryStatusEx) -> i32;
-            }
-            let mut stat = MemoryStatusEx {
-                length: std::mem::size_of::<MemoryStatusEx>() as u32,
-                memory_load: 0,
-                total_phys: 0,
-                avail_phys: 0,
-                total_page_file: 0,
-                avail_page_file: 0,
-                total_virtual: 0,
-                avail_virtual: 0,
-                avail_extended_virtual: 0,
-            };
-            // SAFETY: GlobalMemoryStatusEx writes to stat when it returns non-zero.
-            if unsafe { GlobalMemoryStatusEx(&mut stat) } != 0 && stat.total_phys > 0 {
-                return Some((stat.total_phys / 1024 / 1024) as u32);
-            }
-        }
-        None
-    })
-}
-
-// ponytail: fs scan only, no java -version check; add version probe if false positives appear.
-fn detect_javas() -> Vec<Arc<Path>> {
-    let mut out: Vec<Arc<Path>> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut push = |p: std::path::PathBuf| {
-        if p.exists() && seen.insert(p.clone()) {
-            out.push(p.into());
-        }
-    };
-    if let Ok(v) = std::env::var("JAVA_HOME") {
-        push(std::path::Path::new(&v).join("bin/java"));
-        push(std::path::Path::new(&v).join("bin/java.exe"));
-    }
-    if let Ok(path) = std::env::var("PATH") {
-        for dir in std::env::split_paths(&path) {
-            push(dir.join("java"));
-            push(dir.join("java.exe"));
-        }
-    }
-    for base in ["/usr/lib/jvm", "/usr/java", "/opt/jvm", "/opt/java", "/opt/jdk"] {
-        if let Ok(rd) = std::fs::read_dir(base) {
-            for e in rd.flatten() {
-                push(e.path().join("bin/java"));
-                push(e.path().join("bin/java.exe"));
-            }
-        }
-    }
-    #[cfg(target_os = "macos")]
-    if let Ok(rd) = std::fs::read_dir("/Library/Java/JavaVirtualMachines") {
-        for e in rd.flatten() {
-            push(e.path().join("Contents/Home/bin/java"));
-        }
-    }
-    #[cfg(target_os = "windows")]
-    for base in [
-        "C:\\Program Files\\Java",
-        "C:\\Program Files\\Eclipse Adoptium",
-        "C:\\Program Files\\Zulu",
-    ] {
-        if let Ok(rd) = std::fs::read_dir(base) {
-            for e in rd.flatten() {
-                push(e.path().join("bin/java.exe"));
-            }
-        }
-    }
-    out.truncate(20);
-    out
-}
-
 #[derive(PartialEq, Eq)]
 enum NewNameChangeState {
     NoChange,
@@ -186,6 +72,7 @@ pub struct InstanceSettingsSubpage {
     loader_select_state: Entity<SelectState<Vec<&'static str>>>,
     loader_versions_state: TypelessFrontendMetadataResult,
     loader_version_select_state: Entity<SelectState<SearchableVec<&'static str>>>,
+    loader_version_latest_string: &'static str,
     disable_file_syncing: bool,
     sandbox_available: bool,
     sandbox: bool,
@@ -199,7 +86,6 @@ pub struct InstanceSettingsSubpage {
     jvm_flags_input_state: Entity<InputState>,
     jvm_binary_enabled: bool,
     jvm_binary_path: Option<PathLabel>,
-    detected_javas: Vec<Arc<Path>>,
 
     instance_root_label: PathLabel,
 
@@ -221,7 +107,6 @@ pub struct InstanceSettingsSubpage {
     #[cfg(target_os = "linux")]
     gamemode_available: bool,
     new_name_change_state: NewNameChangeState,
-    group_input_state: Entity<InputState>,
     icon: Option<EmbeddedOrRaw>,
     backend_handle: BackendHandle,
     _observe_loader_version_subscription: Option<Subscription>,
@@ -240,27 +125,15 @@ impl InstanceSettingsSubpage {
         let instance_id = entry.id;
         let instance_name = entry.name.clone();
         let loader = entry.configuration.loader;
-        let preferred_loader_version =
-            entry.configuration.preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
+        let loader_version_latest_string = t::common::latest();
+        let preferred_loader_version = entry
+            .configuration
+            .preferred_loader_version
+            .map(|s| s.as_str())
+            .unwrap_or(loader_version_latest_string);
         let account = entry.configuration.preferred_account;
         let disable_file_syncing = entry.configuration.disable_file_syncing;
         let sandbox = entry.configuration.sandbox;
-        let memory = entry.configuration.memory.unwrap_or_default();
-        let wrapper_command = entry.configuration.wrapper_command.clone().unwrap_or_default();
-        let jvm_flags = entry.configuration.jvm_flags.clone().unwrap_or_default();
-        let jvm_binary = entry.configuration.jvm_binary.clone().unwrap_or_default();
-        let instance_root_label = PathLabel::new(entry.root_path.clone(), true);
-        let icon = if let Some(raw) = entry.icon.clone() {
-            Some(EmbeddedOrRaw::Raw(raw))
-        } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
-            Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
-        } else {
-            None
-        };
-        let initial_group = entry.configuration.group.as_ref().map(|g| g.to_string()).unwrap_or_default();
-        #[cfg(target_os = "linux")]
-        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
-        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
 
         let sandbox_available = if cfg!(target_os = "linux") {
             command::is_command_available("bwrap") && command::is_command_available("xdg-dbus-proxy")
@@ -268,17 +141,29 @@ impl InstanceSettingsSubpage {
             true
         };
 
+        let memory = entry.configuration.memory.unwrap_or_default();
+        let wrapper_command = entry.configuration.wrapper_command.clone().unwrap_or_default();
+        let jvm_flags = entry.configuration.jvm_flags.clone().unwrap_or_default();
+        let jvm_binary = entry.configuration.jvm_binary.clone().unwrap_or_default();
+        #[cfg(target_os = "linux")]
+        let linux_wrapper = entry.configuration.linux_wrapper.unwrap_or_default();
+        let system_libraries = entry.configuration.system_libraries.clone().unwrap_or_default();
+
+        let instance_root_label = PathLabel::new(entry.root_path.clone(), true);
+
+        let icon = if let Some(raw) = entry.icon.clone() {
+            Some(EmbeddedOrRaw::Raw(raw))
+        } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
+            Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
+        } else {
+            None
+        };
+
         let glfw_path = system_libraries.glfw.get_or_auto(&*AUTO_LIBRARY_PATH_GLFW);
         let openal_path = system_libraries.openal.get_or_auto(&*AUTO_LIBRARY_PATH_OPENAL);
 
         let new_name_input_state = cx.new(|cx| InputState::new(window, cx).default_value(instance_name));
         cx.subscribe(&new_name_input_state, Self::on_new_name_input).detach();
-        let group_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t::instance::group::placeholder())
-                .default_value(initial_group)
-        });
-        cx.subscribe_in(&group_input_state, window, Self::on_group_changed).detach();
 
         let minecraft_versions =
             FrontendMetadata::request(&data.metadata, MetadataRequest::MinecraftVersionManifest, cx);
@@ -326,34 +211,21 @@ impl InstanceSettingsSubpage {
         cx.subscribe_in(&loader_select_state, window, Self::on_loader_selected).detach();
 
         cx.observe_in(instance, window, |page, instance, window, cx| {
-            let (root_path, icon_raw, fallback_icon, external_group, preferred_loader_version) = {
-                let entry = instance.read(cx);
-                (
-                    entry.root_path.clone(),
-                    entry.icon.clone(),
-                    entry.configuration.instance_fallback_icon,
-                    entry.configuration.group.clone(),
-                    entry.configuration.preferred_loader_version,
-                )
-            };
-            page.instance_root_label = PathLabel::new(root_path, true);
-            page.icon = if let Some(raw) = icon_raw {
+            let entry = instance.read(cx);
+            page.instance_root_label = PathLabel::new(entry.root_path.clone(), true);
+            page.icon = if let Some(raw) = entry.icon.clone() {
                 Some(EmbeddedOrRaw::Raw(raw))
-            } else if let Some(embedded) = fallback_icon {
+            } else if let Some(embedded) = entry.configuration.instance_fallback_icon {
                 Some(EmbeddedOrRaw::Embedded(embedded.as_str().into()))
             } else {
                 None
             };
-            // Refresh group field when external change arrives and field is not focused.
-            let external_group_str = external_group.as_ref().map(|g| g.as_ref()).unwrap_or("");
-            let is_focused = page.group_input_state.focus_handle(cx).is_focused(window);
-            if !is_focused && page.group_input_state.read(cx).value().as_ref() != external_group_str {
-                page.group_input_state.update(cx, |state, cx| {
-                    state.set_value(external_group_str, window, cx);
-                });
-            }
             if page.loader_version_select_state.read(cx).selected_index(cx).is_none() {
-                let version = preferred_loader_version.map(|s| s.as_str()).unwrap_or("Latest");
+                let version = entry
+                    .configuration
+                    .preferred_loader_version
+                    .map(|s| s.as_str())
+                    .unwrap_or(loader_version_latest_string);
                 page.loader_version_select_state.update(cx, |select_state, cx| {
                     select_state.set_selected_value(&version, window, cx);
                 });
@@ -388,13 +260,13 @@ impl InstanceSettingsSubpage {
             instance: instance.clone(),
             instance_id,
             new_name_input_state,
-            group_input_state,
             version_state: TypelessFrontendMetadataResult::Loading,
             version_select_state,
             account_items,
             loader,
             loader_select_state,
             loader_version_select_state,
+            loader_version_latest_string,
             disable_file_syncing,
             sandbox_available,
             sandbox,
@@ -407,7 +279,6 @@ impl InstanceSettingsSubpage {
             jvm_flags_input_state,
             jvm_binary_enabled: jvm_binary.enabled,
             jvm_binary_path: jvm_binary.path.clone().map(|path| PathLabel::new(path, false)),
-            detected_javas: Vec::new(),
             override_glfw_enabled: system_libraries.override_glfw,
             override_glfw_path: glfw_path.map(|path| PathLabel::new(path, false)),
             override_openal_enabled: system_libraries.override_openal,
@@ -489,6 +360,7 @@ impl InstanceSettingsSubpage {
     }
 
     fn update_loader_versions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let latest_str = self.loader_version_latest_string;
         let loader_versions = match self.loader {
             Loader::Vanilla => {
                 self._observe_loader_version_subscription = None;
@@ -497,24 +369,24 @@ impl InstanceSettingsSubpage {
             },
             Loader::Fabric => self.update_loader_versions_for_loader(
                 MetadataRequest::FabricLoaderManifest,
-                |manifest: &FabricLoaderManifest| {
-                    std::iter::once("Latest").chain(manifest.0.iter().map(|s| s.version.as_str())).collect()
+                move |manifest: &FabricLoaderManifest| {
+                    std::iter::once(latest_str).chain(manifest.0.iter().map(|s| s.version.as_str())).collect()
                 },
                 window,
                 cx,
             ),
             Loader::Forge => self.update_loader_versions_for_loader(
                 MetadataRequest::ForgeMavenManifest,
-                |manifest: &ForgeMavenManifest| {
-                    std::iter::once("Latest").chain(manifest.0.iter().map(|s| s.as_str())).collect()
+                move |manifest: &ForgeMavenManifest| {
+                    std::iter::once(latest_str).chain(manifest.0.iter().map(|s| s.as_str())).collect()
                 },
                 window,
                 cx,
             ),
             Loader::NeoForge => self.update_loader_versions_for_loader(
                 MetadataRequest::NeoforgeMavenManifest,
-                |manifest: &NeoforgeMavenManifest| {
-                    std::iter::once("Latest").chain(manifest.0.iter().map(|s| s.as_str())).collect()
+                move |manifest: &NeoforgeMavenManifest| {
+                    std::iter::once(latest_str).chain(manifest.0.iter().map(|s| s.as_str())).collect()
                 },
                 window,
                 cx,
@@ -526,7 +398,7 @@ impl InstanceSettingsSubpage {
             .configuration
             .preferred_loader_version
             .map(|s| s.as_str())
-            .unwrap_or("Latest");
+            .unwrap_or(latest_str);
         self.loader_version_select_state.update(cx, move |select_state, cx| {
             select_state.set_items(SearchableVec::new(loader_versions), window, cx);
             select_state.set_selected_value(&preferred_loader_version, window, cx);
@@ -551,6 +423,7 @@ impl InstanceSettingsSubpage {
             FrontendMetadataResult::Loaded(manifest) => (items_fn)(&manifest),
             FrontendMetadataResult::Error(_) => vec![],
         };
+        let latest_str = self.loader_version_latest_string;
         self.loader_versions_state = result.as_typeless();
         self._observe_loader_version_subscription =
             Some(cx.observe_in(&request, window, move |page, metadata, window, cx| {
@@ -567,7 +440,7 @@ impl InstanceSettingsSubpage {
                     .configuration
                     .preferred_loader_version
                     .map(|s| s.as_str())
-                    .unwrap_or("Latest");
+                    .unwrap_or(latest_str);
                 page.loader_version_select_state.update(cx, move |select_state, cx| {
                     select_state.set_items(SearchableVec::new(versions), window, cx);
                     select_state.set_selected_value(&preferred_loader_version, window, cx);
@@ -617,31 +490,6 @@ impl InstanceSettingsSubpage {
         }
     }
 
-    pub fn on_group_changed(
-        &mut self,
-        state: &Entity<InputState>,
-        event: &InputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-            let raw = state.read(cx).value();
-            let group = schema::instance::normalize_group(Some(raw.as_str().into()));
-            let canonical = group.as_deref().unwrap_or_default();
-            if raw.as_str() != canonical {
-                state.update(cx, |input, cx| input.set_value(canonical.to_owned(), window, cx));
-            }
-            let current = self.instance.read(cx).configuration.group.clone();
-            if current == group {
-                return;
-            }
-            self.backend_handle.send(MessageToBackend::SetInstanceGroup {
-                id: self.instance_id,
-                group,
-            });
-        }
-    }
-
     pub fn on_minecraft_version_selected(
         &mut self,
         _state: Entity<SelectState<VersionList>>,
@@ -670,7 +518,7 @@ impl InstanceSettingsSubpage {
 
         self.backend_handle.send(MessageToBackend::SetInstancePreferredAccount {
             id: self.instance_id,
-            account: value.as_ref().map(|value| value.item),
+            account: value.clone(),
         });
     }
 
@@ -709,7 +557,11 @@ impl InstanceSettingsSubpage {
     ) {
         let SelectEvent::Confirm(value) = event;
 
-        let value = if value == &Some("Latest") { None } else { value.clone() };
+        let value = if value == &Some(self.loader_version_latest_string) {
+            None
+        } else {
+            value.clone()
+        };
 
         self.backend_handle.send(MessageToBackend::SetInstancePreferredLoaderVersion {
             id: self.instance_id,
@@ -967,8 +819,7 @@ impl Render for InstanceSettingsSubpage {
                     row = row.child(el);
                 }
                 row
-            }))
-            .child(crate::labelled(t::instance::group::label(), Input::new(&self.group_input_state).small()));
+            }));
 
         let mut version_content = v_flex().gap_2();
 
@@ -977,7 +828,8 @@ impl Render for InstanceSettingsSubpage {
                 version_content = version_content.child(Skeleton::new().w_full().min_h_8().max_h_8().rounded_md());
             },
             TypelessFrontendMetadataResult::Loaded => {
-                version_content = version_content.child(Select::new(&self.version_select_state).w_full());
+                version_content = version_content
+                    .child(Select::new(&self.version_select_state).search_placeholder(t::common::search()).w_full());
             },
             TypelessFrontendMetadataResult::Error(ref error) => {
                 version_content =
@@ -988,6 +840,7 @@ impl Render for InstanceSettingsSubpage {
         version_content = version_content.child(
             Select::new(&self.loader_select_state)
                 .title_prefix(format!("{}: ", t::instance::modloader()))
+                .search_placeholder(t::common::search())
                 .w_full(),
         );
 
@@ -999,6 +852,7 @@ impl Render for InstanceSettingsSubpage {
                 TypelessFrontendMetadataResult::Loaded => {
                     version_content = version_content.child(
                         Select::new(&self.loader_version_select_state)
+                            .search_placeholder(t::common::search())
                             .title_prefix(match self.loader {
                                 Loader::Fabric => {
                                     format!("{}: ", t::instance::loader_version(t::modrinth::category::fabric()))
@@ -1028,9 +882,12 @@ impl Render for InstanceSettingsSubpage {
             .child(crate::labelled(t::instance::version(), version_content))
             .child(crate::labelled(
                 t::account::override_account(),
-                h_flex()
-                    .gap_2()
-                    .child(Select::new(&self.account_items).placeholder(t::common::no_override()).cleanable(true)),
+                h_flex().gap_2().child(
+                    Select::new(&self.account_items)
+                        .placeholder(t::common::no_override())
+                        .search_placeholder(t::common::search())
+                        .cleanable(true),
+                ),
             ))
             .child(crate::labelled(
                 t::instance::sync::label(),
@@ -1065,27 +922,6 @@ impl Render for InstanceSettingsSubpage {
                     })),
             ));
 
-        let total_mib = total_memory_mib();
-        let min_val = self.memory_min_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
-        let max_val = self.memory_max_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
-        let mem_info: Option<SharedString> = {
-            let mut parts = Vec::new();
-            if let Some(total) = total_mib {
-                parts.push(t::instance::memory::system_ram(total));
-                if memory_override_enabled && max_val > 0 && max_val as u64 > total as u64 * 85 / 100 {
-                    parts.push(t::instance::memory::warning_high(max_val));
-                }
-            }
-            // max 0 means empty/no cap, so min>max is not an error in that case.
-            if memory_override_enabled && min_val > max_val && max_val != 0 {
-                parts.push(t::instance::memory::min_gt_max().to_string());
-            }
-            if parts.is_empty() {
-                None
-            } else {
-                Some(parts.join(" ").into())
-            }
-        };
         let runtime_content = v_flex()
             .gap_4()
             .size_full()
@@ -1117,23 +953,20 @@ impl Render for InstanceSettingsSubpage {
                                     .child(
                                         NumberInput::new(&self.memory_min_input_state)
                                             .small()
-                                            .suffix("MiB")
+                                            .suffix(t::common::size::mib())
                                             .disabled(!memory_override_enabled),
                                     )
                                     .child(
                                         NumberInput::new(&self.memory_max_input_state)
                                             .small()
-                                            .suffix("MiB")
+                                            .suffix(t::common::size::mib())
                                             .disabled(!memory_override_enabled),
                                     ),
                             )
                             .child(
                                 v_flex().gap_1().line_height(px(24.0)).child(t::common::min()).child(t::common::max()),
                             ),
-                    )
-                    .when_some(mem_info, |this, info| {
-                        this.child(div().text_sm().text_color(cx.theme().muted_foreground).child(info))
-                    }),
+                    ),
             )
             .child(
                 v_flex()
@@ -1174,68 +1007,23 @@ impl Render for InstanceSettingsSubpage {
                             })),
                     )
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                PathLabel::button_opt(&self.jvm_binary_path, "select_jvm_binary")
-                                    .disabled(!jvm_binary_enabled)
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.select_file(
-                                            t::instance::select_jvm_binary(),
-                                            |this, path| {
-                                                this.jvm_binary_path = path.map(|path| PathLabel::new(path, false));
-                                                this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
-                                                    id: this.instance_id,
-                                                    jvm_binary: this.get_jvm_binary_configuration(),
-                                                });
-                                            },
-                                            window,
-                                            cx,
-                                        );
-                                    })),
-                            )
-                            .child(
-                                Button::new("detect_java")
-                                    .label(t::instance::jvm_binary::detect())
-                                    .small()
-                                    .disabled(!jvm_binary_enabled)
-                                    .on_click(cx.listener(|_, _, window, cx| {
-                                        let entity = cx.entity();
-                                        window
-                                            .spawn(cx, async move |cx| {
-                                                let javas =
-                                                    cx.background_executor().spawn(async { detect_javas() }).await;
-                                                let _ = cx.update_window_entity(&entity, |this, _, cx| {
-                                                    this.detected_javas = javas;
-                                                    cx.notify();
-                                                });
-                                            })
-                                            .detach();
-                                    })),
-                            ),
-                    )
-                    .when(!self.detected_javas.is_empty(), |this| {
-                        this.child(v_flex().gap_1().children(self.detected_javas.iter().map(|p| {
-                            let path = p.clone();
-                            let label: SharedString = p.to_string_lossy().into_owned().into();
-                            let id: SharedString = {
-                                use std::collections::hash_map::DefaultHasher;
-                                use std::hash::{Hash, Hasher};
-                                let mut hasher = DefaultHasher::new();
-                                path.to_string_lossy().hash(&mut hasher);
-                                format!("use-java-{:x}", hasher.finish()).into()
-                            };
-                            Button::new(id).label(label.clone()).small().on_click(cx.listener(move |this, _, _, cx| {
-                                this.jvm_binary_path = Some(PathLabel::new(path.clone(), false));
-                                this.jvm_binary_enabled = true;
-                                this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
-                                    id: this.instance_id,
-                                    jvm_binary: this.get_jvm_binary_configuration(),
-                                });
-                                cx.notify();
-                            }))
-                        })))
-                    }),
+                        PathLabel::button_opt(&self.jvm_binary_path, "select_jvm_binary")
+                            .disabled(!jvm_binary_enabled)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.select_file(
+                                    t::instance::select_jvm_binary(),
+                                    |this, path| {
+                                        this.jvm_binary_path = path.map(|path| PathLabel::new(path, false));
+                                        this.backend_handle.send(MessageToBackend::SetInstanceJvmBinary {
+                                            id: this.instance_id,
+                                            jvm_binary: this.get_jvm_binary_configuration(),
+                                        });
+                                    },
+                                    window,
+                                    cx,
+                                );
+                            })),
+                    ),
             )
             .child(
                 v_flex()
@@ -1475,6 +1263,28 @@ impl Render for InstanceSettingsSubpage {
                     }),
             )
             .child(
+                Button::new("duplicate")
+                    .label(t::instance::duplicate::action())
+                    .icon(PandoraIcon::Copy)
+                    .overflow_x_hidden()
+                    .on_click({
+                        let instance = self.instance.clone();
+                        let instances = self.data.instances.clone();
+                        let backend_handle = self.backend_handle.clone();
+                        move |_: &ClickEvent, window, cx| {
+                            let instance = instance.read(cx);
+                            crate::modals::duplicate_instance::open_duplicate_instance(
+                                instance.id,
+                                instance.name.clone(),
+                                instances.clone(),
+                                backend_handle.clone(),
+                                window,
+                                cx,
+                            );
+                        }
+                    }),
+            )
+            .child(
                 Button::new("export")
                     .label(t::instance::export::action())
                     .icon(PandoraIcon::Archive)
@@ -1491,34 +1301,6 @@ impl Render for InstanceSettingsSubpage {
                                 window,
                                 cx,
                             );
-                        }
-                    }),
-            )
-            .child(
-                Button::new("p2p_share")
-                    .label(t::instance::p2p::share_action())
-                    .icon(PandoraIcon::Link)
-                    .overflow_x_hidden()
-                    .on_click({
-                        let instance = self.instance.clone();
-                        let backend_handle = self.backend_handle.clone();
-                        move |_: &ClickEvent, window, cx| {
-                            let id = instance.read(cx).id;
-                            crate::modals::p2p_share::open_p2p_share(id, backend_handle.clone(), window, cx);
-                        }
-                    }),
-            )
-            .child(
-                Button::new("duplicate")
-                    .label(t::instance::duplicate_instance())
-                    .icon(PandoraIcon::Copy)
-                    .overflow_x_hidden()
-                    .on_click({
-                        let backend_handle = self.backend_handle.clone();
-                        let instance = self.instance.clone();
-                        move |_: &ClickEvent, _window, cx| {
-                            let id = instance.read(cx).id;
-                            backend_handle.send(MessageToBackend::DuplicateInstance { id });
                         }
                     }),
             )

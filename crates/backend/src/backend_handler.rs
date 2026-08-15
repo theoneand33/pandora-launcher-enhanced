@@ -12,8 +12,8 @@ use bridge::{
     instance::{ContentFolder, ContentSummary, ContentType, InstanceContentID, InstanceID},
     keep_alive::KeepAlive,
     message::{
-        AccountCapesResult, AccountSkinResult, BackendConfigWithPassword, EmbeddedOrRaw, LogFiles, MessageToBackend,
-        MessageToFrontend, QuickPlayLaunch,
+        AccountCapesResult, AccountSkinResult, BackendConfigWithPassword, EmbeddedOrRaw, GameOutputMsg, LogFiles,
+        MessageToBackend, MessageToFrontend, QuickPlayLaunch,
     },
     meta::MetadataResult,
     modal_action::{ModalAction, ModalActionVisitUrl, ProgressTracker, ProgressTrackerFinishType},
@@ -175,6 +175,12 @@ impl BackendState {
                     }
                 }
             },
+            MessageToBackend::DuplicateInstance { id, name, modal_action } => {
+                let backend = self.clone();
+                tokio::task::spawn(async move {
+                    crate::duplicate::duplicate_instance(backend, id, &name, modal_action).await;
+                });
+            },
             MessageToBackend::ExportInstance {
                 id,
                 format,
@@ -186,9 +192,6 @@ impl BackendState {
                 tokio::task::spawn(async move {
                     crate::export::export_instance(backend, id, format, options, output, modal_action).await;
                 });
-            },
-            MessageToBackend::DuplicateInstance { id } => {
-                self.duplicate_instance(id).await;
             },
             MessageToBackend::RenameInstance { id, name } => {
                 self.rename_instance(id, &name).await;
@@ -419,14 +422,15 @@ impl BackendState {
                 }
 
                 if let Some(id) = id {
-                    self.start_instance(id, quick_play, Default::default()).await
+                    self.start_instance(id, quick_play, None, Default::default()).await
                 }
             },
             MessageToBackend::StartInstance {
                 id,
                 quick_play,
+                live_game_output,
                 modal_action,
-            } => self.start_instance(id, quick_play, modal_action).await,
+            } => self.start_instance(id, quick_play, live_game_output, modal_action).await,
             MessageToBackend::SetContentEnabled {
                 id,
                 content_ids: mod_ids,
@@ -2547,6 +2551,7 @@ impl BackendState {
         self: &Arc<Self>,
         id: InstanceID,
         quick_play: Option<QuickPlayLaunch>,
+        live_game_output: Option<tokio::sync::oneshot::Sender<tokio::sync::mpsc::UnboundedReceiver<GameOutputMsg>>>,
         modal_action: ModalAction,
     ) {
         let keepalive = KeepAlive::new();
@@ -2615,8 +2620,6 @@ impl BackendState {
             return;
         }
 
-        let game_output = !self.config.write().get().dont_open_game_output_when_launching;
-
         let launch_tracker = ProgressTracker::new(Arc::from("Launching"), self.send.clone());
         modal_action.trackers.push(launch_tracker.clone());
         let result = self
@@ -2628,7 +2631,7 @@ impl BackendState {
                 quick_play,
                 login_info,
                 offline_skin,
-                game_output,
+                live_game_output.is_some(),
                 &launch_tracker,
                 &modal_action,
             )
@@ -2642,9 +2645,10 @@ impl BackendState {
         let is_err = result.is_err();
         match result {
             Ok((mut child, skin_server)) => {
-                if game_output {
+                if let Some(live_game_output) = live_game_output {
                     if let Some(stdout) = child.stdout.take() {
-                        log_reader::start_game_output(stdout, child.stderr.take(), self.send.clone());
+                        let receiver = log_reader::start_game_output(stdout, child.stderr.take());
+                        _ = live_game_output.send(receiver);
                     }
                 }
 

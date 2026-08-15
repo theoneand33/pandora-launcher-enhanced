@@ -1,4 +1,4 @@
-use bridge::{handle::BackendHandle, instance::InstanceStatus, message::MessageToBackend};
+use bridge::{instance::InstanceStatus, message::MessageToBackend};
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme, Icon, Sizable,
@@ -11,31 +11,21 @@ use gpui_component::{
 use crate::{
     entity::{
         DataEntities,
-        instance::{InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceRemovedEvent},
+        instance::{
+            InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceMovedToTopEvent, InstanceRemovedEvent,
+        },
     },
-    icon::PandoraIcon,
-    interface_config::InterfaceConfig,
-    modals, png_render_cache, root, ui,
+    png_render_cache, root, ui,
 };
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum GroupFilter {
-    #[default]
-    All,
-    Ungrouped,
-    Named(SharedString),
-}
 
 pub struct InstanceList {
     columns: Vec<Column>,
     items: Vec<InstanceEntry>,
-    filter: SharedString,
-    group_filter: GroupFilter,
-    visible_cache: Vec<usize>,
-    backend_handle: BackendHandle,
+    data: DataEntities,
     _instance_added_subscription: Subscription,
     _instance_removed_subscription: Subscription,
     _instance_modified_subscription: Subscription,
+    _instance_moved_to_top_subscription: Subscription,
 }
 
 impl InstanceList {
@@ -46,31 +36,42 @@ impl InstanceList {
             let _instance_added_subscription = cx.subscribe::<_, InstanceAddedEvent>(
                 &instances,
                 |table: &mut TableState<InstanceList>, _, event, cx| {
-                    let d = table.delegate_mut();
-                    d.items.insert(0, event.instance.clone());
-                    d.rebuild_visible_cache();
+                    table.delegate_mut().items.insert(0, event.instance.clone());
                     cx.notify();
                 },
             );
             let _instance_removed_subscription =
                 cx.subscribe::<_, InstanceRemovedEvent>(&instances, |table, _, event, cx| {
-                    let d = table.delegate_mut();
-                    d.items.retain(|instance| instance.id != event.id);
-                    d.rebuild_visible_cache();
+                    table.delegate_mut().items.retain(|instance| instance.id != event.id);
                     cx.notify();
                 });
             let _instance_modified_subscription =
                 cx.subscribe::<_, InstanceModifiedEvent>(&instances, |table, _, event, cx| {
-                    let d = table.delegate_mut();
-                    if let Some(entry) = d.items.iter_mut().find(|entry| entry.id == event.instance.id) {
+                    if let Some(entry) =
+                        table.delegate_mut().items.iter_mut().find(|entry| entry.id == event.instance.id)
+                    {
                         *entry = event.instance.clone();
-                        d.rebuild_visible_cache();
                         cx.notify();
                     }
                 });
-            let mut instance_list = Self {
+            let _instance_moved_to_top_subscription =
+                cx.subscribe::<_, InstanceMovedToTopEvent>(&instances, |table, _, event, cx| {
+                    let delegate = table.delegate_mut();
+                    let is_sorted = delegate
+                        .columns
+                        .iter()
+                        .any(|c| matches!(c.sort, Some(ColumnSort::Ascending) | Some(ColumnSort::Descending)));
+                    if is_sorted {
+                        return;
+                    }
+                    if let Some(pos) = delegate.items.iter().position(|e| e.id == event.instance.id) {
+                        let item = delegate.items.remove(pos);
+                        delegate.items.insert(0, item);
+                        cx.notify();
+                    }
+                });
+            let instance_list = Self {
                 columns: vec![
-                    Column::new("pin", "").width(36.).fixed_left().movable(false).resizable(false),
                     Column::new("controls", "").width(150.).fixed_left().movable(false).resizable(false),
                     Column::new("name", t::instance::name())
                         .width(150.)
@@ -83,134 +84,27 @@ impl InstanceList {
                         .sortable()
                         .resizable(true),
                     Column::new("loader", t::instance::modloader()).width(150.).fixed_left().resizable(true),
-                    Column::new("remove", "").width(44.).fixed_left().movable(false).resizable(false),
                 ],
                 items,
-                filter: SharedString::default(),
-                group_filter: GroupFilter::All,
-                visible_cache: Vec::new(),
-                backend_handle: data.backend_handle.clone(),
+                data: data.clone(),
                 _instance_added_subscription,
                 _instance_removed_subscription,
                 _instance_modified_subscription,
+                _instance_moved_to_top_subscription,
             };
-            instance_list.rebuild_visible_cache();
             TableState::new(instance_list, window, cx)
         })
     }
 
-    pub fn set_filter(&mut self, query: SharedString) {
-        self.filter = query;
-        self.rebuild_visible_cache();
-    }
-
-    pub fn set_group_filter(&mut self, group: GroupFilter) {
-        self.group_filter = group;
-        self.rebuild_visible_cache();
-    }
-
-    fn contains_ci(haystack: &str, needle_lower: &str) -> bool {
-        // ponytail: one lowercase per haystack per filter; negligible at launcher scale
-        haystack.to_lowercase().contains(needle_lower)
-    }
-
-    fn matches_filter(entry: &InstanceEntry, lower: &str) -> bool {
-        if lower.is_empty() {
-            return true;
-        }
-        if Self::contains_ci(&entry.name, lower) {
-            return true;
-        }
-        if Self::contains_ci(entry.configuration.minecraft_version.as_str(), lower) {
-            return true;
-        }
-        if Self::contains_ci(entry.configuration.loader.pretty_name(), lower) {
-            return true;
-        }
-        if let Some(group) = entry.configuration.group.as_deref()
-            && Self::contains_ci(group, lower)
-        {
-            return true;
-        }
-        false
-    }
-
-    fn matches_group(entry: &InstanceEntry, group_filter: &GroupFilter) -> bool {
-        match group_filter {
-            GroupFilter::All => true,
-            GroupFilter::Ungrouped => entry.configuration.group.is_none(),
-            GroupFilter::Named(g) => {
-                entry.configuration.group.as_ref().is_some_and(|v| v.as_ref().eq_ignore_ascii_case(g))
-            },
-        }
-    }
-
-    /// Collect deduped, case-insensitive sorted group names.
-    pub fn deduped_groups(groups: impl Iterator<Item = SharedString>) -> Vec<SharedString> {
-        let mut out: Vec<SharedString> = groups.collect();
-        out.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-        out.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-        out
-    }
-
-    /// Canonical display for a raw group: first deduped entry with same lowercased key.
-    fn canonical_group_label(&self, raw: &str) -> SharedString {
-        let lower = raw.to_lowercase();
-        let mut groups: Vec<SharedString> = self
-            .items
-            .iter()
-            .filter_map(|e| e.configuration.group.as_ref().map(|g| SharedString::from(g.as_ref())))
-            .collect();
-        groups.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-        groups.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-        groups
-            .into_iter()
-            .find(|g| g.to_lowercase() == lower)
-            .unwrap_or_else(|| SharedString::from(raw))
-    }
-
-    fn compute_visible(items: &[InstanceEntry], filter: &str, group_filter: &GroupFilter) -> Vec<usize> {
-        let lower = filter.to_lowercase();
-        let mut out: Vec<usize> = items
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| Self::matches_filter(e, &lower) && Self::matches_group(e, group_filter))
-            .map(|(i, _)| i)
-            .collect();
-        // pinned first, stable to preserve order from perform_sort
-        out.sort_by(|&a, &b| items[b].configuration.pinned.cmp(&items[a].configuration.pinned));
-        out
-    }
-
-    fn rebuild_visible_cache(&mut self) {
-        let group = self.group_filter.clone();
-        self.visible_cache = Self::compute_visible(&self.items, &self.filter, &group);
-    }
-
-    fn visible_indices(&self) -> &[usize] {
-        &self.visible_cache
-    }
-
-    fn visible_entry(&self, visible_ix: usize) -> Option<&InstanceEntry> {
-        let idx = self.visible_indices().get(visible_ix).copied()?;
-        self.items.get(idx)
-    }
-
-    pub fn total_count(&self) -> usize {
-        self.items.len()
-    }
-
     pub fn render_card(&self, index: usize, cx: &mut App) -> Div {
-        let Some(item) = self.visible_entry(index) else {
-            return v_flex().into();
-        };
+        let item = &self.items[index];
         let loader_and_version = format!(
             "{} {}",
             item.configuration.loader.pretty_name(),
             item.configuration.minecraft_version.as_str(),
         );
 
-        let icon_element = if let Some(icon) = item.icon.clone() {
+        let icon = if let Some(icon) = item.icon.clone() {
             let transform = png_render_cache::ImageTransformation::Resize { width: 64, height: 64 };
             png_render_cache::render_with_transform(icon, transform, cx)
                 .rounded(cx.theme().radius)
@@ -223,51 +117,9 @@ impl InstanceList {
             Icon::default().path(icon_path).size_16().min_w_16().min_h_16().into_any_element()
         };
 
-        let play_button = render_play_button(item, index, self.backend_handle.clone());
+        let play_button = render_play_button(item, index, self.data.clone());
 
         let theme = cx.theme();
-        let id = item.id;
-        let name = item.name.clone();
-        let backend_handle = self.backend_handle.clone();
-        let backend_handle_for_icon = self.backend_handle.clone();
-        let backend_handle_for_rename = self.backend_handle.clone();
-        let name_for_rename = item.name.clone();
-        let trash_icon = PandoraIcon::Trash2;
-        let edit_icon = Icon::new(PandoraIcon::Brush).text_color(white());
-        let icon_hover_group = format!("instance-icon-edit-{index}");
-        let icon_overlay_hover_group = icon_hover_group.clone();
-        let icon = div()
-            .id(("icon", index))
-            .group(icon_hover_group)
-            .cursor_pointer()
-            .size_16()
-            .min_w_16()
-            .min_h_16()
-            .relative()
-            .on_click(move |_, window, cx| {
-                let backend_handle = backend_handle_for_icon.clone();
-                crate::modals::select_icon::open_select_icon(
-                    Box::new(move |icon, _| {
-                        backend_handle.send(MessageToBackend::SetInstanceIcon { id, icon: Some(icon) });
-                    }),
-                    window,
-                    cx,
-                );
-            })
-            .child(icon_element)
-            .child(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .bg(black().opacity(0.5))
-                    .opacity(0.0)
-                    .group_hover(icon_overlay_hover_group, |this| this.opacity(1.0))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(edit_icon.clone().size_8()),
-            );
-
         v_flex()
             .flex_1()
             .p_2()
@@ -277,64 +129,13 @@ impl InstanceList {
             .border_1()
             .border_color(theme.border)
             .rounded(theme.radius_lg)
-            .relative()
-            .child({
-                let name_hover_group = format!("instance-name-edit-{index}");
-                let name_overlay_hover_group = name_hover_group.clone();
-                h_flex().w_full().gap_2().child(icon).child(
-                    v_flex()
-                        .truncate()
-                        .w_full()
-                        .pr_16()
-                        .relative()
-                        .child(
-                            div()
-                                .id(("rename", index))
-                                .group(name_hover_group)
-                                .cursor_pointer()
-                                .w_48()
-                                .max_w_full()
-                                .pl_5()
-                                .on_click(move |_, window, cx| {
-                                    modals::rename_instance::open_rename_instance(
-                                        id,
-                                        name_for_rename.clone(),
-                                        backend_handle_for_rename.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                })
-                                .child(item.name.clone())
-                                .child(
-                                    div()
-                                        .absolute()
-                                        .top_0()
-                                        .bottom_0()
-                                        .left_0()
-                                        .opacity(0.0)
-                                        .group_hover(name_overlay_hover_group, |this| this.opacity(1.0))
-                                        .flex()
-                                        .items_center()
-                                        .justify_start()
-                                        .child(edit_icon.clone().size_4()),
-                                ),
-                        )
-                        .child(loader_and_version)
-                        .when_some(item.configuration.group.clone(), |this, group| {
-                            let label = self.canonical_group_label(group.as_ref());
-                            this.child(
-                                div()
-                                    .text_xs()
-                                    .px_1p5()
-                                    .py_0p5()
-                                    .rounded_sm()
-                                    .bg(cx.theme().accent.opacity(0.15))
-                                    .text_color(cx.theme().accent)
-                                    .child(label),
-                            )
-                        }),
-                )
-            })
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap_2()
+                    .child(icon)
+                    .child(v_flex().truncate().w_full().child(item.name.clone()).child(loader_and_version)),
+            )
             .child(h_flex().gap_2().child(play_button.flex_1().small()).child(
                 Button::new(("view", index)).flex_1().small().info().label(t::instance::view()).on_click({
                     let name = item.name.clone();
@@ -348,56 +149,6 @@ impl InstanceList {
                     }
                 }),
             ))
-            .child(
-                h_flex()
-                    .absolute()
-                    .top_1()
-                    .right_1()
-                    .gap_1()
-                    .child({
-                        let pinned = item.configuration.pinned;
-                        let bh = self.backend_handle.clone();
-                        Button::new(("pin", index))
-                            .small()
-                            .compact()
-                            .icon(if pinned {
-                                PandoraIcon::Star
-                            } else {
-                                PandoraIcon::StarOff
-                            })
-                            .tooltip(if pinned {
-                                t::instance::unpin()
-                            } else {
-                                t::instance::pin()
-                            })
-                            .on_click(move |_, _, _| {
-                                bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
-                            })
-                    })
-                    .child(
-                        Button::new(("remove", index))
-                            .danger()
-                            .small()
-                            .compact()
-                            .icon(trash_icon)
-                            .tooltip(t::instance::delete())
-                            .on_click(move |click: &ClickEvent, window, cx| {
-                                cx.stop_propagation();
-                                window.prevent_default();
-                                if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                                    backend_handle.send(MessageToBackend::DeleteInstance { id });
-                                } else {
-                                    modals::delete_instance::open_delete_instance(
-                                        id,
-                                        name.clone(),
-                                        backend_handle.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            }),
-                    ),
-            )
     }
 }
 
@@ -407,7 +158,7 @@ impl TableDelegate for InstanceList {
     }
 
     fn rows_count(&self, _cx: &App) -> usize {
-        self.visible_indices().len()
+        self.items.len()
     }
 
     fn column(&self, col_ix: usize, _cx: &App) -> gpui_component::table::Column {
@@ -421,37 +172,32 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) {
-        // ponytail: pinned stays on top regardless of sort; sort only within pinned groups
-        if let Some(col) = self.columns.get_mut(col_ix) {
+        for (ix, col) in self.columns.iter_mut().enumerate() {
+            if ix == col_ix {
+                col.sort = Some(sort);
+            } else if col.sort.is_some() {
+                col.sort = Some(ColumnSort::Default);
+            }
+        }
+        if let Some(col) = self.columns.get(col_ix) {
             match col.key.as_ref() {
-                "name" => self.items.sort_by(|a, b| {
-                    if a.configuration.pinned != b.configuration.pinned {
-                        return b.configuration.pinned.cmp(&a.configuration.pinned);
-                    }
-                    match sort {
-                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
-                        _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
-                    }
+                "name" => self.items.sort_by(|a, b| match sort {
+                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(&a.name, &b.name).reverse(),
+                    _ => lexical_sort::natural_lexical_cmp(&a.name, &b.name),
                 }),
-                "version" => self.items.sort_by(|a, b| {
-                    if a.configuration.pinned != b.configuration.pinned {
-                        return b.configuration.pinned.cmp(&a.configuration.pinned);
-                    }
-                    match sort {
-                        ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
-                            &a.configuration.minecraft_version,
-                            &b.configuration.minecraft_version,
-                        )
-                        .reverse(),
-                        _ => lexical_sort::natural_lexical_cmp(
-                            &a.configuration.minecraft_version,
-                            &b.configuration.minecraft_version,
-                        ),
-                    }
+                "version" => self.items.sort_by(|a, b| match sort {
+                    ColumnSort::Descending => lexical_sort::natural_lexical_cmp(
+                        &a.configuration.minecraft_version,
+                        &b.configuration.minecraft_version,
+                    )
+                    .reverse(),
+                    _ => lexical_sort::natural_lexical_cmp(
+                        &a.configuration.minecraft_version,
+                        &b.configuration.minecraft_version,
+                    ),
                 }),
                 _ => {},
             }
-            self.rebuild_visible_cache();
         }
     }
 
@@ -462,81 +208,13 @@ impl TableDelegate for InstanceList {
         _window: &mut Window,
         _cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let Some(item) = self.visible_entry(row_ix).cloned() else {
-            return div().into_any_element();
-        };
+        let item = &self.items[row_ix];
         if let Some(col) = self.columns.get(col_ix) {
             match col.key.as_ref() {
-                "pin" => {
-                    let id = item.id;
-                    let pinned = item.configuration.pinned;
-                    let bh = self.backend_handle.clone();
-                    h_flex()
-                        .size_full()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Button::new(("pin", row_ix))
-                                .small()
-                                .compact()
-                                .icon(if pinned {
-                                    PandoraIcon::Star
-                                } else {
-                                    PandoraIcon::StarOff
-                                })
-                                .tooltip(if pinned {
-                                    t::instance::unpin()
-                                } else {
-                                    t::instance::pin()
-                                })
-                                .on_click(move |_, _, _| {
-                                    bh.send(MessageToBackend::SetInstancePinned { id, pinned: !pinned });
-                                }),
-                        )
-                        .into_any_element()
-                },
-                "name" => {
-                    let id = item.id;
-                    let name = item.name.clone();
-                    let backend_handle = self.backend_handle.clone();
-                    let edit_icon = Icon::new(PandoraIcon::Brush).text_color(white());
-                    let hover_group = format!("instance-list-name-edit-{row_ix}");
-                    let overlay_hover_group = hover_group.clone();
-                    div()
-                        .id(("rename-list", row_ix))
-                        .group(hover_group)
-                        .relative()
-                        .cursor_pointer()
-                        .w_full()
-                        .pl_5()
-                        .on_click(move |_, window, cx| {
-                            modals::rename_instance::open_rename_instance(
-                                id,
-                                name.clone(),
-                                backend_handle.clone(),
-                                window,
-                                cx,
-                            );
-                        })
-                        .child(item.name.clone())
-                        .child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .bottom_0()
-                                .left_0()
-                                .opacity(0.0)
-                                .group_hover(overlay_hover_group, |this| this.opacity(1.0))
-                                .flex()
-                                .items_center()
-                                .justify_start()
-                                .child(edit_icon.size_4()),
-                        )
-                        .into_any_element()
-                },
+                "name" => item.name.clone().into_any_element(),
                 "version" => item.configuration.minecraft_version.as_str().into_any_element(),
                 "controls" => {
-                    let play_button = render_play_button(&item, row_ix, self.backend_handle.clone());
+                    let play_button = render_play_button(item, row_ix, self.data.clone());
 
                     h_flex()
                         .size_full()
@@ -557,39 +235,6 @@ impl TableDelegate for InstanceList {
                         .into_any_element()
                 },
                 "loader" => item.configuration.loader.pretty_name().into_any_element(),
-                "remove" => {
-                    let backend_handle = self.backend_handle.clone();
-                    let id = item.id;
-                    let name = item.name.clone();
-                    let trash_icon = PandoraIcon::Trash2;
-                    h_flex()
-                        .size_full()
-                        .items_center()
-                        .child(
-                            Button::new(("remove", row_ix))
-                                .danger()
-                                .small()
-                                .compact()
-                                .icon(trash_icon)
-                                .tooltip(t::instance::delete())
-                                .on_click(move |click: &ClickEvent, window, cx| {
-                                    cx.stop_propagation();
-                                    window.prevent_default();
-                                    if InterfaceConfig::get(cx).quick_delete_instance && click.modifiers().shift {
-                                        backend_handle.send(MessageToBackend::DeleteInstance { id });
-                                    } else {
-                                        modals::delete_instance::open_delete_instance(
-                                            id,
-                                            name.clone(),
-                                            backend_handle.clone(),
-                                            window,
-                                            cx,
-                                        );
-                                    }
-                                }),
-                        )
-                        .into_any_element()
-                },
                 _ => t::common::unknown().into_any_element(),
             }
         } else {
@@ -598,7 +243,7 @@ impl TableDelegate for InstanceList {
     }
 }
 
-fn render_play_button(item: &InstanceEntry, index: usize, backend_handle: BackendHandle) -> Button {
+fn render_play_button(item: &InstanceEntry, index: usize, data: DataEntities) -> Button {
     let name = item.name.clone();
     let id = item.id;
     match item.status {
@@ -606,13 +251,13 @@ fn render_play_button(item: &InstanceEntry, index: usize, backend_handle: Backen
             .success()
             .label(t::instance::start::label())
             .on_click(move |_, window, cx| {
-                root::start_instance(id, name.clone(), None, &backend_handle, window, cx);
+                root::start_instance(id, name.clone(), None, &data, window, cx);
             }),
         InstanceStatus::Launching => Button::new(("launching", index)).warning().label(t::instance::start::starting()),
         InstanceStatus::Stopping => Button::new(("stopping", index)).danger().label(t::instance::start::stopping()),
         InstanceStatus::Running => {
             Button::new(("kill_instance", index)).danger().label(t::instance::kill()).on_click({
-                let backend_handle = backend_handle.clone();
+                let backend_handle = data.backend_handle.clone();
                 move |_, _, _| {
                     backend_handle.send(MessageToBackend::KillInstance { id });
                 }

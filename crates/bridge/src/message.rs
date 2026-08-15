@@ -92,15 +92,17 @@ pub enum MessageToBackend {
     DeleteInstance {
         id: InstanceID,
     },
+    DuplicateInstance {
+        id: InstanceID,
+        name: Ustr,
+        modal_action: ModalAction,
+    },
     ExportInstance {
         id: InstanceID,
         format: ExportFormat,
         options: ExportOptions,
         output: PathBuf,
         modal_action: ModalAction,
-    },
-    DuplicateInstance {
-        id: InstanceID,
     },
     RenameInstance {
         id: InstanceID,
@@ -176,6 +178,7 @@ pub enum MessageToBackend {
     StartInstance {
         id: InstanceID,
         quick_play: Option<QuickPlayLaunch>,
+        live_game_output: Option<tokio::sync::oneshot::Sender<tokio::sync::mpsc::UnboundedReceiver<GameOutputMsg>>>,
         modal_action: ModalAction,
     },
     RequestLoadWorlds {

@@ -104,7 +104,7 @@ impl InstanceLogsSubpage {
                         &dropdown,
                         window,
                         move |page, entity, _: &SelectEvent<NamedDropdown<Arc<Path>>>, window, cx| {
-                            let selected = entity.read(cx).selected_value().map(|item| item.item.clone());
+                            let selected = entity.read(cx).selected_value().cloned();
 
                             if selected == page.last_selected_path {
                                 return;

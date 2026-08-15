@@ -1273,26 +1273,21 @@ fn create_instance_content_summary(
         filename
     };
 
+    let filename: Arc<str> = filename.into();
+
     let mut hasher = DefaultHasher::new();
     filename_without_disabled.hash(&mut hasher);
     let filename_hash = hasher.finish();
-
-    let filename: Arc<str> = filename.into();
-    let lowercase_filename = filename.to_lowercase();
-    let lowercase_filename = if lowercase_filename == &*filename {
-        filename.clone()
-    } else {
-        lowercase_filename.into()
-    };
 
     let content_source = mod_metadata_manager.read_content_sources().get(&summary.hash).unwrap_or_default();
 
     let lowercase_search_keys = summary
         .id
-        .clone()
+        .as_ref()
+        .map(lowercase_arc)
         .into_iter()
-        .chain(summary.name.clone().into_iter())
-        .chain(std::iter::once(lowercase_filename))
+        .chain(summary.name.as_ref().map(lowercase_arc).into_iter())
+        .chain(std::iter::once(lowercase_arc(&filename)))
         .collect();
 
     let disabled_children = read_disabled_children_for(&summary, path).unwrap_or_default();
@@ -1324,6 +1319,15 @@ fn create_instance_content_summary(
     })
 }
 
+fn lowercase_arc(s: &Arc<str>) -> Arc<str> {
+    let lowercase = s.to_lowercase();
+    if lowercase == &**s {
+        return s.clone();
+    } else {
+        return lowercase.into();
+    }
+}
+
 fn try_load_resourcepack_folder(
     pack_mcmeta_bytes: &[u8],
     pack_png_bytes: Option<&[u8]>,
@@ -1340,19 +1344,14 @@ fn try_load_resourcepack_folder(
     let filename_hash = hasher.finish();
 
     let filename: Arc<str> = filename.into();
-    let lowercase_filename = filename.to_lowercase();
-    let lowercase_filename = if lowercase_filename == &*filename {
-        filename.clone()
-    } else {
-        lowercase_filename.into()
-    };
 
     let lowercase_search_keys = summary
         .id
-        .clone()
+        .as_ref()
+        .map(lowercase_arc)
         .into_iter()
-        .chain(summary.name.clone().into_iter())
-        .chain(std::iter::once(lowercase_filename))
+        .chain(summary.name.as_ref().map(lowercase_arc).into_iter())
+        .chain(std::iter::once(lowercase_arc(&filename)))
         .collect();
 
     return Some(InstanceContentSummary {
