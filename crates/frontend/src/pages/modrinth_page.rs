@@ -1039,10 +1039,14 @@ impl PrimaryAction {
 
                 crate::root::start_install(content_install, &data.backend_handle, window, cx);
             },
-            PrimaryAction::CheckForUpdates => {
+            PrimaryAction::CheckForUpdates | PrimaryAction::ErrorCheckingForUpdates => {
+                let Some(install_for) = install_for else {
+                    window.push_notification((NotificationType::Error, t::instance::unable_to_find()), cx);
+                    return;
+                };
                 let modal_action = ModalAction::default();
                 data.backend_handle.send(MessageToBackend::UpdateCheck {
-                    instance: install_for.unwrap(),
+                    instance: install_for,
                     modal_action: modal_action.clone(),
                 });
                 crate::modals::generic::show_notification(
@@ -1052,10 +1056,13 @@ impl PrimaryAction {
                     modal_action,
                 );
             },
-            PrimaryAction::ErrorCheckingForUpdates => {},
             PrimaryAction::UpToDate => {},
             PrimaryAction::Update(ids) => {
-                crate::root::update_multiple_mods(install_for.unwrap(), ids.clone(), &data.backend_handle, window, cx);
+                let Some(install_for) = install_for else {
+                    window.push_notification((NotificationType::Error, t::instance::unable_to_find()), cx);
+                    return;
+                };
+                crate::root::update_multiple_mods(install_for, ids.clone(), &data.backend_handle, window, cx);
             },
         }
     }
