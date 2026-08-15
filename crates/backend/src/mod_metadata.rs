@@ -34,7 +34,6 @@ use schema::{
     unique_bytes::UniqueBytes,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeAs, serde_as};
 use sha1::{Digest, Sha1};
 use ustr::Ustr;
 
@@ -1499,21 +1498,23 @@ fn create_version_string(ver: &str) -> Arc<str> {
     }
 }
 
-#[serde_as]
 #[derive(Deserialize)]
 struct LegacyDeserializedContentSources(
-    #[serde_as(as = "FxHashMap<DeserializeAsHex, _>")] FxHashMap<[u8; 20], LegacyContentSource>,
+    #[serde(deserialize_with = "deserialize_content_sources")] FxHashMap<[u8; 20], LegacyContentSource>,
 );
 
-struct DeserializeAsHex {}
-
-impl<'de> DeserializeAs<'de, [u8; 20]> for DeserializeAsHex {
-    fn deserialize_as<D>(deserializer: D) -> Result<[u8; 20], D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        hex::serde::deserialize(deserializer)
-    }
+fn deserialize_content_sources<'de, D>(deserializer: D) -> Result<FxHashMap<[u8; 20], LegacyContentSource>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let map = FxHashMap::<String, LegacyContentSource>::deserialize(deserializer)?;
+    map.into_iter()
+        .map(|(key, value)| {
+            let bytes = hex::decode(&key).map_err(serde::de::Error::custom)?;
+            let key: [u8; 20] = bytes.try_into().map_err(|_| serde::de::Error::custom("key must be 20 bytes"))?;
+            Ok((key, value))
+        })
+        .collect()
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

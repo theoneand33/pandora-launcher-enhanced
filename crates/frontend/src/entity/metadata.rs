@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use bridge::{
     handle::BackendHandle,
-    keep_alive::KeepAliveHandle,
     message::MessageToBackend,
     meta::{MetadataRequest, MetadataResult},
+    notify_signal::KeepAliveNotifySignalHandle,
 };
 use gpui::{prelude::*, *};
 use schema::{
@@ -20,7 +20,7 @@ pub enum FrontendMetadataState {
     Loading,
     Loaded {
         result: Result<MetadataResult, Arc<str>>,
-        keep_alive: Option<KeepAliveHandle>,
+        keep_alive: Option<KeepAliveNotifySignalHandle>,
     },
 }
 
@@ -111,7 +111,7 @@ impl FrontendMetadata {
         entity: &Entity<Self>,
         request: MetadataRequest,
         result: Result<MetadataResult, Arc<str>>,
-        keep_alive: Option<KeepAliveHandle>,
+        keep_alive: Option<KeepAliveNotifySignalHandle>,
         cx: &mut App,
     ) {
         entity.update(cx, |this, cx| {

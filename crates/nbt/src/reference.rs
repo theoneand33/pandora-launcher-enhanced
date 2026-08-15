@@ -38,50 +38,11 @@ impl PartialEq for NBTRef<'_> {
     }
 }
 
-macro_rules! as_basic {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<as_ $name>](self) -> Option<&'a $value_type> {
-                match self {
-                    NBTRef::$node(value) => Some(value),
-                    _ => None,
-                }
-            }
-        }
-    };
-}
-
 impl<'a> NBTRef<'a> {
-    super::enumerate_basic_types!(as_basic);
-
     pub fn as_compound(self) -> Option<CompoundRef<'a>> {
         match self {
             NBTRef::Compound(compound) => Some(compound),
             _ => None,
-        }
-    }
-
-    pub fn as_list(self) -> Option<ListRef<'a>> {
-        match self {
-            NBTRef::List(list) => Some(list),
-            _ => None,
-        }
-    }
-
-    pub fn tag_type(&self) -> TagType {
-        match self {
-            Self::Byte(_) => super::TAG_BYTE_ID,
-            Self::Short(_) => super::TAG_SHORT_ID,
-            Self::Int(_) => super::TAG_INT_ID,
-            Self::Long(_) => super::TAG_LONG_ID,
-            Self::Float(_) => super::TAG_FLOAT_ID,
-            Self::Double(_) => super::TAG_DOUBLE_ID,
-            Self::ByteArray(_) => super::TAG_BYTE_ARRAY_ID,
-            Self::String(_) => super::TAG_STRING_ID,
-            Self::List(_) => super::TAG_LIST_ID,
-            Self::Compound(_) => super::TAG_COMPOUND_ID,
-            Self::IntArray(_) => super::TAG_INT_ARRAY_ID,
-            Self::LongArray(_) => super::TAG_LONG_ARRAY_ID,
         }
     }
 }
@@ -100,54 +61,6 @@ pub enum NBTRefMut<'a> {
     Compound(CompoundRefMut<'a>),
     IntArray(&'a mut Vec<i32>),
     LongArray(&'a mut Vec<i64>),
-}
-
-macro_rules! as_basic_mut {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<as_ $name>](&mut self) -> Option<&mut $value_type> {
-                match self {
-                    NBTRefMut::$node(value) => Some(value),
-                    _ => None,
-                }
-            }
-        }
-    };
-}
-
-impl<'a> NBTRefMut<'a> {
-    super::enumerate_basic_types!(as_basic_mut);
-
-    pub fn as_compound(self) -> Option<CompoundRefMut<'a>> {
-        match self {
-            NBTRefMut::Compound(compound) => Some(compound),
-            _ => None,
-        }
-    }
-
-    pub fn as_list(self) -> Option<ListRefMut<'a>> {
-        match self {
-            NBTRefMut::List(list) => Some(list),
-            _ => None,
-        }
-    }
-
-    pub fn tag_type(&self) -> TagType {
-        match self {
-            Self::Byte(_) => super::TAG_BYTE_ID,
-            Self::Short(_) => super::TAG_SHORT_ID,
-            Self::Int(_) => super::TAG_INT_ID,
-            Self::Long(_) => super::TAG_LONG_ID,
-            Self::Float(_) => super::TAG_FLOAT_ID,
-            Self::Double(_) => super::TAG_DOUBLE_ID,
-            Self::ByteArray(_) => super::TAG_BYTE_ARRAY_ID,
-            Self::String(_) => super::TAG_STRING_ID,
-            Self::List(_) => super::TAG_LIST_ID,
-            Self::Compound(_) => super::TAG_COMPOUND_ID,
-            Self::IntArray(_) => super::TAG_INT_ARRAY_ID,
-            Self::LongArray(_) => super::TAG_LONG_ARRAY_ID,
-        }
-    }
 }
 
 #[derive(Copy, Clone)]
@@ -186,47 +99,6 @@ impl PartialEq for CompoundRef<'_> {
 }
 
 impl<'a> CompoundRef<'a> {
-    pub fn clone_nbt(&self) -> NBT {
-        let mut nbt = NBT::new();
-        let mut compound = nbt.as_compound_mut().unwrap();
-        for (key, entry) in self.entries() {
-            match entry {
-                NBTRef::Byte(v) => compound.insert_byte(key, *v),
-                NBTRef::Short(v) => compound.insert_short(key, *v),
-                NBTRef::Int(v) => compound.insert_int(key, *v),
-                NBTRef::Long(v) => compound.insert_long(key, *v),
-                NBTRef::Float(v) => compound.insert_float(key, *v),
-                NBTRef::Double(v) => compound.insert_double(key, *v),
-                NBTRef::ByteArray(v) => compound.insert_byte_array(key, v.clone()),
-                NBTRef::String(v) => compound.insert_string(key, v.clone()),
-                NBTRef::List(v) => v.clone_into(compound.create_list(key, v.children_type)),
-                NBTRef::Compound(v) => v.clone_into(compound.create_compound(key)),
-                NBTRef::IntArray(v) => compound.insert_int_array(key, v.clone()),
-                NBTRef::LongArray(v) => compound.insert_long_array(key, v.clone()),
-            }
-        }
-        nbt
-    }
-
-    fn clone_into(&self, mut into: CompoundRefMut<'_>) {
-        for (key, entry) in self.entries() {
-            match entry {
-                NBTRef::Byte(v) => into.insert_byte(key, *v),
-                NBTRef::Short(v) => into.insert_short(key, *v),
-                NBTRef::Int(v) => into.insert_int(key, *v),
-                NBTRef::Long(v) => into.insert_long(key, *v),
-                NBTRef::Float(v) => into.insert_float(key, *v),
-                NBTRef::Double(v) => into.insert_double(key, *v),
-                NBTRef::ByteArray(v) => into.insert_byte_array(key, v.clone()),
-                NBTRef::String(v) => into.insert_string(key, v.clone()),
-                NBTRef::List(v) => v.clone_into(into.create_list(key, v.children_type)),
-                NBTRef::Compound(v) => v.clone_into(into.create_compound(key)),
-                NBTRef::IntArray(v) => into.insert_int_array(key, v.clone()),
-                NBTRef::LongArray(v) => into.insert_long_array(key, v.clone()),
-            }
-        }
-    }
-
     pub(crate) fn get_self_node(&self) -> &NBTCompound {
         match self.nbt.nodes.get(self.node_idx) {
             Some(NBTNode::Compound(compound)) => compound,
@@ -243,16 +115,6 @@ impl<'a> CompoundRef<'a> {
         &self.nbt.nodes[idx]
     }
 
-    pub fn is_empty(&self) -> bool {
-        let compound = self.get_self_node();
-        compound.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        let compound = self.get_self_node();
-        compound.0.len()
-    }
-
     pub fn entries(&self) -> CompoundIterator<'_> {
         CompoundIterator {
             nbt: self.nbt,
@@ -261,21 +123,9 @@ impl<'a> CompoundRef<'a> {
         }
     }
 
-    // todo: should probably return an iterator instead
-    pub fn keys(&self) -> Vec<&str> {
-        let mut refs: Vec<&str> = vec![];
-
-        let compound = self.get_self_node();
-        for (ele, _) in compound.0.iter() {
-            refs.push(ele);
-        }
-
-        refs
-    }
-
     super::enumerate_basic_types!(super::find);
 
-    pub fn find_numeric<T: num::FromPrimitive>(&self, key: &str) -> Option<T> {
+    pub fn find_numeric<T: num_traits::FromPrimitive>(&self, key: &str) -> Option<T> {
         let idx = self.find_idx(key)?;
         match self.get_node(idx) {
             NBTNode::Byte(v) => T::from_i8(*v),
@@ -305,22 +155,6 @@ impl<'a> CompoundRef<'a> {
             } if *list_type_id == type_id => Some(ListRef {
                 nbt: self.nbt,
                 node_idx: idx,
-                children_type: type_id,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn find_list_of_any(&self, key: &str) -> Option<ListRef<'_>> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::List {
-                type_id: list_type_id,
-                children: _,
-            } => Some(ListRef {
-                nbt: self.nbt,
-                node_idx: idx,
-                children_type: *list_type_id,
             }),
             _ => None,
         }
@@ -336,15 +170,6 @@ impl<'a> CompoundRef<'a> {
             _ => None,
         }
     }
-
-    pub fn find(&self, key: &str) -> Option<NBTRef<'_>> {
-        let idx = self.find_idx(key)?;
-        Some(self.nbt.get_reference(idx))
-    }
-
-    pub fn contains_key(&self, key: &str) -> bool {
-        self.find_idx(key).is_some()
-    }
 }
 
 pub struct CompoundRefMut<'a> {
@@ -359,13 +184,6 @@ impl<'a> Debug for CompoundRefMut<'a> {
 }
 
 impl<'a> CompoundRefMut<'a> {
-    pub fn as_immutable_ref(&self) -> CompoundRef<'_> {
-        CompoundRef {
-            nbt: self.nbt,
-            node_idx: self.node_idx,
-        }
-    }
-
     pub(crate) fn get_self_node(&self) -> &NBTCompound {
         match self.nbt.nodes.get(self.node_idx) {
             Some(NBTNode::Compound(compound)) => compound,
@@ -398,15 +216,6 @@ impl<'a> CompoundRefMut<'a> {
         &self.nbt.nodes[idx]
     }
 
-    fn get_node_mut(&mut self, idx: usize) -> &mut NBTNode {
-        &mut self.nbt.nodes[idx]
-    }
-
-    pub fn is_empty(&self) -> bool {
-        let compound = self.get_self_node();
-        compound.0.is_empty()
-    }
-
     pub fn entries(&self) -> CompoundIterator<'_> {
         CompoundIterator {
             nbt: self.nbt,
@@ -416,29 +225,6 @@ impl<'a> CompoundRefMut<'a> {
     }
 
     super::enumerate_basic_types!(super::insert);
-    super::enumerate_basic_types!(super::find);
-    super::enumerate_basic_types!(super::find_mut);
-
-    pub fn find_numeric<T: num::FromPrimitive>(&self, key: &str) -> Option<T> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::Byte(v) => T::from_i8(*v),
-            NBTNode::Short(v) => T::from_i16(*v),
-            NBTNode::Int(v) => T::from_i32(*v),
-            NBTNode::Long(v) => T::from_i64(*v),
-            NBTNode::Float(v) => T::from_f32(*v),
-            NBTNode::Double(v) => T::from_f64(*v),
-            NBTNode::ByteArray(_) => None,
-            NBTNode::String(_) => None,
-            NBTNode::List {
-                type_id: _,
-                children: _,
-            } => None,
-            NBTNode::Compound(_) => None,
-            NBTNode::IntArray(_) => None,
-            NBTNode::LongArray(_) => None,
-        }
-    }
 
     pub fn create_list(&mut self, key: &str, type_id: TagType) -> ListRefMut<'_> {
         let idx = self.insert_node(
@@ -464,47 +250,6 @@ impl<'a> CompoundRefMut<'a> {
         }
     }
 
-    pub fn find_list(&self, key: &str, type_id: TagType) -> Option<ListRef<'_>> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::List {
-                type_id: list_type_id,
-                children: _,
-            } if *list_type_id == type_id => Some(ListRef {
-                nbt: self.nbt,
-                node_idx: idx,
-                children_type: type_id,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn find_list_of_any(&self, key: &str) -> Option<ListRef<'_>> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::List {
-                type_id: list_type_id,
-                children: _,
-            } => Some(ListRef {
-                nbt: self.nbt,
-                node_idx: idx,
-                children_type: *list_type_id,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn find_compound(&self, key: &str) -> Option<CompoundRef<'_>> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::Compound(_) => Some(CompoundRef {
-                nbt: self.nbt,
-                node_idx: idx,
-            }),
-            _ => None,
-        }
-    }
-
     pub fn find_list_mut(&mut self, key: &str, type_id: TagType) -> Option<ListRefMut<'_>> {
         let idx = self.find_idx(key)?;
         match self.get_node(idx) {
@@ -518,47 +263,12 @@ impl<'a> CompoundRefMut<'a> {
             _ => None,
         }
     }
-
-    pub fn find_compound_mut(&mut self, key: &str) -> Option<CompoundRefMut<'_>> {
-        let idx = self.find_idx(key)?;
-        match self.get_node(idx) {
-            NBTNode::Compound(_) => Some(CompoundRefMut {
-                nbt: self.nbt,
-                node_idx: idx,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn find(&self, key: &str) -> Option<NBTRef<'_>> {
-        let idx = self.find_idx(key)?;
-        Some(self.nbt.get_reference(idx))
-    }
-
-    pub fn find_mut(&mut self, key: &str) -> Option<NBTRefMut<'_>> {
-        let idx = self.find_idx(key)?;
-        Some(self.nbt.get_reference_mut(idx))
-    }
-
-    pub fn contains_key(&self, key: &str) -> bool {
-        self.find_idx(key).is_some()
-    }
-
-    pub fn remove(&mut self, key: &str) -> bool {
-        if let Some(idx) = self.get_self_node_mut().remove(key) {
-            self.nbt.remove_node(idx);
-            true
-        } else {
-            false
-        }
-    }
 }
 
 #[derive(Copy, Clone)]
 pub struct ListRef<'a> {
     pub(crate) nbt: &'a NBT,
     pub(crate) node_idx: usize,
-    pub(crate) children_type: TagType,
 }
 
 impl<'a> Debug for ListRef<'a> {
@@ -588,25 +298,6 @@ impl PartialEq for ListRef<'_> {
 }
 
 impl<'a> ListRef<'a> {
-    fn clone_into(&self, mut into: ListRefMut<'_>) {
-        for child in self.iter() {
-            match child {
-                NBTRef::Byte(v) => into.insert_byte(*v),
-                NBTRef::Short(v) => into.insert_short(*v),
-                NBTRef::Int(v) => into.insert_int(*v),
-                NBTRef::Long(v) => into.insert_long(*v),
-                NBTRef::Float(v) => into.insert_float(*v),
-                NBTRef::Double(v) => into.insert_double(*v),
-                NBTRef::ByteArray(v) => into.insert_byte_array(v.clone()),
-                NBTRef::String(v) => into.insert_string(v.clone()),
-                NBTRef::List(v) => v.clone_into(into.create_list(v.children_type)),
-                NBTRef::Compound(v) => v.clone_into(into.create_compound()),
-                NBTRef::IntArray(v) => into.insert_int_array(v.clone()),
-                NBTRef::LongArray(v) => into.insert_long_array(v.clone()),
-            }
-        }
-    }
-
     pub(crate) fn get_self_node(&self) -> (TagType, &Vec<usize>) {
         match self.nbt.nodes.get(self.node_idx) {
             Some(NBTNode::List { type_id, children }) => (*type_id, children),
@@ -622,30 +313,6 @@ impl<'a> ListRef<'a> {
         let (_, children) = self.get_self_node();
         let idx = children.get(index)?;
         Some(self.nbt.get_reference(*idx))
-    }
-
-    super::enumerate_basic_types!(super::get_list);
-
-    pub fn get_numeric<T: num::FromPrimitive>(&self, index: usize) -> Option<T> {
-        let (_, children) = self.get_self_node();
-        let idx = children.get(index)?;
-        match &self.nbt.nodes[*idx] {
-            NBTNode::Byte(v) => T::from_i8(*v),
-            NBTNode::Short(v) => T::from_i16(*v),
-            NBTNode::Int(v) => T::from_i32(*v),
-            NBTNode::Long(v) => T::from_i64(*v),
-            NBTNode::Float(v) => T::from_f32(*v),
-            NBTNode::Double(v) => T::from_f64(*v),
-            NBTNode::ByteArray(_) => None,
-            NBTNode::String(_) => None,
-            NBTNode::List {
-                type_id: _,
-                children: _,
-            } => None,
-            NBTNode::Compound(_) => None,
-            NBTNode::IntArray(_) => None,
-            NBTNode::LongArray(_) => None,
-        }
     }
 
     pub fn iter(&self) -> ListIterator<'_> {
@@ -696,21 +363,6 @@ impl<'a> ListRefMut<'a> {
         idx
     }
 
-    fn set_node_at(&mut self, index: usize, node: NBTNode) -> usize {
-        let (type_id, children) = self.get_self_node_mut();
-        if type_id != node.get_type() {
-            panic!("Tried to insert {:?} into a list of {:?}", node.get_type(), type_id);
-        }
-
-        if index == children.len() {
-            return self.insert_node(node);
-        }
-
-        let idx = *children.get(index).unwrap();
-        let _ = std::mem::replace(&mut self.nbt.nodes[idx], node);
-        idx
-    }
-
     pub fn len(&self) -> usize {
         self.get_self_node().1.len()
     }
@@ -745,33 +397,6 @@ impl<'a> ListRefMut<'a> {
         let idx = children.get(index)?;
         Some(self.nbt.get_reference(*idx))
     }
-
-    super::enumerate_basic_types!(super::get_list);
-
-    pub fn get_numeric<T: num::FromPrimitive>(&self, index: usize) -> Option<T> {
-        let (_, children) = self.get_self_node();
-        let idx = children.get(index)?;
-        match &self.nbt.nodes[*idx] {
-            NBTNode::Byte(v) => T::from_i8(*v),
-            NBTNode::Short(v) => T::from_i16(*v),
-            NBTNode::Int(v) => T::from_i32(*v),
-            NBTNode::Long(v) => T::from_i64(*v),
-            NBTNode::Float(v) => T::from_f32(*v),
-            NBTNode::Double(v) => T::from_f64(*v),
-            NBTNode::ByteArray(_) => None,
-            NBTNode::String(_) => None,
-            NBTNode::List {
-                type_id: _,
-                children: _,
-            } => None,
-            NBTNode::Compound(_) => None,
-            NBTNode::IntArray(_) => None,
-            NBTNode::LongArray(_) => None,
-        }
-    }
-
-    super::enumerate_basic_types!(super::insert_list);
-    super::enumerate_basic_types!(super::set_list_at);
 
     pub fn create_compound(&mut self) -> CompoundRefMut<'_> {
         let idx = self.insert_node(NBTNode::Compound(Default::default()));

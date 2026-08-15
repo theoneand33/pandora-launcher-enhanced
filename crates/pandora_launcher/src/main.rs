@@ -1,7 +1,7 @@
 #![deny(unused_must_use)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -11,27 +11,47 @@ use std::time::SystemTime;
 use bridge::handle::{BackendHandle, FrontendHandle};
 use bridge::message::{MessageToBackend, MessageToFrontend};
 use bridge::quit::QuitCoordinator;
-use clap::Parser;
 use fern::colors::ColoredLevelConfig;
 use native_dialog::DialogBuilder;
 use parking_lot::RwLock;
 
-#[derive(Parser, Debug)]
-#[command()]
 struct Cli {
     /// Instance to launch, instead of opening the launcher
-    #[arg(long)]
     run_instance: Option<String>,
     /// Internal function to set traversable ACLs in an elevated context
     #[cfg(windows)]
-    #[arg(long, hide = false, num_args = 2..)]
-    internal_set_traverse_acls: Option<Vec<std::ffi::OsString>>,
+    internal_set_traverse_acls: Option<Vec<OsString>>,
+}
+
+fn parse_args(args: Vec<OsString>) -> Cli {
+    let mut cli = Cli {
+        run_instance: None,
+        #[cfg(windows)]
+        internal_set_traverse_acls: None,
+    };
+    let mut args = args.into_iter();
+    let _program = args.next();
+    while let Some(arg) = args.next() {
+        if arg == *OsStr::new("--run-instance") {
+            if let Some(value) = args.next() {
+                cli.run_instance = Some(value.to_string_lossy().into_owned());
+            }
+        }
+        #[cfg(windows)]
+        if arg == *OsStr::new("--internal-set-traverse-acls") {
+            let rest: Vec<OsString> = args.collect();
+            if !rest.is_empty() {
+                cli.internal_set_traverse_acls = Some(rest);
+            }
+        }
+    }
+    cli
 }
 
 pub mod panic;
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = parse_args(std::env::args_os().collect());
 
     #[cfg(windows)]
     if let Some(internal_set_traverse_acls) = cli.internal_set_traverse_acls {
@@ -157,13 +177,7 @@ fn main() {
                                 args.push(unsafe { OsString::from_encoded_bytes_unchecked(buf) });
                             }
 
-                            match Cli::try_parse_from(&args) {
-                                Ok(cli) => run_cli(cli, &frontend_handle, &backend_handle),
-                                Err(err) => {
-                                    log::error!("Error while parsing received arguments: {err}");
-                                    continue 'listen;
-                                },
-                            }
+                            run_cli(parse_args(std::mem::take(&mut args)), &frontend_handle, &backend_handle);
                         },
                         _ = listen_cancel.cancelled() => {
                             break;
@@ -217,9 +231,9 @@ fn main() {
 
         runtime.block_on(async {
             #[cfg(unix)]
-            let connect = PlatformClientStream::connect(&socket).await;
+            let connect = connect_socket(&socket).await;
             #[cfg(windows)]
-            let connect = PlatformClientStream::connect(std::ffi::OsStr::new("pandora-launcher-socket")).await;
+            let connect = connect_socket(std::ffi::OsStr::new("pandora-launcher-socket")).await;
 
             let mut conn = match connect {
                 Ok(conn) => conn,
@@ -260,20 +274,6 @@ struct PlatformListener {
     pipe: tokio::net::windows::named_pipe::NamedPipeServer,
 }
 
-struct PlatformServerStream {
-    #[cfg(unix)]
-    stream: tokio::net::UnixStream,
-    #[cfg(windows)]
-    server: tokio::net::windows::named_pipe::NamedPipeServer,
-}
-
-struct PlatformClientStream {
-    #[cfg(unix)]
-    stream: tokio::net::UnixStream,
-    #[cfg(windows)]
-    client: tokio::net::windows::named_pipe::NamedPipeClient,
-}
-
 #[cfg(unix)]
 impl PlatformListener {
     fn bind(local_path: &Path) -> std::io::Result<Self> {
@@ -282,9 +282,9 @@ impl PlatformListener {
         })
     }
 
-    async fn accept(&mut self) -> std::io::Result<PlatformServerStream> {
+    async fn accept(&mut self) -> std::io::Result<tokio::net::UnixStream> {
         let (stream, _) = self.listener.accept().await?;
-        Ok(PlatformServerStream { stream })
+        Ok(stream)
     }
 }
 
@@ -303,7 +303,7 @@ impl PlatformListener {
         Ok(Self { pipe_name, pipe })
     }
 
-    async fn accept(&mut self) -> std::io::Result<PlatformServerStream> {
+    async fn accept(&mut self) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
         self.pipe.connect().await?;
         let old_pipe = std::mem::replace(
             &mut self.pipe,
@@ -311,89 +311,31 @@ impl PlatformListener {
                 .access_outbound(false)
                 .create(&self.pipe_name)?,
         );
-        Ok(PlatformServerStream { server: old_pipe })
-    }
-}
-
-impl PlatformServerStream {
-    #[cfg(unix)]
-    fn project(self: std::pin::Pin<&mut Self>) -> std::pin::Pin<&mut tokio::net::UnixStream> {
-        unsafe { self.map_unchecked_mut(|s| &mut s.stream) }
-    }
-
-    #[cfg(windows)]
-    fn project(self: std::pin::Pin<&mut Self>) -> std::pin::Pin<&mut tokio::net::windows::named_pipe::NamedPipeServer> {
-        unsafe { self.map_unchecked_mut(|s| &mut s.server) }
-    }
-}
-
-impl tokio::io::AsyncRead for PlatformServerStream {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        tokio::io::AsyncRead::poll_read(self.project(), cx, buf)
+        Ok(old_pipe)
     }
 }
 
 #[cfg(unix)]
-impl PlatformClientStream {
-    async fn connect(local_path: &Path) -> std::io::Result<Self> {
-        Ok(Self {
-            stream: tokio::net::UnixStream::connect(local_path).await?,
-        })
-    }
-
-    fn project(self: std::pin::Pin<&mut Self>) -> std::pin::Pin<&mut tokio::net::UnixStream> {
-        unsafe { self.map_unchecked_mut(|s| &mut s.stream) }
-    }
+async fn connect_socket(local_path: &Path) -> std::io::Result<tokio::net::UnixStream> {
+    tokio::net::UnixStream::connect(local_path).await
 }
 
 #[cfg(windows)]
-impl PlatformClientStream {
-    async fn connect(global_name: &std::ffi::OsStr) -> std::io::Result<Self> {
-        let mut pipe_name = std::ffi::OsString::new();
-        pipe_name.push(r"\\.\pipe\");
-        pipe_name.push(global_name);
+async fn connect_socket(
+    global_name: &std::ffi::OsStr,
+) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
+    let mut pipe_name = std::ffi::OsString::new();
+    pipe_name.push(r"\\.\pipe\");
+    pipe_name.push(global_name);
 
-        loop {
-            match tokio::net::windows::named_pipe::ClientOptions::new().read(false).open(&pipe_name) {
-                Ok(client) => return Ok(Self { client }),
-                Err(e) if e.raw_os_error() == Some(231) => (), // ERROR_PIPE_BUSY
-                Err(e) => return Err(e),
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    loop {
+        match tokio::net::windows::named_pipe::ClientOptions::new().read(false).open(&pipe_name) {
+            Ok(client) => return Ok(client),
+            Err(e) if e.raw_os_error() == Some(231) => (), // ERROR_PIPE_BUSY
+            Err(e) => return Err(e),
         }
-    }
 
-    fn project(self: std::pin::Pin<&mut Self>) -> std::pin::Pin<&mut tokio::net::windows::named_pipe::NamedPipeClient> {
-        unsafe { self.map_unchecked_mut(|s| &mut s.client) }
-    }
-}
-
-impl tokio::io::AsyncWrite for PlatformClientStream {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        tokio::io::AsyncWrite::poll_write(self.project(), cx, buf)
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        tokio::io::AsyncWrite::poll_flush(self.project(), cx)
-    }
-
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        tokio::io::AsyncWrite::poll_shutdown(self.project(), cx)
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 }
 

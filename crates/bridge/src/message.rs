@@ -29,9 +29,9 @@ use crate::{
         ContentFolder, InstanceContentID, InstanceContentSummary, InstanceID, InstancePlaytime, InstanceServerSummary,
         InstanceStatus, InstanceWorldSummary,
     },
-    keep_alive::KeepAliveHandle,
     meta::{MetadataRequest, MetadataResult},
     modal_action::ModalAction,
+    notify_signal::KeepAliveNotifySignalHandle,
 };
 
 #[derive(Debug, Default)]
@@ -438,7 +438,7 @@ pub enum MessageToFrontend {
     MetadataResult {
         request: MetadataRequest,
         result: Result<MetadataResult, Arc<str>>,
-        keep_alive_handle: Option<KeepAliveHandle>,
+        keep_alive_handle: Option<KeepAliveNotifySignalHandle>,
     },
     SkinLibraryUpdated {
         skin_library: SkinLibrary,

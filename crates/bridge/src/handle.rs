@@ -215,8 +215,4 @@ impl FrontendHandle {
     pub fn is_closed(&self) -> bool {
         self.sender.is_closed()
     }
-
-    pub fn last_serial(&self) -> Serial {
-        self.processed_serial.get()
-    }
 }

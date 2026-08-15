@@ -20,7 +20,6 @@ use bridge::{
 use command::PandoraArg;
 use command::{PandoraChild, PandoraCommand, PandoraSandbox};
 use futures::{FutureExt, TryFutureExt};
-use rand::seq::SliceRandom;
 use rc_zip_sync::{ArchiveHandle, ReadZip, rc_zip::EntryKind};
 use regex::Regex;
 use rustc_hash::FxHashMap;
@@ -45,6 +44,7 @@ use schema::{
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use ustr::Ustr;
+use uuid::Uuid;
 
 use crate::{
     account::MinecraftLoginInfo,
@@ -1056,7 +1056,11 @@ impl Launcher {
 
         let mirrors: Vec<Mirror> = serde_json::from_slice(&bytes).ok()?;
 
-        let mirror = mirrors.choose(&mut rand::thread_rng())?;
+        if mirrors.is_empty() {
+            return None;
+        }
+        let index = Uuid::new_v4().as_u128() as usize % mirrors.len();
+        let mirror = &mirrors[index];
 
         Some(mirror.url.clone())
     }

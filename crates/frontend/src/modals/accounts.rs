@@ -13,7 +13,6 @@ use gpui_component::{
     sheet::Sheet,
     v_flex,
 };
-use rand::Rng;
 use uuid::Uuid;
 
 use crate::{
@@ -337,8 +336,8 @@ impl Render for Accounts {
                                         let uuid = if let Ok(uuid) = Uuid::try_parse(&uuid) {
                                             uuid
                                         } else {
-                                            let uuid: u128 = rand::thread_rng().r#gen();
-                                            let uuid = (uuid & !0xF0000000000000000000) | 0x30000000000000000000; // set version to 3
+                                            let uuid = (Uuid::new_v4().as_u128() & !0xF0000000000000000000)
+                                                | 0x30000000000000000000; // set version to 3
                                             Uuid::from_u128(uuid)
                                         };
 

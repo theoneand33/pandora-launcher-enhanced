@@ -17,12 +17,14 @@ struct CommandPathCacheEntry {
 static COMMAND_PATH_CACHE: LazyLock<RwLock<FxHashMap<OsString, CommandPathCacheEntry>>> =
     LazyLock::new(Default::default);
 
-fn illegal_char(b: u8) -> bool {
+#[cfg(windows)]
+pub(crate) fn illegal_filename_char(b: u8) -> bool {
     b < 0x1f || matches!(b, b'/' | b'?' | b'<' | b'>' | b'\\' | b':' | b'*' | b'|' | b'"')
 }
 
 pub fn get_command_path_cached(command: &OsStr) -> Option<Arc<Path>> {
-    if command.as_encoded_bytes().iter().any(|b| illegal_char(*b)) {
+    #[cfg(windows)]
+    if command.as_encoded_bytes().iter().any(|b| illegal_filename_char(*b)) {
         return None;
     }
 

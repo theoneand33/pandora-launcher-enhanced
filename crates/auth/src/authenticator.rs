@@ -40,14 +40,6 @@ pub struct Authenticator {
     client: reqwest::Client,
 }
 
-// #[derive(thiserror::Error, Debug)]
-// pub enum AuthenticatorError {
-//     #[error("Failed to make http request")]
-//     Reqwest(#[from] reqwest::Error),
-//     #[error("Failed to deserialize response")]
-//     SerdeJson(#[from] serde_json::Error),
-// }
-
 #[derive(thiserror::Error, Debug)]
 pub enum MsaAuthorizationError {
     #[error("Connection error: {0}")]

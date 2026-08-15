@@ -1,7 +1,9 @@
-use std::{
-    io::{Error, ErrorKind},
-    sync::mpsc,
-};
+use std::sync::mpsc;
+
+#[cfg(windows)]
+use crate::path_cache::illegal_filename_char;
+#[cfg(windows)]
+use std::io::{Error, ErrorKind};
 
 use std::sync::OnceLock;
 
@@ -9,7 +11,6 @@ use crate::{PandoraChild, PandoraCommand, PandoraSandbox};
 
 pub enum SpawnType {
     Normal,
-    Elevated,
     Sandboxed(PandoraSandbox),
 }
 
@@ -34,11 +35,6 @@ pub struct SpawnContext {
     pub dev_null_fd: Option<libc::c_int>,
     #[cfg(target_os = "linux")]
     pub dbus_proxy: Option<crate::unix::linux::bwrap::DbusProxy>,
-}
-
-#[cfg(windows)]
-fn illegal_filename_char(b: u8) -> bool {
-    b < 0x1f || matches!(b, b'/' | b'?' | b'<' | b'>' | b'\\' | b':' | b'*' | b'|' | b'"')
 }
 
 pub fn spawn(
@@ -87,7 +83,7 @@ pub fn spawn(
 }
 
 fn handle_spawn(
-    mut command: PandoraCommand,
+    command: PandoraCommand,
     spawn_type: SpawnType,
     context: &mut SpawnContext,
 ) -> std::io::Result<PandoraChild> {
@@ -97,22 +93,6 @@ fn handle_spawn(
             return crate::unix::unix_spawn::spawn(command, context);
             #[cfg(windows)]
             return crate::windows::windows_spawn::spawn(command, context);
-        },
-        SpawnType::Elevated => {
-            command.stdin = crate::PandoraStdioWriteMode::Null;
-            command.stdout = crate::PandoraStdioReadMode::Null;
-            command.stderr = crate::PandoraStdioReadMode::Null;
-
-            if command.inherit_env.is_some() || !command.env.is_empty() {
-                return Err(Error::new(ErrorKind::InvalidInput, "cannot set custom environment for elevated process"));
-            }
-
-            #[cfg(target_os = "linux")]
-            return crate::unix::linux::pkexec::spawn(command, context);
-            #[cfg(windows)]
-            return crate::windows::runas::spawn(command, context);
-            #[cfg(target_os = "macos")]
-            return crate::unix::macos::elevated::spawn(command);
         },
         SpawnType::Sandboxed(sandbox) => {
             #[cfg(target_os = "linux")]

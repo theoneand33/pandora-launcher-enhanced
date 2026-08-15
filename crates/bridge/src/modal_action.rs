@@ -101,10 +101,6 @@ impl ProgressTrackers {
     pub fn push(&self, tracker: ProgressTracker) {
         self.trackers.write().push(tracker);
     }
-
-    pub fn clear(&self) {
-        self.trackers.write().clear();
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -159,10 +155,6 @@ impl ProgressTracker {
             sender,
             notify_serial: AtomicOptionSerial::default(),
         }
-    }
-
-    pub fn id(&self) -> usize {
-        Arc::as_ptr(&self.inner).addr()
     }
 
     pub fn get_title(&self) -> Arc<str> {

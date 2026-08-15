@@ -91,14 +91,6 @@ impl PandoraCommand {
             .flatten()
     }
 
-    pub async fn spawn_elevated(self) -> std::io::Result<PandoraProcess> {
-        crate::spawner::spawn(self, SpawnType::Elevated)
-            .await
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "spawning thread has shutdown"))
-            .flatten()
-            .map(|child| child.process)
-    }
-
     pub async fn spawn_sandboxed(self, sandbox: PandoraSandbox) -> std::io::Result<PandoraChild> {
         crate::spawner::spawn(self, SpawnType::Sandboxed(sandbox))
             .await

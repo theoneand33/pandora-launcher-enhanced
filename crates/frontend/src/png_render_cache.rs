@@ -18,13 +18,6 @@ pub enum ImageTransformation {
     ResizeToWidth {
         width: u32,
     },
-    CropAndScale {
-        min_x: u32,
-        min_y: u32,
-        width: u32,
-        height: u32,
-        scale: u32,
-    },
 }
 
 struct CacheEntry {
@@ -118,16 +111,6 @@ impl PngRenderCache {
                         };
                         image = image.resize_exact(width, height, filter);
                     }
-                },
-                ImageTransformation::CropAndScale {
-                    min_x,
-                    min_y,
-                    width,
-                    height,
-                    scale,
-                } => {
-                    let cropped = image.crop_imm(min_x, min_y, width, height);
-                    image = cropped.resize_exact(width * scale, height * scale, FilterType::Nearest);
                 },
             }
 

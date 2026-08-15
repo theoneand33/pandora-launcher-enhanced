@@ -88,8 +88,8 @@ impl ProxyConfig {
         if self.auth_enabled && !self.username.is_empty() {
             let password = password.unwrap_or("");
             // URL-encode username and password to handle special characters
-            let username = urlencoding::encode(&self.username);
-            let password = urlencoding::encode(password);
+            let username = url::form_urlencoded::byte_serialize(self.username.as_bytes()).collect::<String>();
+            let password = url::form_urlencoded::byte_serialize(password.as_bytes()).collect::<String>();
             Some(format!("{}://{}:{}@{}:{}", scheme, username, password, self.host, self.port))
         } else {
             Some(format!("{}://{}:{}", scheme, self.host, self.port))

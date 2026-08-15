@@ -62,59 +62,12 @@ macro_rules! insert {
     };
 }
 
-macro_rules! get_list {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<get_ $name>](&self, index: usize) -> Option<&$value_type> {
-                match self.get(index) {
-                    Some(v) => v.[<as_ $name>](),
-                    None => None,
-                }
-            }
-        }
-    };
-}
-
-macro_rules! insert_list {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<insert_ $name>](&mut self, value: $value_type) {
-                self.insert_node(NBTNode::$node(value));
-            }
-        }
-    };
-}
-
-macro_rules! set_list_at {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<set_ $name _at>](&mut self, index: usize, value: $value_type) {
-                self.set_node_at(index, NBTNode::$node(value));
-            }
-        }
-    };
-}
-
 macro_rules! find {
     ($name:ident, $value_type:ty, $node:ident) => {
         paste::paste! {
             pub fn [<find_ $name>](&self, key: &str) -> Option<&$value_type> {
                 let idx = self.find_idx(key)?;
                 match self.get_node(idx) {
-                    NBTNode::$node(value) => Some(value),
-                    _ => None
-                }
-            }
-        }
-    };
-}
-
-macro_rules! find_mut {
-    ($name:ident, $value_type:ty, $node:ident) => {
-        paste::paste! {
-            pub fn [<find_ $name _mut>](&mut self, key: &str) -> Option<&mut $value_type> {
-                let idx = self.find_idx(key)?;
-                match self.get_node_mut(idx) {
                     NBTNode::$node(value) => Some(value),
                     _ => None
                 }
@@ -140,11 +93,7 @@ macro_rules! enumerate_basic_types {
 
 pub(crate) use enumerate_basic_types;
 pub(crate) use find;
-pub(crate) use find_mut;
-pub(crate) use get_list;
 pub(crate) use insert;
-pub(crate) use insert_list;
-pub(crate) use set_list_at;
 
 impl NBT {
     pub fn new() -> NBT {
@@ -218,11 +167,10 @@ impl NBT {
             NBTNode::Double(value) => NBTRef::Double(value),
             NBTNode::ByteArray(value) => NBTRef::ByteArray(value),
             NBTNode::String(value) => NBTRef::String(value),
-            NBTNode::List { type_id, children: _ } => NBTRef::List(ListRef {
-                nbt: self,
-                node_idx,
-                children_type: *type_id,
-            }),
+            NBTNode::List {
+                type_id: _,
+                children: _,
+            } => NBTRef::List(ListRef { nbt: self, node_idx }),
             NBTNode::Compound(_) => NBTRef::Compound(CompoundRef { nbt: self, node_idx }),
             NBTNode::IntArray(value) => NBTRef::IntArray(value),
             NBTNode::LongArray(value) => NBTRef::LongArray(value),
@@ -318,13 +266,6 @@ impl NBTCompound {
 
         match self.binary_search(key) {
             Ok(index) => Some(self.0[index].1),
-            Err(_) => None,
-        }
-    }
-
-    fn remove(&mut self, key: &str) -> Option<usize> {
-        match self.binary_search(key) {
-            Ok(index) => Some(self.0.remove(index).1),
             Err(_) => None,
         }
     }
