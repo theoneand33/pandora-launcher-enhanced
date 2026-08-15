@@ -1632,7 +1632,11 @@ async fn do_java_runtime_load(
             JavaRuntimeComponentFile::Directory => {
                 let _ = std::fs::create_dir(path);
             },
-            JavaRuntimeComponentFile::File { executable, downloads } => {
+            JavaRuntimeComponentFile::File {
+                #[cfg(unix)]
+                executable,
+                downloads,
+            } => {
                 let mut expected_hash = [0u8; 20];
                 let Ok(_) = hex::decode_to_slice(downloads.raw.sha1.as_str(), &mut expected_hash) else {
                     return Err(LoadJavaRuntimeError::InvalidHash(downloads.raw.sha1));

@@ -448,14 +448,15 @@ pub fn are_files_hard_linked(a: &Path, b: &Path) -> std::io::Result<bool> {
     }
     #[cfg(windows)]
     {
+        use windows::Win32::Foundation::HANDLE;
         use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
         let file_a = std::fs::File::open(a)?;
         let file_b = std::fs::File::open(b)?;
         let mut info_a = Default::default();
         let mut info_b = Default::default();
         unsafe {
-            GetFileInformationByHandle(file_a.as_raw_handle(), &mut info_a)?;
-            GetFileInformationByHandle(file_b.as_raw_handle(), &mut info_b)?;
+            GetFileInformationByHandle(HANDLE(file_a.as_raw_handle()), &mut info_a)?;
+            GetFileInformationByHandle(HANDLE(file_b.as_raw_handle()), &mut info_b)?;
         }
         Ok(info_a.dwVolumeSerialNumber == info_b.dwVolumeSerialNumber
             && info_a.nFileIndexHigh == info_b.nFileIndexHigh
@@ -474,10 +475,11 @@ pub(crate) fn has_multiple_hard_links(path: &Path) -> Option<bool> {
     }
     #[cfg(windows)]
     {
+        use windows::Win32::Foundation::HANDLE;
         use windows::Win32::Storage::FileSystem::GetFileInformationByHandle;
         let file = std::fs::File::open(path).ok()?;
         let mut info = Default::default();
-        unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) }.ok()?;
+        unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }.ok()?;
         Some(info.nNumberOfLinks > 1)
     }
     #[cfg(not(any(windows, unix)))]
