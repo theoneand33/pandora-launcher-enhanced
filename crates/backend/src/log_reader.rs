@@ -54,7 +54,10 @@ pub fn start_game_output(stdout: PipeReader, stderr: Option<PipeReader>, fronten
 
             loop {
                 match reader.read_line(&mut raw_text) {
-                    Err(e) => panic!("Error while reading stderr: {:?}", e),
+                    Err(e) => {
+                        log::error!("Error while reading stderr: {:?}", e);
+                        return;
+                    },
                     Ok(0) => {
                         return; // EOF
                     },

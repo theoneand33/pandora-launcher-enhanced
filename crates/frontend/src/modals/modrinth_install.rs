@@ -424,7 +424,7 @@ impl InstallDialog {
                         }
                     }
 
-                    required.retain(|dep| !existing_projects.contains(dep.project_id.as_ref().unwrap()));
+                    required.retain(|dep| !dep.project_id.as_ref().is_some_and(|id| existing_projects.contains(id)));
                 }
 
                 required
@@ -501,17 +501,18 @@ impl InstallDialog {
 
                     if this.install_dependencies {
                         for dep in required_dependencies.iter() {
+                            let Some(project_id) = dep.project_id.clone() else {
+                                continue;
+                            };
                             files.push(ContentInstallFile {
                                 replace_old: None,
                                 path: bridge::install::ContentInstallPath::Automatic,
                                 download: ContentDownload::Modrinth {
-                                    project_id: dep.project_id.clone().unwrap(),
+                                    project_id: project_id.clone(),
                                     version_id: dep.version_id.clone(),
                                     install_dependencies: true,
                                 },
-                                content_source: ContentSource::ModrinthProject {
-                                    project_id: dep.project_id.clone().unwrap(),
-                                },
+                                content_source: ContentSource::ModrinthProject { project_id },
                                 reason: ContentInstallReason::Dependency,
                             })
                         }
