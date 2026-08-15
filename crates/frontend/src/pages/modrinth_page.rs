@@ -236,39 +236,45 @@ impl ModrinthSearchPage {
                     let mut specific_installed_content: FxHashMap<Arc<str>, Vec<InstalledContent>> =
                         FxHashMap::default();
 
-                    for summary in instance_content[content_folder].read(cx).iter() {
-                        match &summary.content_source {
-                            ContentSource::ModrinthProject { project_id } => {
-                                let installed_content = InstalledContent {
-                                    content_id: summary.id,
-                                    status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                                };
+                    if let Some(content) = instance_content[content_folder].read(cx).clone() {
+                        for summary in content.iter() {
+                            match &summary.content_source {
+                                ContentSource::ModrinthProject { project_id } => {
+                                    let installed_content = InstalledContent {
+                                        content_id: summary.id,
+                                        status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
+                                    };
 
-                                let installed = all_installed_content_by_project.entry(project_id.clone()).or_default();
-                                installed.push(installed_content);
+                                    let installed =
+                                        all_installed_content_by_project.entry(project_id.clone()).or_default();
+                                    installed.push(installed_content);
 
-                                let installed = specific_installed_content.entry(project_id.clone()).or_default();
-                                installed.push(installed_content);
-                            },
-                            _ => {},
-                        }
+                                    let installed = specific_installed_content.entry(project_id.clone()).or_default();
+                                    installed.push(installed_content);
+                                },
+                                _ => {},
+                            }
 
-                        if let ContentType::ModrinthModpack { files, .. } = &summary.content_summary.extra {
-                            for file in files.iter() {
-                                let Some(project_id) = &file.project_id else {
-                                    continue;
-                                };
-                                let dangling = InstalledContent {
-                                    content_id: InstanceContentID::dangling(),
-                                    status: ContentUpdateStatus::Unknown,
-                                };
-                                all_installed_content_by_project.entry(project_id.clone()).or_default().push(dangling);
-                                specific_installed_content.entry(project_id.clone()).or_default().push(
-                                    InstalledContent {
+                            if let ContentType::ModrinthModpack { files, .. } = &summary.content_summary.extra {
+                                for file in files.iter() {
+                                    let Some(project_id) = &file.project_id else {
+                                        continue;
+                                    };
+                                    let dangling = InstalledContent {
                                         content_id: InstanceContentID::dangling(),
                                         status: ContentUpdateStatus::Unknown,
-                                    },
-                                );
+                                    };
+                                    all_installed_content_by_project
+                                        .entry(project_id.clone())
+                                        .or_default()
+                                        .push(dangling);
+                                    specific_installed_content.entry(project_id.clone()).or_default().push(
+                                        InstalledContent {
+                                            content_id: InstanceContentID::dangling(),
+                                            status: ContentUpdateStatus::Unknown,
+                                        },
+                                    );
+                                }
                             }
                         }
                     }
@@ -281,33 +287,36 @@ impl ModrinthSearchPage {
 
                         specific.clear();
 
-                        let content = entity.read(cx);
-                        for summary in content.iter() {
-                            match &summary.content_source {
-                                ContentSource::ModrinthProject { project_id } => {
-                                    let installed = specific.entry(project_id.clone()).or_default();
-                                    installed.push(InstalledContent {
-                                        content_id: summary.id,
-                                        status: summary.update.status_if_matches(loader, minecraft_version.as_str()),
-                                    })
-                                },
-                                ContentSource::Manual
-                                | ContentSource::ModrinthUnknown
-                                | ContentSource::CurseforgeProject { .. } => {},
-                            }
+                        if let Some(content) = entity.read(cx).clone() {
+                            for summary in content.iter() {
+                                match &summary.content_source {
+                                    ContentSource::ModrinthProject { project_id } => {
+                                        let installed = specific.entry(project_id.clone()).or_default();
+                                        installed.push(InstalledContent {
+                                            content_id: summary.id,
+                                            status: summary
+                                                .update
+                                                .status_if_matches(loader, minecraft_version.as_str()),
+                                        })
+                                    },
+                                    ContentSource::Manual
+                                    | ContentSource::ModrinthUnknown
+                                    | ContentSource::CurseforgeProject { .. } => {},
+                                }
 
-                            let ContentType::ModrinthModpack { files, .. } = &summary.content_summary.extra else {
-                                continue;
-                            };
-                            for file in files.iter() {
-                                let Some(project_id) = &file.project_id else {
+                                let ContentType::ModrinthModpack { files, .. } = &summary.content_summary.extra else {
                                     continue;
                                 };
-                                let installed = specific.entry(project_id.clone()).or_default();
-                                installed.push(InstalledContent {
-                                    content_id: InstanceContentID::dangling(),
-                                    status: ContentUpdateStatus::Unknown,
-                                });
+                                for file in files.iter() {
+                                    let Some(project_id) = &file.project_id else {
+                                        continue;
+                                    };
+                                    let installed = specific.entry(project_id.clone()).or_default();
+                                    installed.push(InstalledContent {
+                                        content_id: InstanceContentID::dangling(),
+                                        status: ContentUpdateStatus::Unknown,
+                                    });
+                                }
                             }
                         }
 

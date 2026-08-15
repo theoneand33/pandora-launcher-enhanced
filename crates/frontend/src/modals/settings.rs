@@ -6,7 +6,7 @@ use bridge::{
 };
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, Disableable, Sizable, ThemeRegistry,
+    ActiveTheme, Disableable, IndexPath, Sizable, ThemeRegistry,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
@@ -19,7 +19,12 @@ use gpui_component::{
 };
 use schema::backend_config::{BackendConfig, ProxyConfig, ProxyProtocol};
 
-use crate::{entity::DataEntities, icon::PandoraIcon, interface_config::InterfaceConfig};
+use crate::{
+    component::named_dropdown::{NamedDropdown, NamedDropdownItem},
+    entity::DataEntities,
+    icon::PandoraIcon,
+    interface_config::{InterfaceConfig, LiveGameOutputDisplay},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum SettingsTab {
@@ -30,12 +35,14 @@ enum SettingsTab {
 
 struct Settings {
     selected_tab: SettingsTab,
+    language_select: Entity<SelectState<NamedDropdown<t::Language>>>,
     theme_folder: Arc<Path>,
     theme_select: Entity<SelectState<SearchableVec<SharedString>>>,
     backend_handle: BackendHandle,
     pending_request: bool,
     backend_config: Option<BackendConfig>,
     get_configuration_task: Option<Task<()>>,
+    live_game_output_select: Entity<SelectState<NamedDropdown<LiveGameOutputDisplay>>>,
     // Proxy settings state
     proxy_enabled: bool,
     proxy_protocol_select: Entity<SelectState<Vec<&'static str>>>,
@@ -55,6 +62,18 @@ pub fn build_settings_sheet(
 ) -> impl Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static {
     let theme_folder = data.theme_folder.clone();
     let settings = cx.new(|cx| {
+        let interface_config = InterfaceConfig::get(cx);
+        let current_language = interface_config.language.clone();
+        let current_live_game_output_display = interface_config.live_game_output_display;
+
+        let language_select = cx.new(|cx| {
+            let lang_options = Settings::build_language_options();
+            let selected_index = lang_options.iter().position(|item| item.item == current_language).map(IndexPath::new);
+            SelectState::new(NamedDropdown::new(lang_options), selected_index, window, cx)
+        });
+
+        cx.subscribe_in(&language_select, window, Settings::on_language_changed).detach();
+
         let theme_select_delegate = SearchableVec::new(
             ThemeRegistry::global(cx)
                 .sorted_themes()
@@ -88,6 +107,34 @@ pub fn build_settings_sheet(
         })
         .detach();
 
+        let live_game_output_select = NamedDropdown::create_and_select(
+            vec![
+                NamedDropdownItem {
+                    name: t::settings::windows::live_game_output_display::tab_on_instance_page().into(),
+                    item: LiveGameOutputDisplay::TabOnInstancePage,
+                },
+                NamedDropdownItem {
+                    name: t::settings::windows::live_game_output_display::separate_window().into(),
+                    item: LiveGameOutputDisplay::SeparateWindow,
+                },
+                NamedDropdownItem {
+                    name: t::settings::windows::live_game_output_display::hidden().into(),
+                    item: LiveGameOutputDisplay::Hidden,
+                },
+            ],
+            current_live_game_output_display,
+            window,
+            cx,
+        );
+
+        cx.subscribe(&live_game_output_select, |_, _, event, cx| {
+            let SelectEvent::Confirm(Some(value)) = event else {
+                return;
+            };
+            InterfaceConfig::get_mut(cx).live_game_output_display = *value;
+        })
+        .detach();
+
         let proxy_protocol_select = cx.new(|cx| {
             let protocols = vec!["HTTP", "HTTPS", "SOCKS5"];
             let mut state = SelectState::new(protocols, None, window, cx);
@@ -108,12 +155,14 @@ pub fn build_settings_sheet(
 
         let mut settings = Settings {
             selected_tab: SettingsTab::Interface,
+            language_select,
             theme_folder,
             theme_select,
             backend_handle: data.backend_handle.clone(),
             pending_request: false,
             backend_config: None,
             get_configuration_task: None,
+            live_game_output_select,
             proxy_enabled: false,
             proxy_protocol_select,
             proxy_host_input,
@@ -292,6 +341,44 @@ impl Settings {
         self.proxy_password_changed = false;
     }
 
+    fn build_language_options() -> Vec<NamedDropdownItem<t::Language>> {
+        std::iter::once(NamedDropdownItem {
+            name: t::settings::language::system().into(),
+            item: t::Language::System,
+        })
+        .chain(t::languages().iter().map(|&(code, name)| NamedDropdownItem {
+            name: name.into(),
+            item: t::Language::Code(code.to_string()),
+        }))
+        .collect()
+    }
+
+    fn on_language_changed(
+        &mut self,
+        _state: &Entity<SelectState<NamedDropdown<t::Language>>>,
+        event: &SelectEvent<NamedDropdown<t::Language>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let SelectEvent::Confirm(Some(lang)) = event else {
+            return;
+        };
+        let lang = lang.clone();
+        t::set_lang(&lang);
+
+        let lang_options = Self::build_language_options();
+        let selected_index = lang_options.iter().position(|option| option.item == lang).map(IndexPath::new);
+
+        InterfaceConfig::get_mut(cx).language = lang;
+
+        self.language_select.update(cx, |select, cx| {
+            select.set_items(NamedDropdown::new(lang_options), window, cx);
+            select.set_selected_index(selected_index, window, cx);
+        });
+
+        cx.notify();
+    }
+
     fn render_interface_tab(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let interface_config = InterfaceConfig::get(cx);
 
@@ -351,6 +438,11 @@ impl Settings {
                                 InterfaceConfig::get_mut(cx).quick_delete_skins = *value;
                             }),
                     ),
+            ))
+            .child(crate::labelled(t::settings::language::title(), Select::new(&self.language_select)))
+            .child(crate::labelled(
+                t::settings::windows::live_game_output_display(),
+                Select::new(&self.live_game_output_select),
             ));
 
         if let Some(backend_config) = &self.backend_config {

@@ -22,6 +22,7 @@ mod backend_handler;
 
 mod account;
 mod directories;
+mod duplicate;
 mod export;
 mod id_slab;
 mod install_content;
@@ -425,6 +426,49 @@ pub fn hard_link_or_copy(from: &Path, to: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+pub fn are_files_hard_linked(a: &Path, b: &Path) -> std::io::Result<bool> {
+    let metadata_a = std::fs::symlink_metadata(a)?;
+    let metadata_b = std::fs::symlink_metadata(b)?;
+
+    if !metadata_a.is_file() || !metadata_b.is_file() {
+        return Ok(false);
+    }
+    if metadata_a.len() != metadata_b.len() {
+        return Ok(false);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(metadata_a.dev() == metadata_b.dev() && metadata_a.ino() == metadata_b.ino())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        Ok(metadata_a.volume_serial_number() == metadata_b.volume_serial_number()
+            && metadata_a.file_index() == metadata_b.file_index())
+    }
+    #[cfg(not(any(windows, unix)))]
+    compile_error!("Unsupported platform: can't check if files are hard linked");
+}
+
+pub(crate) fn has_multiple_hard_links(path: &Path) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        let metadata = std::fs::symlink_metadata(path).ok()?;
+        use std::os::unix::fs::MetadataExt;
+        Some(metadata.nlink() > 1)
+    }
+    #[cfg(windows)]
+    {
+        let metadata = std::fs::symlink_metadata(path).ok()?;
+        use std::os::windows::fs::MetadataExt;
+        metadata.number_of_links()? > 1
+    }
+    #[cfg(not(any(windows, unix)))]
+    compile_error!("Unsupported platform: can't check for multiple hard links");
 }
 
 pub fn rename_with_fallback_across_devices(from: &Path, to: &Path) -> std::io::Result<()> {

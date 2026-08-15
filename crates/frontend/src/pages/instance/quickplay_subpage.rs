@@ -11,12 +11,16 @@ use gpui_component::{
     ActiveTheme as _, Colorize, Disableable, IndexPath, Sizable, Theme,
     button::{Button, ButtonVariants},
     h_flex,
-    list::{ListDelegate, ListItem, ListState},
+    list::{List, ListDelegate, ListItem, ListState},
+    spinner::Spinner,
     v_flex,
 };
 
 use crate::{
-    entity::instance::InstanceEntry, icon::PandoraIcon, interface_config::InterfaceConfig, png_render_cache, root,
+    entity::{DataEntities, instance::InstanceEntry},
+    icon::PandoraIcon,
+    interface_config::InterfaceConfig,
+    png_render_cache, root,
 };
 
 pub struct InstanceQuickplaySubpage {
@@ -33,7 +37,7 @@ pub struct InstanceQuickplaySubpage {
 impl InstanceQuickplaySubpage {
     pub fn new(
         instance: &Entity<InstanceEntry>,
-        backend_handle: BackendHandle,
+        data: &DataEntities,
         mut window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> Self {
@@ -44,20 +48,24 @@ impl InstanceQuickplaySubpage {
         let worlds_state = instance.worlds_state.clone();
         let servers_state = instance.servers_state.clone();
 
+        let worlds = instance.worlds.read(cx).clone().map(|l| l.to_vec());
         let worlds_list_delegate = WorldsListDelegate {
             id: instance_id,
             name: instance.name.clone(),
-            backend_handle: backend_handle.clone(),
-            worlds: instance.worlds.read(cx).to_vec(),
-            searched: instance.worlds.read(cx).to_vec(),
+            data: data.clone(),
+            loaded: worlds.is_some(),
+            worlds: worlds.clone().unwrap_or_default(),
+            searched: worlds.unwrap_or_default(),
         };
 
+        let servers = instance.servers.read(cx).clone().map(|l| l.to_vec());
         let servers_list_delegate = ServersListDelegate {
             id: instance_id,
             name: instance.name.clone(),
-            backend_handle: backend_handle.clone(),
-            servers: instance.servers.read(cx).to_vec(),
-            searched: instance.servers.read(cx).to_vec(),
+            data: data.clone(),
+            loaded: servers.is_some(),
+            servers: servers.clone().unwrap_or_default(),
+            searched: servers.unwrap_or_default(),
             search_query: String::new(),
         };
 
@@ -67,10 +75,11 @@ impl InstanceQuickplaySubpage {
         let window2 = &mut window;
         let world_list = cx.new(move |cx| {
             cx.observe(&worlds, |list: &mut ListState<WorldsListDelegate>, worlds, cx| {
-                let worlds = worlds.read(cx).to_vec();
+                let worlds = worlds.read(cx).clone().map(|l| l.to_vec());
                 let delegate = list.delegate_mut();
-                delegate.worlds = worlds.clone();
-                delegate.searched = worlds;
+                delegate.loaded = worlds.is_some();
+                delegate.worlds = worlds.clone().unwrap_or_default();
+                delegate.searched = worlds.unwrap_or_default();
                 cx.notify();
             })
             .detach();
@@ -80,7 +89,7 @@ impl InstanceQuickplaySubpage {
 
         let server_list = cx.new(move |cx| {
             cx.observe(&servers, |list: &mut ListState<ServersListDelegate>, servers, cx| {
-                let servers = servers.read(cx).to_vec();
+                let servers = servers.read(cx).clone().map(|l| l.to_vec());
                 let delegate = list.delegate_mut();
                 delegate.set_servers(servers);
                 cx.notify();
@@ -97,7 +106,7 @@ impl InstanceQuickplaySubpage {
 
         Self {
             instance: instance_entity,
-            backend_handle,
+            backend_handle: data.backend_handle.clone(),
             worlds_state,
             world_list,
             servers_state,
@@ -133,7 +142,7 @@ impl Render for InstanceQuickplaySubpage {
         let current_session = if playtime.current_session_secs > 0 {
             format_playtime(playtime.current_session_secs)
         } else {
-            "Not running".into()
+            t::instance::current_session::not_running().into()
         };
 
         v_flex()
@@ -158,7 +167,7 @@ impl Render for InstanceQuickplaySubpage {
                                 .border_1()
                                 .rounded(theme.radius)
                                 .border_color(theme.border)
-                                .child(self.world_list.clone()),
+                                .child(List::new(&self.world_list).search_placeholder(t::common::search())),
                         ),
                     )
                     .child(
@@ -169,7 +178,7 @@ impl Render for InstanceQuickplaySubpage {
                                 .border_1()
                                 .rounded(theme.radius)
                                 .border_color(theme.border)
-                                .child(self.server_list.clone()),
+                                .child(List::new(&self.server_list).search_placeholder(t::common::search())),
                         ),
                     ),
             )
@@ -195,18 +204,19 @@ fn format_playtime(total_secs: u64) -> SharedString {
     let seconds = total_secs % 60;
 
     if hours > 0 {
-        format!("{hours}h {minutes}m").into()
+        format!("{hours}{} {minutes}{}", t::time::h(), t::time::m()).into()
     } else if minutes > 0 {
-        format!("{minutes}m {seconds}s").into()
+        format!("{minutes}{} {seconds}{}", t::time::m(), t::time::s()).into()
     } else {
-        format!("{seconds}s").into()
+        format!("{seconds}{}", t::time::s()).into()
     }
 }
 
 pub struct WorldsListDelegate {
     id: InstanceID,
     name: SharedString,
-    backend_handle: BackendHandle,
+    data: DataEntities,
+    loaded: bool,
     worlds: Vec<InstanceWorldSummary>,
     searched: Vec<InstanceWorldSummary>,
 }
@@ -216,6 +226,19 @@ impl ListDelegate for WorldsListDelegate {
 
     fn items_count(&self, _section: usize, _cx: &App) -> usize {
         self.searched.len()
+    }
+
+    fn loading(&self, _cx: &App) -> bool {
+        !self.loaded
+    }
+
+    fn render_loading(&mut self, _window: &mut Window, cx: &mut Context<ListState<Self>>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .h_1_2()
+            .items_center()
+            .justify_center()
+            .child(Spinner::new().color(cx.theme().muted_foreground).with_size(px(36.0)))
     }
 
     fn render_item(
@@ -245,7 +268,7 @@ impl ListDelegate for WorldsListDelegate {
 
         let id = self.id;
         let name = self.name.clone();
-        let backend_handle = self.backend_handle.clone();
+        let data = self.data.clone();
         let target = summary.level_path.file_name().unwrap().to_owned();
         let item = ListItem::new(ix).p_1().child(
             h_flex()
@@ -257,7 +280,7 @@ impl ListDelegate for WorldsListDelegate {
                                 id,
                                 name.clone(),
                                 Some(QuickPlayLaunch::Singleplayer(target.clone())),
-                                &backend_handle,
+                                &data,
                                 window,
                                 cx,
                             );
@@ -284,7 +307,8 @@ impl ListDelegate for WorldsListDelegate {
 pub struct ServersListDelegate {
     id: InstanceID,
     name: SharedString,
-    backend_handle: BackendHandle,
+    data: DataEntities,
+    loaded: bool,
     servers: Vec<InstanceServerSummary>,
     searched: Vec<InstanceServerSummary>,
     search_query: String,
@@ -295,6 +319,19 @@ impl ListDelegate for ServersListDelegate {
 
     fn items_count(&self, _section: usize, _cx: &App) -> usize {
         self.searched.len()
+    }
+
+    fn loading(&self, _cx: &App) -> bool {
+        !self.loaded
+    }
+
+    fn render_loading(&mut self, _window: &mut Window, cx: &mut Context<ListState<Self>>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .h_1_2()
+            .items_center()
+            .justify_center()
+            .child(Spinner::new().color(cx.theme().muted_foreground).with_size(px(36.0)))
     }
 
     fn render_item(
@@ -360,7 +397,9 @@ impl ListDelegate for ServersListDelegate {
 
                         this.child(div().text_color(color).child(format!("{}ms", millis)))
                     })
-                    .when(summary.status.is_none() && summary.pinging, |this| this.child("Pinging...")),
+                    .when(summary.status.is_none() && summary.pinging, |this| {
+                        this.child(t::instance::quickplay::pinging())
+                    }),
             )
             .when_some(summary.status.as_ref(), |this, status| {
                 this.child(
@@ -379,16 +418,15 @@ impl ListDelegate for ServersListDelegate {
                         .whitespace_nowrap()
                         .text_color(theme.danger)
                         .h(rems(2.0))
-                        .child("Unable to get server status"),
+                        .child(t::instance::quickplay::unable_to_get_status()),
                 )
             });
 
         let id = self.id;
         let name = self.name.clone();
-        let backend_handle = self.backend_handle.clone();
+        let data = self.data.clone();
         let target = OsString::from(summary.ip.to_string());
         let row_index = ix.row;
-        let raw_index = summary.raw_index;
 
         let move_up = Button::new(("server-up", row_index))
             .compact()
@@ -416,15 +454,6 @@ impl ListDelegate for ServersListDelegate {
                 delegate.reorder_servers(row_index, row_index + 1, cx);
             }));
 
-        let delete = Button::new(("server-delete", row_index))
-            .compact()
-            .small()
-            .danger()
-            .icon(PandoraIcon::Trash2)
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.delegate_mut().delete_server(raw_index, cx);
-            }));
-
         let item = ListItem::new(ix).p_1().child(
             h_flex()
                 .gap_1()
@@ -435,7 +464,7 @@ impl ListDelegate for ServersListDelegate {
                                 id,
                                 name.clone(),
                                 Some(QuickPlayLaunch::Multiplayer(target.clone())),
-                                &backend_handle,
+                                &data,
                                 window,
                                 cx,
                             );
@@ -444,7 +473,7 @@ impl ListDelegate for ServersListDelegate {
                 )
                 .child(icon.size_16().min_w_16().min_h_16())
                 .child(description)
-                .child(v_flex().gap_1().child(move_up).child(move_down).child(delete).px_2()),
+                .child(v_flex().gap_1().child(move_up).child(move_down).px_2()),
         );
 
         Some(item)
@@ -466,8 +495,9 @@ impl ServersListDelegate {
         self.search_query.is_empty()
     }
 
-    fn set_servers(&mut self, servers: Vec<InstanceServerSummary>) {
-        self.servers = servers;
+    fn set_servers(&mut self, servers: Option<Vec<InstanceServerSummary>>) {
+        self.loaded = servers.is_some();
+        self.servers = servers.unwrap_or_default();
         self.searched = self.apply_search(&self.search_query);
     }
 
@@ -483,24 +513,12 @@ impl ServersListDelegate {
         if !self.can_reorder() {
             return;
         }
-        // ponytail: translate display row -> raw NBT index (hidden/ip-less servers are filtered)
-        let Some(from_raw) = self.searched.get(from_index).map(|s| s.raw_index) else {
-            return;
-        };
-        let Some(to_raw) = self.searched.get(to_index).map(|s| s.raw_index) else {
-            return;
-        };
 
-        self.backend_handle.send(MessageToBackend::ReorderServers {
+        self.data.backend_handle.send(MessageToBackend::ReorderServers {
             id: self.id,
-            from_index: from_raw,
-            to_index: to_raw,
+            from_index,
+            to_index,
         });
-        cx.notify();
-    }
-
-    fn delete_server(&mut self, index: usize, cx: &mut Context<ListState<Self>>) {
-        self.backend_handle.send(MessageToBackend::DeleteServer { id: self.id, index });
         cx.notify();
     }
 }

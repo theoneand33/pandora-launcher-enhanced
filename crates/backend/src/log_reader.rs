@@ -4,11 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use bridge::{
-    game_output::GameOutputLogLevel,
-    handle::FrontendHandle,
-    message::{GameOutputMsg, MessageToFrontend},
-};
+use bridge::{game_output::GameOutputLogLevel, message::GameOutputMsg};
 use chrono::Utc;
 use memchr::memchr;
 use regex::Regex;
@@ -42,9 +38,11 @@ pub fn replace(string: &str) -> Cow<'_, str> {
     replaced
 }
 
-pub fn start_game_output(stdout: PipeReader, stderr: Option<PipeReader>, frontend: FrontendHandle) {
+pub fn start_game_output(
+    stdout: PipeReader,
+    stderr: Option<PipeReader>,
+) -> tokio::sync::mpsc::UnboundedReceiver<GameOutputMsg> {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    frontend.send(MessageToFrontend::CreateGameOutputWindow { receiver });
 
     if let Some(stderr) = stderr {
         let sender = sender.clone();
@@ -137,6 +135,8 @@ pub fn start_game_output(stdout: PipeReader, stderr: Option<PipeReader>, fronten
             });
         }
     });
+
+    receiver
 }
 
 #[derive(Error, Debug)]

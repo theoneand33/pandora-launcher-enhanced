@@ -7,15 +7,14 @@ use bridge::{
     handle::BackendHandle,
     install::{ContentDownload, ContentInstall, ContentInstallFile, InstallTarget},
     instance::{ContentFolder, InstanceContentSummary, InstanceID},
-    modal_action::ModalAction,
 };
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Disableable, IndexPath, Sizable, WindowExt,
+    ActiveTheme as _, IndexPath, Sizable, WindowExt,
     button::{Button, ButtonVariants},
     h_flex,
     input::SelectAll,
-    list::ListState,
+    list::{List, ListState},
     notification::{Notification, NotificationType},
     select::{Select, SelectEvent, SelectState},
     switch::Switch,
@@ -49,38 +48,9 @@ pub struct InstanceContentSubpage {
     backend_handle: BackendHandle,
     content_states: ContentStates,
     content_list: Entity<ListState<ContentListDelegate>>,
-    content: Entity<Arc<[InstanceContentSummary]>>,
-    // For non-Mods tabs: the mods folder, so bundled modpack resource-pack/shader children can be
-    // surfaced under their own tab. `None` for the Mods tab.
-    mods_content: Option<Entity<Arc<[InstanceContentSummary]>>>,
+    content: Entity<Option<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
-    update_check_action: Option<ModalAction>,
-    update_all_action: Option<ModalAction>,
-    show_outdated_only: bool,
     _add_from_file_task: Option<Task<()>>,
-}
-
-/// Combines a tab's own folder content with the modpack bundles from the mods folder (when
-/// provided), so a modpack's resource-pack/shader children can appear under the matching tab. The
-/// delegate then filters each modpack's children down to the ones destined for its folder.
-fn combined_content_of(
-    folder: &Entity<Arc<[InstanceContentSummary]>>,
-    mods: Option<&Entity<Arc<[InstanceContentSummary]>>>,
-    cx: &App,
-) -> Vec<InstanceContentSummary> {
-    let mut combined: Vec<InstanceContentSummary> = folder.read(cx).to_vec();
-    if let Some(mods) = mods {
-        for item in mods.read(cx).iter() {
-            if item.content_summary.extra.is_modpack() {
-                combined.push(item.clone());
-            }
-        }
-    }
-    combined
-}
-
-fn is_updatable(s: &InstanceContentSummary, loader: Loader, version: &'static str) -> bool {
-    s.update.can_update(loader, version)
 }
 
 #[derive(Clone, Copy)]
@@ -198,9 +168,6 @@ impl InstanceContentSubpage {
 
         let content_folder = content_type.content_folder();
         let content = instance.content[content_folder].clone();
-        // Non-Mods tabs also read the mods folder so they can surface modpack-bundled content.
-        let mods_content =
-            (content_folder != ContentFolder::Mods).then(|| instance.content[ContentFolder::Mods].clone());
 
         let config = InterfaceConfig::get(cx);
         let mut sort_key = content_type.sort_key(config);
@@ -220,7 +187,10 @@ impl InstanceContentSubpage {
             sort_key,
             enabled_first,
         );
-        content_list_delegate.set_content(&combined_content_of(&content, mods_content.as_ref(), cx));
+
+        if let Some(new_content) = content.read(cx).clone() {
+            content_list_delegate.set_content(&new_content);
+        }
 
         let sort_dropdown = cx.new(|cx| {
             let items = valid_sort_modes
@@ -236,28 +206,14 @@ impl InstanceContentSubpage {
         });
 
         let content_for_observe = content.clone();
-        let mods_for_observe = mods_content.clone();
         let content_list = cx.new(move |cx| {
-            {
-                let content_e = content_for_observe.clone();
-                let mods_e = mods_for_observe.clone();
-                cx.observe(&content_for_observe, move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                    list.delegate_mut().set_content(&combined_content_of(&content_e, mods_e.as_ref(), cx));
-                    cx.notify();
-                })
-                .detach();
-            }
-
-            if let Some(mods_e) = mods_for_observe.clone() {
-                let content_e = content_for_observe.clone();
-                let mods_for_closure = mods_e.clone();
-                cx.observe(&mods_e, move |list: &mut ListState<ContentListDelegate>, _, cx| {
-                    list.delegate_mut()
-                        .set_content(&combined_content_of(&content_e, Some(&mods_for_closure), cx));
-                    cx.notify();
-                })
-                .detach();
-            }
+            cx.observe(&content_for_observe, |list: &mut ListState<ContentListDelegate>, content, cx| {
+                if let Some(new_content) = content.read(cx) {
+                    list.delegate_mut().set_content(new_content);
+                }
+                cx.notify();
+            })
+            .detach();
 
             ListState::new(content_list_delegate, window, cx).selectable(false).searchable(true)
         });
@@ -265,11 +221,11 @@ impl InstanceContentSubpage {
         cx.subscribe(
             &sort_dropdown,
             |this, _, event: &SelectEvent<NamedDropdown<InstanceContentSortKey>>, cx| {
-                let SelectEvent::Confirm(Some(value)) = event else {
+                let SelectEvent::Confirm(Some(sort_key)) = event else {
                     return;
                 };
 
-                let sort_key = value.item;
+                let sort_key = *sort_key;
                 let config = InterfaceConfig::get_mut(cx);
 
                 if this.content_type.sort_key(config) == sort_key {
@@ -279,11 +235,13 @@ impl InstanceContentSubpage {
                 let enabled_first = this.content_type.sort_enabled_first(config);
                 this.content_type.set_sort_key(config, sort_key);
 
-                let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                let content = this.content.read(cx).clone();
                 let content_list = this.content_list.clone();
                 cx.update_entity(&content_list, |list, cx| {
                     list.delegate_mut().set_sort_options(sort_key, enabled_first);
-                    list.delegate_mut().set_content(&content);
+                    if let Some(content) = &content {
+                        list.delegate_mut().set_content(content);
+                    }
                     cx.notify();
                 });
                 cx.notify();
@@ -301,11 +259,7 @@ impl InstanceContentSubpage {
             content_states,
             content_list,
             content,
-            mods_content,
             sort_dropdown,
-            update_check_action: None,
-            update_all_action: None,
-            show_outdated_only: false,
             _add_from_file_task: None,
         }
     }
@@ -337,40 +291,10 @@ impl InstanceContentSubpage {
 }
 
 impl Render for InstanceContentSubpage {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let theme = cx.theme();
 
         self.content_states.observe(self.content_type.content_folder());
-        // Non-Mods tabs also surface modpack-bundled content, so make sure the mods folder loads.
-        if self.mods_content.is_some() {
-            self.content_states.observe(ContentFolder::Mods);
-        }
-
-        // Poll ModalActions so they reset on completion (both success and error) and
-        // drive `request_animation_frame` while active. Tidy up finished actions
-        // instead of holding them forever.
-        let is_checking = self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
-        if is_checking {
-            window.request_animation_frame();
-        } else if self.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
-            self.update_check_action = None;
-        }
-
-        let is_updating_all = self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none());
-        if is_updating_all {
-            window.request_animation_frame();
-        } else if self.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_some()) {
-            self.update_all_action = None;
-        }
-
-        let combined = combined_content_of(&self.content, self.mods_content.as_ref(), cx);
-        // Single source of truth for updatable items — used for both visibility and click handler.
-        let updatable: Vec<InstanceContentSummary> = combined
-            .iter()
-            .filter(|s| is_updatable(s, self.instance_loader, self.instance_version.as_str()))
-            .cloned()
-            .collect();
-        let has_updates = !updatable.is_empty();
 
         let header = h_flex()
             .gap_3()
@@ -383,52 +307,14 @@ impl Render for InstanceContentSubpage {
                     .success()
                     .compact()
                     .small()
-                    .loading(is_checking)
-                    .when(is_checking, |b| b.disabled(true))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        if this.update_check_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
-                            return;
+                    .on_click({
+                        let backend_handle = self.backend_handle.clone();
+                        let instance_id = self.instance;
+                        move |_, window, cx| {
+                            crate::root::start_update_check(instance_id, &backend_handle, window, cx);
                         }
-                        let action = ModalAction::default();
-                        this.update_check_action = Some(action.clone());
-                        cx.notify();
-                        crate::root::start_update_check_with_action(
-                            this.instance,
-                            &this.backend_handle,
-                            window,
-                            cx,
-                            action,
-                        );
-                    })),
+                    }),
             )
-            .when(has_updates && !is_checking, |this| {
-                this.child(
-                    Button::new("update-all")
-                        .label(t::instance::content::update::all())
-                        .success()
-                        .compact()
-                        .small()
-                        .loading(is_updating_all)
-                        .when(is_updating_all, |b| b.disabled(true))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            if this.update_all_action.as_ref().is_some_and(|a| a.get_finished_at().is_none()) {
-                                return;
-                            }
-                            let ids = combined_content_of(&this.content, this.mods_content.as_ref(), cx)
-                                .into_iter()
-                                .filter(|s| is_updatable(s, this.instance_loader, this.instance_version.as_str()))
-                                .map(|s| s.id)
-                                .collect::<Vec<_>>();
-                            if ids.is_empty() {
-                                return;
-                            }
-                            let action =
-                                crate::root::update_multiple_mods(this.instance, ids, &this.backend_handle, window, cx);
-                            this.update_all_action = Some(action);
-                            cx.notify();
-                        })),
-                )
-            })
             .child(
                 Button::new("addmr")
                     .label(t::instance::content::install::from_modrinth())
@@ -523,11 +409,7 @@ impl Render for InstanceContentSubpage {
             .gap_3()
             .items_center()
             .child(
-                div().child(
-                    Select::new(&self.sort_dropdown)
-                        .small()
-                        .title_prefix(format!("{}: ", t::instance::content::sort())),
-                ),
+                div().child(Select::new(&self.sort_dropdown).small().title_prefix(t::instance::content::sort_prefix())),
             )
             .child(
                 h_flex()
@@ -547,103 +429,19 @@ impl Render for InstanceContentSubpage {
                                 let sort_key = this.content_type.sort_key(config);
                                 this.content_type.set_sort_enabled_first(config, enabled_first);
 
-                                let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
+                                let content = this.content.read(cx).clone();
                                 let content_list = this.content_list.clone();
                                 cx.update_entity(&content_list, |list, cx| {
                                     list.delegate_mut().set_sort_options(sort_key, enabled_first);
-                                    list.delegate_mut().set_content(&content);
+                                    if let Some(content) = &content {
+                                        list.delegate_mut().set_content(content);
+                                    }
                                     cx.notify();
                                 });
                                 cx.notify();
                             })),
                     ),
             )
-            .child(
-                h_flex()
-                    .gap_1()
-                    .child(div().text_sm().child(t::instance::content::outdated_only()))
-                    .child(Switch::new("outdated_only").checked(self.show_outdated_only).on_click(cx.listener(
-                        |this, checked, _, cx| {
-                            if this.show_outdated_only == *checked {
-                                return;
-                            }
-                            this.show_outdated_only = *checked;
-                            let content = combined_content_of(&this.content, this.mods_content.as_ref(), cx);
-                            let cl = this.content_list.clone();
-                            cx.update_entity(&cl, |list, cx| {
-                                list.delegate_mut().set_outdated_only(*checked);
-                                list.delegate_mut().set_content(&content);
-                                cx.notify();
-                            });
-                            cx.notify();
-                        },
-                    ))),
-            )
-            .child({
-                let has_search = self.content_list.read(cx).delegate().has_search_filter();
-                let label = if self.show_outdated_only {
-                    t::instance::content::enable_outdated()
-                } else if has_search {
-                    t::instance::content::enable_filtered()
-                } else {
-                    t::instance::content::enable_all()
-                };
-                let tooltip = if has_search {
-                    t::instance::content::enable_filtered()
-                } else if self.show_outdated_only {
-                    t::instance::content::enable_outdated()
-                } else {
-                    t::instance::content::enable_all()
-                };
-                Button::new("enable_all")
-                    .small()
-                    // content_ids() is tab-scoped and respects search/outdated filters:
-                    // "Enable all" affects only visible summaries (current tab, filtered
-                    // by search query and outdated-only).
-                    .tooltip(tooltip)
-                    .label(label)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let ids = this.content_list.read(cx).delegate().content_ids();
-                        if ids.is_empty() {
-                            return;
-                        }
-                        this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
-                            id: this.instance,
-                            content_ids: ids,
-                            enabled: true,
-                        });
-                    }))
-            })
-            .child({
-                let has_search = self.content_list.read(cx).delegate().has_search_filter();
-                let label = if self.show_outdated_only {
-                    t::instance::content::disable_outdated()
-                } else if has_search {
-                    t::instance::content::disable_filtered()
-                } else {
-                    t::instance::content::disable_all()
-                };
-                let tooltip = if has_search {
-                    t::instance::content::disable_filtered()
-                } else if self.show_outdated_only {
-                    t::instance::content::disable_outdated()
-                } else {
-                    t::instance::content::disable_all()
-                };
-                Button::new("disable_all").small().tooltip(tooltip).label(label).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        let ids = this.content_list.read(cx).delegate().content_ids();
-                        if ids.is_empty() {
-                            return;
-                        }
-                        this.backend_handle.send(bridge::message::MessageToBackend::SetContentEnabled {
-                            id: this.instance,
-                            content_ids: ids,
-                            enabled: false,
-                        });
-                    },
-                ))
-            })
             .absolute()
             .top(px(4.0))
             .right(px(12.0));
@@ -660,7 +458,7 @@ impl Render for InstanceContentSubpage {
                 .border_1()
                 .rounded(theme.radius)
                 .border_color(theme.border)
-                .child(self.content_list.clone())
+                .child(List::new(&self.content_list).search_placeholder(t::common::search()))
                 .child(filter_bar_controls)
                 .on_click({
                     let content_list = self.content_list.clone();

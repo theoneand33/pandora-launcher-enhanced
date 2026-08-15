@@ -5,9 +5,7 @@ use bridge::{
     message::{BridgeNotificationType, MessageToFrontend},
     quit::QuitCoordinator,
 };
-use gpui::{
-    AnyWindowHandle, App, AppContext, SharedString, TitlebarOptions, Window, WindowDecorations, WindowOptions, px, size,
-};
+use gpui::{AnyWindowHandle, App, SharedString, Window};
 use gpui_component::{
     Root, WindowExt,
     notification::{Notification, NotificationType},
@@ -20,7 +18,6 @@ use crate::{
         instance::{ContentStates, InstanceEntries},
         metadata::FrontendMetadata,
     },
-    game_output::{GameOutput, GameOutputRoot},
     interface_config::InterfaceConfig,
     root::LauncherRoot,
 };
@@ -211,25 +208,6 @@ impl Processor {
                     window.close_all_dialogs(cx);
                 });
             },
-            MessageToFrontend::CreateGameOutputWindow { receiver } => {
-                self.quit_coordinator.set_can_quit(false);
-                let options = WindowOptions {
-                    app_id: Some("PandoraLauncher".into()),
-                    window_min_size: Some(size(px(360.0), px(240.0))),
-                    titlebar: Some(TitlebarOptions {
-                        title: Some(t::system::game_output().into()),
-                        ..Default::default()
-                    }),
-                    window_decorations: Some(WindowDecorations::Server),
-                    ..Default::default()
-                };
-                _ = cx.open_window(options, |window, cx| {
-                    let game_output = cx.new(|cx| GameOutput::new(receiver, cx));
-                    let game_output_root = cx.new(|cx| GameOutputRoot::new(game_output.clone(), window, cx));
-                    window.activate_window();
-                    cx.new(|cx| Root::new(game_output_root, window, cx))
-                });
-            },
             MessageToFrontend::MoveInstanceToTop { id } => {
                 InstanceEntries::move_to_top(&self.data.instances, id, cx);
             },
@@ -243,23 +221,9 @@ impl Processor {
             MessageToFrontend::SkinLibraryUpdated { skin_library } => {
                 self.data.set_skin_library(skin_library, cx);
             },
-            MessageToFrontend::UpdateAvailable { .. } => {
-                self.with_main_window(message, cx, |_, message, window, cx| {
-                    let MessageToFrontend::UpdateAvailable { update } = message else {
-                        unreachable!();
-                    };
-
-                    if let Some(root) = window.root::<Root>().flatten() {
-                        if let Ok(launcher_root) = root.read(cx).view().clone().downcast::<LauncherRoot>() {
-                            launcher_root.update(cx, |launcher_root, cx| {
-                                launcher_root.ui.update(cx, |ui, cx| {
-                                    ui.update = Some(update);
-                                    cx.notify();
-                                });
-                            });
-                        }
-                    }
-                });
+            MessageToFrontend::CreateGameOutputWindow { .. } => {
+                // Legacy window handling — now handled via live_game_output tab
+                // Keep arm to satisfy exhaustive match
             },
             MessageToFrontend::P2pShareCreated { .. } => {
                 let backend_handle = self.data.backend_handle.clone();
@@ -284,6 +248,25 @@ impl Processor {
                         window,
                         cx,
                     );
+                });
+            },
+
+            MessageToFrontend::UpdateAvailable { .. } => {
+                self.with_main_window(message, cx, |_, message, window, cx| {
+                    let MessageToFrontend::UpdateAvailable { update } = message else {
+                        unreachable!();
+                    };
+
+                    if let Some(root) = window.root::<Root>().flatten() {
+                        if let Ok(launcher_root) = root.read(cx).view().clone().downcast::<LauncherRoot>() {
+                            launcher_root.update(cx, |launcher_root, cx| {
+                                launcher_root.ui.update(cx, |ui, cx| {
+                                    ui.update = Some(update);
+                                    cx.notify();
+                                });
+                            });
+                        }
+                    }
                 });
             },
             MessageToFrontend::OpenOrFocusMainWindow => {

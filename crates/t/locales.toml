@@ -4355,3 +4355,29 @@ sv = "Relay-URL måste börja med http:// eller https://"
 ru = "URL релея должен начинаться с http:// или https://"
 fr = "L'URL du relais doit commencer par http:// ou https://"
 
+
+[instance.live_game_output]
+en = "Live Game Output"
+[instance.duplicate.action]
+en = "Duplicate"
+ru = "Дублировать"
+[instance.duplicate.title]
+en = "Duplicate Instance"
+ru = "Дублирование экземпляра"
+[instance.duplicate.copy_of]
+en = "Copy of ${name: &str}"
+ru = "Копия ${name: &str}"
+[instance.duplicate.progress]
+en = "Duplicating instance"
+ru = "Создание дубликата экземпляра"
+[instance.duplicate.error]
+en = "Error duplicating instance"
+ru = "Не удалось создать дубликат экземпляра"
+[settings.windows.live_game_output_display]
+en = "Live game output display"
+[settings.windows.live_game_output_display.tab_on_instance_page]
+en = "Tab on Instance Page"
+[settings.windows.live_game_output_display.separate_window]
+en = "Separate Window"
+[settings.windows.live_game_output_display.hidden]
+en = "Hidden"
