@@ -3614,6 +3614,31 @@ hu = "Módosítás engedélyezése futás közben"
 sv = "Tillåt ändring medan spelet körs"
 ru = "Разрешить изменения во время работы"
 
+[settings.update.title]
+en = "Updates"
+pl = "Aktualizacje"
+de = "Updates"
+hu = "Frissítések"
+sv = "Uppdateringar"
+ru = "Обновления"
+fr = "Mises à jour"
+[settings.update.auto]
+en = "Auto-update at launch"
+pl = "Automatyczna aktualizacja przy starcie"
+de = "Automatisch beim Start aktualisieren"
+hu = "Automatikus frissítés indításkor"
+sv = "Uppdatera automatiskt vid start"
+ru = "Автообновление при запуске"
+fr = "Mise à jour automatique au lancement"
+[settings.update.auto_hint]
+en = "Download and install updates automatically at launch (Rust binaries are small)"
+pl = "Pobieraj i instaluj aktualizacje automatycznie przy starcie (pliki binarne Rusta są małe)"
+de = "Updates beim Start automatisch herunterladen und installieren (Rust-Binaries sind klein)"
+hu = "Frissítések automatikus letöltése és telepítése indításkor (a Rust binárisok kicsik)"
+sv = "Ladda ner och installera uppdateringar automatiskt vid start (Rust-binärer är små)"
+ru = "Загружать и устанавливать обновления автоматически при запуске (бинарники Rust небольшие)"
+fr = "Télécharger et installer les mises à jour automatiquement au lancement (les binaires Rust sont légers)"
+
 [settings.proxy.launcher_only_note]
 en = "Note - Proxy settings only apply to the launcher, not the game itself"
 pl = "Uwaga - ustawienia proxy dotyczą tylko launchera, a nie samej gry"

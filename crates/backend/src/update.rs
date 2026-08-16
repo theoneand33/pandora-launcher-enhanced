@@ -2,7 +2,10 @@ use std::{
     ffi::{OsStr, OsString},
     io::Cursor,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use base64::Engine;
@@ -18,7 +21,24 @@ use uuid::Uuid;
 
 use crate::directories::LauncherDirectories;
 
-pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandle) {
+static UPDATE_INSTALLING: AtomicBool = AtomicBool::new(false);
+
+fn try_acquire_update_lock() -> bool {
+    UPDATE_INSTALLING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+        .is_ok()
+}
+
+fn release_update_lock() {
+    UPDATE_INSTALLING.store(false, Ordering::Release);
+}
+
+pub async fn check_for_updates(
+    http_client: reqwest::Client,
+    dirs: Arc<LauncherDirectories>,
+    send: FrontendHandle,
+    disable_auto_update: bool,
+) {
     if option_env!("PANDORA_UPDATE_PUBKEY").is_none() {
         return;
     }
@@ -135,13 +155,37 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
         return;
     };
 
-    send.send(MessageToFrontend::UpdateAvailable {
-        update: UpdatePrompt {
-            old_version: version.into(),
-            new_version: manifest.version.clone(),
-            install_type,
-            exe: executable.clone(),
-        },
+    let update = UpdatePrompt {
+        old_version: version.into(),
+        new_version: manifest.version.clone(),
+        install_type,
+        exe: executable.clone(),
+    };
+
+    send.send(MessageToFrontend::UpdateAvailable { update: update.clone() });
+
+    if disable_auto_update {
+        log::info!("Auto-update disabled, skipping auto-install for {}", update.new_version);
+        return;
+    }
+
+    // ponytail: Rust binaries are small (~10-20 MiB), auto-update at launch is cheap
+    if std::env::var_os("PANDORA_DISABLE_AUTO_UPDATE").is_some() {
+        log::info!("PANDORA_DISABLE_AUTO_UPDATE is set, skipping auto-install");
+        return;
+    }
+
+    log::info!("Auto-updating to Pandora {} at launch", update.new_version);
+    send.send_info(format!("Auto-updating to Pandora {}...", update.new_version));
+
+    let modal_action = ModalAction::default();
+    // Auto-install runs in background; install_update owns the single-flight lock
+    // and surfaces failures via send.send_error since no frontend owns this ModalAction.
+    let client = http_client.clone();
+    let send_clone = send.clone();
+    let dirs_clone = dirs.clone();
+    tokio::task::spawn(async move {
+        install_update(client, dirs_clone, send_clone, update, modal_action).await;
     });
 }
 
@@ -190,8 +234,30 @@ pub async fn install_update(
     update: UpdatePrompt,
     modal_action: ModalAction,
 ) {
-    if let Err(error) = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await {
-        modal_action.set_error_message(error);
+    if !try_acquire_update_lock() {
+        let msg: Arc<str> = "Update already in progress".into();
+        modal_action.set_error_message(msg.clone());
+        modal_action.set_finished();
+        send.send(MessageToFrontend::Refresh);
+        if modal_action.refcnt() <= 2 {
+            send.send_warning(msg);
+        }
+        log::warn!("Update install already in progress, rejecting second request");
+        return;
+    }
+
+    // Ensure lock is released even if we early-return or panic
+    let _guard = scopeguard::guard((), |_| release_update_lock());
+
+    let result = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await;
+    if let Err(error) = result {
+        modal_action.set_error_message(error.clone());
+        // Manual path's error is visible via show_notification reading modal_action.error;
+        // auto path's ModalAction is orphaned (refcnt <=2), so surface via toast.
+        if modal_action.refcnt() <= 2 {
+            send.send_error(format!("Update failed: {}", error));
+        }
+        log::error!("Update failed: {}", error);
     }
 
     modal_action.set_finished();

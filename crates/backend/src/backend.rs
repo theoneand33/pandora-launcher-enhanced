@@ -296,7 +296,13 @@ impl BackendState {
     async fn start(self, recv: BackendReceiver, watcher_rx: Receiver<notify_debouncer_full::DebounceEventResult>) {
         log::info!("Starting backend");
 
-        tokio::task::spawn(crate::update::check_for_updates(self.redirecting_http_client.clone(), self.send.clone()));
+        {
+            let client = self.redirecting_http_client.clone();
+            let dirs = self.directories.clone();
+            let send = self.send.clone();
+            let disable_auto_update = self.config.write().get().disable_auto_update;
+            tokio::task::spawn(crate::update::check_for_updates(client, dirs, send, disable_auto_update));
+        }
 
         // Pre-fetch version manifest
         self.meta.load(&MinecraftVersionManifestMetadataItem).await;
