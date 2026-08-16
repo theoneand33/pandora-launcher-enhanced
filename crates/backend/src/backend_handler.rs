@@ -2537,6 +2537,11 @@ impl BackendState {
                     cfg.p2p_relay_url = relay_url;
                 });
             },
+            MessageToBackend::SetAutoUpdate { enabled } => {
+                self.config.write().modify(|cfg| {
+                    cfg.disable_auto_update = !enabled;
+                });
+            },
             MessageToBackend::Quit => {
                 self.should_quit.store(true, Ordering::Relaxed);
             },

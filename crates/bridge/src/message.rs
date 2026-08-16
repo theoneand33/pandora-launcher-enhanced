@@ -368,6 +368,9 @@ pub enum MessageToBackend {
     SetP2pConfig {
         relay_url: Option<String>,
     },
+    SetAutoUpdate {
+        enabled: bool,
+    },
     Quit,
 }
 

@@ -411,6 +411,29 @@ impl Settings {
                                 }
                             })),
                     ),
+                ))
+                .child(crate::labelled(
+                    t::settings::update::title(),
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            Checkbox::new("auto-update")
+                                .label(t::settings::update::auto())
+                                .checked(!backend_config.disable_auto_update)
+                                .on_click(cx.listener({
+                                    let backend_handle = self.backend_handle.clone();
+                                    move |settings, value, window, cx| {
+                                        backend_handle.send(MessageToBackend::SetAutoUpdate { enabled: *value });
+                                        settings.update_backend_configuration(window, cx);
+                                    }
+                                })),
+                        )
+                        .child(
+                            gpui::div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(t::settings::update::auto_hint()),
+                        ),
                 ));
         } else {
             div = div.child(Spinner::new().large());
