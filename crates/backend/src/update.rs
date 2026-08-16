@@ -2,7 +2,10 @@ use std::{
     ffi::{OsStr, OsString},
     io::Cursor,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use base64::Engine;
@@ -17,6 +20,18 @@ use schema::pandora_update::{UpdateInstallType, UpdateManifest, UpdatePrompt};
 use sha1::{Digest, Sha1};
 
 use crate::directories::LauncherDirectories;
+
+static UPDATE_INSTALLING: AtomicBool = AtomicBool::new(false);
+
+fn try_acquire_update_lock() -> bool {
+    UPDATE_INSTALLING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+        .is_ok()
+}
+
+fn release_update_lock() {
+    UPDATE_INSTALLING.store(false, Ordering::Release);
+}
 
 pub async fn check_for_updates(
     http_client: reqwest::Client,
@@ -164,8 +179,8 @@ pub async fn check_for_updates(
     send.send_info(format!("Auto-updating to Pandora {}...", update.new_version));
 
     let modal_action = ModalAction::default();
-    // Spawn auto-install so the check task does not block; progress uses the same
-    // tracker/notification path as manual installs.
+    // Auto-install runs in background; install_update owns the single-flight lock
+    // and surfaces failures via send.send_error since no frontend owns this ModalAction.
     let client = http_client.clone();
     let send_clone = send.clone();
     let dirs_clone = dirs.clone();
@@ -219,8 +234,30 @@ pub async fn install_update(
     update: UpdatePrompt,
     modal_action: ModalAction,
 ) {
-    if let Err(error) = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await {
-        modal_action.set_error_message(error);
+    if !try_acquire_update_lock() {
+        let msg: Arc<str> = "Update already in progress".into();
+        modal_action.set_error_message(msg.clone());
+        modal_action.set_finished();
+        send.send(MessageToFrontend::Refresh);
+        if modal_action.refcnt() <= 2 {
+            send.send_warning(msg);
+        }
+        log::warn!("Update install already in progress, rejecting second request");
+        return;
+    }
+
+    // Ensure lock is released even if we early-return or panic
+    let _guard = scopeguard::guard((), |_| release_update_lock());
+
+    let result = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await;
+    if let Err(error) = result {
+        modal_action.set_error_message(error.clone());
+        // Manual path's error is visible via show_notification reading modal_action.error;
+        // auto path's ModalAction is orphaned (refcnt <=2), so surface via toast.
+        if modal_action.refcnt() <= 2 {
+            send.send_error(format!("Update failed: {}", error));
+        }
+        log::error!("Update failed: {}", error);
     }
 
     modal_action.set_finished();
