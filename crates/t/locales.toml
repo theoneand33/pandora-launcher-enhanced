@@ -2874,6 +2874,13 @@ hu = "Összes frissítése"
 sv = "Uppdatera alla"
 ru = "Обновить всё"
 
+[instance.content.update_all_mods]
+en = "Update all mods (${count: usize})"
+[instance.content.update_all_resourcepacks]
+en = "Update all resourcepacks (${count: usize})"
+[instance.content.update_all_shaders]
+en = "Update all shaders (${count: usize})"
+
 [instance.content.update.error]
 en = "Error updating mod"
 pl = "Błąd aktualizowania moda"
