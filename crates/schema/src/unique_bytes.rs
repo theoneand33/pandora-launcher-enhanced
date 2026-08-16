@@ -50,9 +50,39 @@ impl UniqueBytes {
             map.remove(bytes);
         }
 
+        // Amortized cleanup of stale Weak entries that were not re-interned.
+        // Keeps Vec<u8> keys from growing without bound.
+        if map.len() > 256 && map.len() % 64 == 0 {
+            map.retain(|_, weak| weak.upgrade().is_some());
+        }
+
         let arc: Arc<[u8]> = Arc::from(bytes);
         map.insert(bytes.to_vec(), Arc::downgrade(&arc));
         UniqueBytes(arc)
+    }
+}
+
+impl Drop for UniqueBytes {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) != 1 {
+            return;
+        }
+        let mut map = UNIQUE.lock();
+        if Arc::strong_count(&self.0) != 1 {
+            return;
+        }
+        let key: &[u8] = &self.0;
+        if let Some(weak) = map.get(key) {
+            match weak.upgrade() {
+                None => {
+                    map.remove(key);
+                },
+                Some(arc) if Arc::ptr_eq(&arc, &self.0) => {
+                    map.remove(key);
+                },
+                _ => {},
+            }
+        }
     }
 }
 
@@ -87,7 +117,7 @@ impl<'de> Visitor<'de> for UniqueBytesVisitor {
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let capacity = seq.size_hint().unwrap_or(0).max(0);
+        let capacity = seq.size_hint().unwrap_or(0);
         let mut values = Vec::<u8>::with_capacity(capacity);
 
         while let Some(element) = seq.next_element()? {

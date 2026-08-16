@@ -4,6 +4,7 @@ use parking_lot::Mutex;
 
 struct QuitCoordinatorInner {
     ready: [AtomicBool; 2],
+    forked: AtomicBool,
     on_quit: Mutex<Option<Box<dyn FnOnce() + Send + Sync>>>,
 }
 
@@ -19,12 +20,18 @@ impl QuitCoordinator {
             index: 0,
             shared: Arc::new(QuitCoordinatorInner {
                 ready: [AtomicBool::new(false), AtomicBool::new(false)],
+                forked: AtomicBool::new(false),
                 on_quit: Mutex::new(Some(on_quit)),
             }),
         }
     }
 
     pub fn fork(&self) -> Self {
+        assert_eq!(self.index, 0, "QuitCoordinator::fork must be called on the original (index 0)");
+        assert!(
+            !self.shared.forked.swap(true, std::sync::atomic::Ordering::SeqCst),
+            "QuitCoordinator::fork called twice; second fork would clobber slot 1"
+        );
         Self {
             index: 1,
             shared: Arc::clone(&self.shared),

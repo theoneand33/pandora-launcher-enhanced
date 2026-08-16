@@ -86,11 +86,20 @@ impl ProxyConfig {
         let scheme = self.protocol.scheme();
 
         if self.auth_enabled && !self.username.is_empty() {
-            let password = password.unwrap_or("");
-            // URL-encode username and password to handle special characters
-            let username = url::form_urlencoded::byte_serialize(self.username.as_bytes()).collect::<String>();
-            let password = url::form_urlencoded::byte_serialize(password.as_bytes()).collect::<String>();
-            Some(format!("{}://{}:{}@{}:{}", scheme, username, password, self.host, self.port))
+            let pw = password.unwrap_or("");
+            // Use Url's userinfo handling which correctly encodes spaces as %20.
+            // Url leaves '%' unencoded (USERINFO set excludes '%'), so pre-encode
+            // literal '%' as %25 to preserve it.
+            let username_pre = self.username.replace('%', "%25");
+            let pw_pre = pw.replace('%', "%25");
+            let mut url = url::Url::parse(&format!("{}://{}:{}", scheme, self.host, self.port)).ok()?;
+            let _ = url.set_username(&username_pre);
+            let _ = url.set_password(Some(&pw_pre));
+            let mut s = url.to_string();
+            if s.ends_with('/') {
+                s.pop();
+            }
+            Some(s)
         } else {
             Some(format!("{}://{}:{}", scheme, self.host, self.port))
         }
@@ -207,5 +216,31 @@ impl LegacySyncTarget {
             LegacySyncTarget::Bobby => (".bobby", false),
             LegacySyncTarget::Litematic => ("schematics", false),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proxy_url_encodes_spaces_and_percent() {
+        let config = ProxyConfig {
+            enabled: true,
+            protocol: ProxyProtocol::Http,
+            host: "proxy.example.com".to_string(),
+            port: 8080,
+            auth_enabled: true,
+            username: "user name".to_string(),
+        };
+        let url = config.to_url(Some("p@ss word%")).unwrap();
+        assert!(url.contains("user%20name"), "username should encode space as %20, got {url}");
+        assert!(!url.contains("user+name"), "username must not use '+' for space, got {url}");
+        assert!(
+            url.contains("p%40ss%20word%25"),
+            "password should encode @ as %40, space as %20, % as %25, got {url}"
+        );
+        assert!(url.starts_with("http://"), "scheme preserved, got {url}");
+        assert!(url.contains("@proxy.example.com:8080"), "host and port preserved, got {url}");
     }
 }

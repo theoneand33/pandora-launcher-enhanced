@@ -1,9 +1,9 @@
-use std::{cell::RefCell, num::NonZeroUsize, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::RefCell, ops::Range, rc::Rc, sync::Arc};
 
 use crate::{
     component::scrollable_text::{
-        ScrollHandler, ScrollRenderInfo, ScrollState, ScrollableLine, Scrolling, WrappedLineCache, WrappedLines,
-        update_scrolling,
+        ScrollHandler, ScrollRenderInfo, ScrollState, ScrollableLine, Scrolling, ShapeCache, WrappedLineCache,
+        WrappedLines, update_scrolling,
     },
     fenwick::FenwickTree,
 };
@@ -16,8 +16,6 @@ use gpui_component::{
     scroll::{Scrollbar, ScrollbarHandle},
     v_flex,
 };
-use lru::LruCache;
-use rustc_hash::FxBuildHasher;
 
 use bridge::{game_output::GameOutputLogLevel, message::GameOutputMsg};
 
@@ -37,16 +35,16 @@ struct CachedShapedLines {
     last_time: Option<Arc<ShapedLine>>,
     last_time_millis: i64,
 
-    item_lines: LruCache<usize, WrappedLines, FxBuildHasher>,
+    shape_cache: ShapeCache,
 }
 
 impl WrappedLineCache for CachedShapedLines {
     fn get_lines(&mut self, index: usize) -> Option<&WrappedLines> {
-        self.item_lines.get(&index)
+        self.shape_cache.get_lines(index)
     }
 
     fn put_lines(&mut self, index: usize, lines: WrappedLines) {
-        self.item_lines.put(index, lines);
+        self.shape_cache.put_lines(index, lines);
     }
 }
 
@@ -107,7 +105,7 @@ impl GameOutput {
                 cached_shaped_lines: CachedShapedLines {
                     last_time: None,
                     last_time_millis: 0,
-                    item_lines: LruCache::with_hasher(NonZeroUsize::new(256).unwrap(), FxBuildHasher),
+                    shape_cache: ShapeCache::new(),
                 },
                 search_query: SharedString::new_static(""),
             }),
@@ -789,7 +787,7 @@ impl GameOutputRoot {
                     lengths.push(item.total_lines);
                 }
                 item_state.item_sizes = FenwickTree::from_iter(lengths.into_iter());
-                item_state.cached_shaped_lines.item_lines.clear();
+                item_state.cached_shaped_lines.shape_cache.clear();
                 item_state.search_query = SharedString::new_static("");
 
                 this.update_in(window, |this, window, cx| {
@@ -828,7 +826,7 @@ impl GameOutputRoot {
                     }
                 }
                 item_state.item_sizes = FenwickTree::from_iter(lengths.into_iter());
-                item_state.cached_shaped_lines.item_lines.clear();
+                item_state.cached_shaped_lines.shape_cache.clear();
                 item_state.search_query = search_pattern;
 
                 this.update_in(window, |this, window, cx| {

@@ -635,11 +635,14 @@ impl InstallDialog {
         install_shared::render_select_loader(
             &mut self.loader_select_state,
             &self.version_matrix,
-            &mut self.single_loader_set,
-            self.force_target_loader,
-            self.target_loader
-                .map(|loader| SharedString::new_static(loader.as_modrinth_loader().pretty_name())),
-            &self.last_selected_loader,
+            install_shared::LoaderSelection {
+                single_loader_set: &mut self.single_loader_set,
+                force_target_loader: self.force_target_loader,
+                target_loader_label: self
+                    .target_loader
+                    .map(|loader| SharedString::new_static(loader.as_modrinth_loader().pretty_name())),
+                last_selected_loader: &self.last_selected_loader,
+            },
             selected_minecraft_version,
             ModrinthLoader::pretty_name,
             window,

@@ -13,6 +13,26 @@ pub struct VersionMatrixLoaders<L: EnumSetType> {
     pub same_loaders_for_all_versions: bool,
 }
 
+pub struct LoaderSelection<'a, L: EnumSetType> {
+    pub single_loader_set: &'a mut Option<EnumSet<L>>,
+    pub force_target_loader: bool,
+    pub target_loader_label: Option<SharedString>,
+    pub last_selected_loader: &'a Option<SharedString>,
+}
+
+fn is_snapshot_version(version: &str) -> bool {
+    // Recognize valid snapshot identifiers like "24w03a" (YYwWWx) without matching any
+    // string that merely contains 'w'. Preserves existing pre/rc checks separately.
+    let bytes = version.as_bytes();
+    bytes.len() == 6
+        && bytes[0].is_ascii_digit()
+        && bytes[1].is_ascii_digit()
+        && bytes[2] == b'w'
+        && bytes[3].is_ascii_digit()
+        && bytes[4].is_ascii_digit()
+        && bytes[5].is_ascii_lowercase()
+}
+
 pub fn render_select_minecraft_version<L: EnumSetType, D: 'static>(
     select_state: &mut Option<Entity<SelectState<SearchableVec<SharedString>>>>,
     version_matrix: &FxHashMap<&'static str, VersionMatrixLoaders<L>>,
@@ -21,7 +41,7 @@ pub fn render_select_minecraft_version<L: EnumSetType, D: 'static>(
     cx: &mut Context<D>,
 ) -> AnyElement {
     let select_state = select_state.get_or_insert_with(|| {
-        if let Some(minecraft_version) = fixed_minecraft_version.clone() {
+        if let Some(minecraft_version) = *fixed_minecraft_version {
             cx.new(|cx| {
                 let mut select_state = SelectState::new(
                     SearchableVec::new(vec![SharedString::new_static(minecraft_version)]),
@@ -36,8 +56,8 @@ pub fn render_select_minecraft_version<L: EnumSetType, D: 'static>(
         } else {
             let mut keys: Vec<SharedString> = version_matrix.keys().cloned().map(SharedString::new_static).collect();
             keys.sort_by(|a, b| {
-                let a_is_snapshot = a.contains("w") || a.contains("pre") || a.contains("rc");
-                let b_is_snapshot = b.contains("w") || b.contains("pre") || b.contains("rc");
+                let a_is_snapshot = is_snapshot_version(a) || a.contains("pre") || a.contains("rc");
+                let b_is_snapshot = is_snapshot_version(b) || b.contains("pre") || b.contains("rc");
                 if a_is_snapshot != b_is_snapshot {
                     if a_is_snapshot {
                         Ordering::Greater
@@ -66,15 +86,18 @@ pub fn render_select_minecraft_version<L: EnumSetType, D: 'static>(
 pub fn render_select_loader<L: EnumSetType, D: 'static>(
     select_state: &mut Option<Entity<SelectState<Vec<SharedString>>>>,
     version_matrix: &FxHashMap<&'static str, VersionMatrixLoaders<L>>,
-    single_loader_set: &mut Option<EnumSet<L>>,
-    force_target_loader: bool,
-    target_loader_label: Option<SharedString>,
-    last_selected_loader: &Option<SharedString>,
+    constraints: LoaderSelection<'_, L>,
     selected_minecraft_version: &SharedString,
     pretty_name: impl Fn(L) -> &'static str,
     window: &mut Window,
     cx: &mut Context<D>,
 ) -> AnyElement {
+    let LoaderSelection {
+        single_loader_set,
+        force_target_loader,
+        target_loader_label,
+        last_selected_loader,
+    } = constraints;
     let loader_select_state = select_state.get_or_insert_with(|| {
         *single_loader_set = None;
 
