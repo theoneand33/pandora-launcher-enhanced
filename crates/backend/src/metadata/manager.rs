@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bridge::keep_alive::{KeepAlive, KeepAliveHandle};
+use bridge::notify_signal::{KeepAliveNotifySignal, KeepAliveNotifySignalHandle};
 use reqwest::StatusCode;
 use schema::{
     assets_index::AssetsIndex,
@@ -37,7 +37,8 @@ use crate::metadata::items::{MetadataItem, ModrinthV3VersionUpdateMetadataItem, 
 
 const DATA_TTL: Duration = Duration::from_secs(5 * 60);
 
-pub(super) type MetaLoadStateWrapper<T> = Arc<tokio::sync::Mutex<(Option<KeepAliveHandle>, MetaLoadState<T>)>>;
+pub(super) type MetaLoadStateWrapper<T> =
+    Arc<tokio::sync::Mutex<(Option<KeepAliveNotifySignalHandle>, MetaLoadState<T>)>>;
 
 #[derive(Default)]
 pub struct MetadataManagerStates {
@@ -81,7 +82,7 @@ pub struct MetadataManager {
     pub(super) neoforge_installer_maven_cache: Arc<Path>,
     pub(super) forge_installer_maven_cache: Arc<Path>,
 
-    expiring: tokio::sync::Mutex<VecDeque<(Instant, KeepAlive)>>,
+    expiring: tokio::sync::Mutex<VecDeque<(Instant, KeepAliveNotifySignal)>>,
 
     http_client: reqwest::Client,
 }
@@ -208,7 +209,7 @@ impl MetadataManager {
         let is_valid = wrapper.0.as_ref().map(|h| h.is_alive()).unwrap_or(true);
         if !is_valid || matches!(wrapper.1, MetaLoadState::Unloaded) {
             if item.expires() {
-                let keep_alive = KeepAlive::new();
+                let keep_alive = KeepAliveNotifySignal::new();
                 let handle = keep_alive.create_handle();
                 wrapper.0 = Some(handle);
                 self.expiring.lock().await.push_back((Instant::now() + DATA_TTL, keep_alive));
@@ -227,14 +228,14 @@ impl MetadataManager {
         &self,
         item: &I,
         force_reload: bool,
-    ) -> (Result<Arc<<I as MetadataItem>::T>, MetaLoadError>, Option<KeepAliveHandle>) {
+    ) -> (Result<Arc<<I as MetadataItem>::T>, MetaLoadError>, Option<KeepAliveNotifySignalHandle>) {
         let wrapper = item.state(&mut *self.states.lock().await);
         let mut wrapper = wrapper.lock().await;
 
         let is_valid = wrapper.0.as_ref().map(|h| h.is_alive()).unwrap_or(true);
         if force_reload || !is_valid || matches!(wrapper.1, MetaLoadState::Unloaded) {
             if item.expires() {
-                let keep_alive = KeepAlive::new();
+                let keep_alive = KeepAliveNotifySignal::new();
                 let handle = keep_alive.create_handle();
                 wrapper.0 = Some(handle);
                 self.expiring.lock().await.push_back((Instant::now() + DATA_TTL, keep_alive));

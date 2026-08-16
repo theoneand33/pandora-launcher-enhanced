@@ -18,17 +18,7 @@ use crate::{
 };
 
 pub fn show_notification(window: &mut Window, cx: &mut App, error_title: SharedString, modal_action: ModalAction) {
-    show_notification_with_note(window, cx, error_title, modal_action, Notification::new());
-}
-
-pub fn show_notification_with_note(
-    window: &mut Window,
-    cx: &mut App,
-    error_title: SharedString,
-    modal_action: ModalAction,
-    notification: Notification,
-) {
-    let notification = notification.autohide(false).content(move |notification, window, cx| {
+    let notification = Notification::new().autohide(false).content(move |notification, window, cx| {
         if let Some(error) = &*modal_action.error.read() {
             let error_widget = ErrorAlert::new(error_title.clone(), error.clone().into());
             return error_widget.into_any_element();

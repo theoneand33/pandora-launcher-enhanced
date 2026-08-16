@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::sync::Arc;
 
 use bridge::{
     install::{ContentDownload, ContentInstall, ContentInstallFile, InstallTarget},
@@ -38,13 +38,9 @@ use crate::{
         instance::InstanceEntry,
         metadata::{AsMetadataResult, FrontendMetadata, FrontendMetadataResult, FrontendMetadataState},
     },
+    modals::install_shared::{self, VersionMatrixLoaders},
     root,
 };
-
-struct VersionMatrixLoaders {
-    loaders: EnumSet<CurseforgeModLoaderType>,
-    same_loaders_for_all_versions: bool,
-}
 
 struct InstallDialog {
     title: SharedString,
@@ -54,7 +50,7 @@ struct InstallDialog {
     project_type: CurseforgeClassId,
     project_id: u32,
 
-    version_matrix: FxHashMap<&'static str, VersionMatrixLoaders>,
+    version_matrix: FxHashMap<&'static str, VersionMatrixLoaders<CurseforgeModLoaderType>>,
     instances: Option<Entity<SelectState<InstanceDropdown>>>,
     unsupported_instances: usize,
 
@@ -88,7 +84,8 @@ pub fn open(
     let title: SharedString = t::instance::content::install::title(&hit.name).into();
     let project_type = hit.class_id.map(CurseforgeClassId::from_u32).unwrap_or_default();
 
-    let mut version_matrix: FxHashMap<&'static str, VersionMatrixLoaders> = FxHashMap::default();
+    let mut version_matrix: FxHashMap<&'static str, VersionMatrixLoaders<CurseforgeModLoaderType>> =
+        FxHashMap::default();
     for version in hit.latest_files_indexes.iter() {
         let mod_loader = version
             .mod_loader
@@ -526,48 +523,13 @@ impl InstallDialog {
     }
 
     fn render_select_minecraft_version(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let select_state = self.minecraft_version_select_state.get_or_insert_with(|| {
-            if let Some(minecraft_version) = self.fixed_minecraft_version.clone() {
-                cx.new(|cx| {
-                    let mut select_state = SelectState::new(
-                        SearchableVec::new(vec![SharedString::new_static(minecraft_version)]),
-                        None,
-                        window,
-                        cx,
-                    )
-                    .searchable(true);
-                    select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                    select_state
-                })
-            } else {
-                let mut keys: Vec<SharedString> =
-                    self.version_matrix.keys().cloned().map(SharedString::new_static).collect();
-                keys.sort_by(|a, b| {
-                    let a_is_snapshot = a.contains("w") || a.contains("pre") || a.contains("rc");
-                    let b_is_snapshot = b.contains("w") || b.contains("pre") || b.contains("rc");
-                    if a_is_snapshot != b_is_snapshot {
-                        if a_is_snapshot {
-                            Ordering::Greater
-                        } else {
-                            Ordering::Less
-                        }
-                    } else {
-                        lexical_sort::natural_lexical_cmp(a, b).reverse()
-                    }
-                });
-                cx.new(|cx| {
-                    let mut select_state =
-                        SelectState::new(SearchableVec::new(keys), None, window, cx).searchable(true);
-                    select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                    select_state
-                })
-            }
-        });
-
-        Select::new(select_state)
-            .disabled(self.fixed_minecraft_version.is_some())
-            .title_prefix(format!("{}: ", t::instance::game_version()))
-            .into_any_element()
+        install_shared::render_select_minecraft_version(
+            &mut self.minecraft_version_select_state,
+            &self.version_matrix,
+            &self.fixed_minecraft_version,
+            window,
+            cx,
+        )
     }
 
     fn render_select_loader(
@@ -576,75 +538,22 @@ impl InstallDialog {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let loader_select_state = self.loader_select_state.get_or_insert_with(|| {
-            self.single_loader_set = None;
-
-            if let Some(loader) = self.target_loader
-                && self.force_target_loader
-            {
-                let loader = SharedString::new_static(loader.as_curseforge_loader().pretty_name());
-                cx.new(|cx| {
-                    let mut select_state = SelectState::new(vec![loader], None, window, cx);
-                    select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                    select_state
-                })
-            } else if let Some(loaders) = self.version_matrix.get(selected_minecraft_version.as_str()) {
-                if loaders.same_loaders_for_all_versions {
-                    let single_loader = if loaders.loaders.len() == 1 {
-                        SharedString::new_static(loaders.loaders.iter().next().unwrap().pretty_name())
-                    } else {
-                        let mut string = String::new();
-                        let mut first = true;
-                        for loader in loaders.loaders.iter() {
-                            if first {
-                                first = false;
-                            } else {
-                                string.push_str(" / ");
-                            }
-                            string.push_str(loader.pretty_name());
-                        }
-                        SharedString::new(string)
-                    };
-
-                    self.single_loader_set = Some(loaders.loaders);
-
-                    cx.new(|cx| {
-                        let mut select_state = SelectState::new(vec![single_loader], None, window, cx);
-                        select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                        select_state
-                    })
-                } else {
-                    let keys: Vec<SharedString> = loaders
-                        .loaders
-                        .iter()
-                        .map(CurseforgeModLoaderType::pretty_name)
-                        .map(SharedString::new_static)
-                        .collect();
-
-                    cx.new(|cx| {
-                        let mut select_state = SelectState::new(keys, None, window, cx);
-                        if let Some(previous) = &self.last_selected_loader {
-                            select_state.set_selected_value(previous, window, cx);
-                        }
-                        if select_state.selected_index(cx).is_none() {
-                            select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                        }
-                        select_state
-                    })
-                }
-            } else {
-                cx.new(|cx| {
-                    let mut select_state = SelectState::new(Vec::new(), None, window, cx);
-                    select_state.set_selected_index(Some(IndexPath::default()), window, cx);
-                    select_state
-                })
-            }
-        });
-
-        Select::new(loader_select_state)
-            .disabled(self.force_target_loader || self.single_loader_set.is_some())
-            .title_prefix(format!("{}: ", t::instance::loader()))
-            .into_any_element()
+        install_shared::render_select_loader(
+            &mut self.loader_select_state,
+            &self.version_matrix,
+            install_shared::LoaderSelection {
+                single_loader_set: &mut self.single_loader_set,
+                force_target_loader: self.force_target_loader,
+                target_loader_label: self
+                    .target_loader
+                    .map(|loader| SharedString::new_static(loader.as_curseforge_loader().pretty_name())),
+                last_selected_loader: &self.last_selected_loader,
+            },
+            selected_minecraft_version,
+            CurseforgeModLoaderType::pretty_name,
+            window,
+            cx,
+        )
     }
 
     fn render_select_mod_version(

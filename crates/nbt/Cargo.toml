@@ -9,5 +9,5 @@ anyhow.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
 paste.workspace = true
-num.workspace = true
+num-traits.workspace = true
 cesu8.workspace = true

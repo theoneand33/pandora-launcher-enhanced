@@ -34,24 +34,11 @@ struct AtLauncherConfig {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AtLauncherInstance {
-    // uuid: Uuid,
     launcher: Launcher,
     id: String,
-    // compliance_level: usize,
-    // java_version: JavaVersion,
     // NOTE: enable the below line will cause an error as `rules.features.has_custom_resolution` is a `"true"` not `true`
     // NOTE: That being said, we probably don't need to worry about it that much... hopefully...
     // arguments: LaunchArguments,
-    // #[serde(rename = "typ")]
-    // modpack_type: String,
-    // time: String,
-    // release_time: String,
-    // minimum_launcher_version: String,
-    // asset_index: AssetIndexLink,
-    // assets: String,
-    // downloads: Vec<GameDownloads>,
-    // logging: GameLogging,
-    // libraries: GameLibrary
 }
 
 #[derive(Deserialize)]
@@ -95,162 +82,36 @@ struct Launcher {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LoaderVersion {
-    // version: String,
     raw_version: String,
-    // recommended: bool,
     #[serde(rename = "type")]
     loader_type: Loader,
-    // downloadables: Vec<>
 }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct QuickPlay {}
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeCategory {
-//     name: String,
-//     slug: String,
-//     url: String,
-//     date_modified: String,
-//     game_id: usize,
-//     is_class: bool,
-//     id: usize,
-//     icon_url: String,
-//     parent_category_id: usize,
-//     class_id: usize,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeProject {
-//     id: usize,
-//     #[serde(rename = "name")]
-//     project_name: String,
-//     authors: Vec<CurseForgeAuthor>,
-//     game_id: usize,
-//     summary: String,
-//     categories: Vec<CurseForgeCategory>,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeAuthor {
-//     id: usize,
-//     name: String,
-//     url: String,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeFileDependency {
-//     file_id: usize,
-//     mod_id: usize,
-//     relation_type: usize,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeFileModule {
-//     fingerprint: usize,
-//     name: String,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeFileHash {
-//     value: String,
-//     algo: usize,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct SortableGameVersion {
-//     game_version_padded: String,
-//     game_version: String,
-//     game_version_release_date: String,
-//     game_version_name: String,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct CurseForgeFile {
-//     id: usize,
-//     game_id: usize,
-//     is_available: bool,
-//     display_name: String,
-//     file_name: String,
-//     release_type: usize,
-//     file_status: usize,
-//     file_date: String,
-//     file_length: usize,
-//     dependencies: Vec<CurseForgeFileDependency>,
-//     alternate_file_id: usize,
-//     modules: Vec<CurseForgeFileModule>,
-//     is_server_pack: bool,
-//     hashes: Vec<CurseForgeFileHash>,
-//     sortable_game_versions: Vec<SortableGameVersion>,
-//     game_versions: Vec<String>,
-//     file_fingerprint: usize,
-//     mod_id: usize,
-// }
-
-// #[derive(Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// struct Mod {
-//     name: String,
-//     version: String,
-//     optional: bool,
-//     file: String,
-//     #[serde(rename = "type")]
-//     mod_type: String,
-//     description: String,
-//     disabled: bool,
-//     user_added: bool,
-//     was_selected: bool,
-//     skipped: bool,
-//     curse_forge_project_id: Option<usize>,
-//     curse_forge_file_id: Option<usize>,
-//     curse_forge_project: Option<CurseForgeProject>,
-//     curse_forge_file: Option<CurseForgeFile>,
-//     modrinth_project: Option<ModrinthHit>,
-//     modrinth_version: Option<ModrinthProjectVersion>
-// }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AtLauncherAccount {
     access_token: String,
-    // oauth_token:
     xsts_auth: AtLauncherXstsAuth,
     access_token_expires_at: String,
-    // must_login: bool,
     username: Uuid,
     minecraft_username: String,
     uuid: Uuid,
-    // collapsed_packs: Vec<>
-    // collapsed_instances: Vec<>
-    // collapsed_servers: Vec<>
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct AtLauncherXstsAuth {
-    // issue_instant: String,
     not_after: String,
     token: String,
     display_claims: AtLauncherDisplayClaims,
 }
 
 #[derive(Debug, Deserialize)]
-// #[serde(rename_all = "case")]
 struct AtLauncherDisplayClaims {
     xui: Vec<AtLauncherDisplayClaim>,
 }
 
 #[derive(Debug, Deserialize)]
-// #[serde(rename_all = "case")]
 struct AtLauncherDisplayClaim {
     uhs: String,
 }

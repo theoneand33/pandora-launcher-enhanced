@@ -22,8 +22,6 @@ pub enum ProcessAuthorizationError {
     CsrfMismatch,
     #[error("The response didn't include the code")]
     MissingCode,
-    #[error("Cancelled by user")]
-    CancelledByUser,
 }
 
 pub async fn start_server(

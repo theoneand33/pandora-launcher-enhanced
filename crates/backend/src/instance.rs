@@ -15,7 +15,6 @@ use bridge::{
         InstanceContentSummary, InstanceID, InstancePlaytime, InstanceServerSummary, InstanceStatus,
         InstanceWorldSummary,
     },
-    keep_alive::KeepAliveHandle,
     message::{BridgeDataLoadState, MessageToFrontend},
     notify_signal::{KeepAliveNotifySignal, KeepAliveNotifySignalHandle},
 };
@@ -56,7 +55,7 @@ pub struct Instance {
     pub configuration: Persistent<InstanceConfiguration>,
     pub stats: Persistent<InstanceStats>,
 
-    pub launch_keepalive: Option<KeepAliveHandle>,
+    pub launch_keepalive: Option<KeepAliveNotifySignalHandle>,
     pub processes: Vec<PandoraProcess>,
     pub closing_processes: Vec<(PandoraProcess, Instant)>,
     pub skin_server_guards: FxHashMap<u32, SkinServerGuard>,

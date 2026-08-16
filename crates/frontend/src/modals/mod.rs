@@ -6,6 +6,7 @@ pub mod delete_instance;
 pub mod duplicate_instance;
 pub mod export_instance;
 pub mod generic;
+pub mod install_shared;
 pub mod modrinth_install;
 pub mod p2p_join;
 pub mod p2p_share;

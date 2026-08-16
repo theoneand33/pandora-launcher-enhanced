@@ -2,7 +2,6 @@ use std::{cmp::Ordering, io::Write, path::Path, sync::Arc, time::Duration};
 
 use bridge::instance::InstanceContentSummary;
 use gpui::{App, SharedString, Task};
-use rand::RngCore;
 use schema::{curseforge::CurseforgeClassId, modrinth::ModrinthProjectType};
 use serde::{Deserialize, Serialize};
 
@@ -84,8 +83,6 @@ pub struct InterfaceConfig {
     pub instance_subpage: InstanceSubpageType,
     #[serde(default, deserialize_with = "schema::try_deserialize")]
     pub collapse_capes_in_skins_page: bool,
-    #[serde(default, deserialize_with = "schema::try_deserialize")]
-    pub skin_list_sort_desc: bool,
     #[serde(default = "schema::default_true", deserialize_with = "schema::try_deserialize")]
     pub skin_list_show_3d: bool,
 }
@@ -210,7 +207,6 @@ impl Default for InterfaceConfig {
             instances_view_mode: Default::default(),
             instance_subpage: Default::default(),
             collapse_capes_in_skins_page: false,
-            skin_list_sort_desc: false,
             skin_list_show_3d: true,
         }
     }
@@ -316,7 +312,7 @@ pub(crate) fn write_safe(path: &Path, content: &[u8]) -> std::io::Result<()> {
     }
 
     let mut temp = path.to_path_buf();
-    temp.add_extension(format!("{}", rand::thread_rng().next_u32()));
+    temp.add_extension(uuid::Uuid::new_v4().simple().to_string());
     temp.add_extension("new");
 
     let mut temp_file = std::fs::File::create(&temp)?;

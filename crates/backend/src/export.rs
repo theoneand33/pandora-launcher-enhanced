@@ -123,7 +123,6 @@ struct CurseforgeResolvedFile {
     project_id: u32,
     file_id: u32,
     enabled: bool,
-    is_mod: bool,
 }
 
 pub async fn export_instance(
@@ -298,12 +297,7 @@ async fn export_curseforge_pack(
 
     let loader_version = instance.determine_loader_version(backend).await;
     let manifest_json = build_curseforge_manifest(instance, loader_version, options, &resolved)?;
-    let modlist_html = build_curseforge_modlist(&resolved);
-    let extra_files = vec![
-        ("manifest.json".to_string(), manifest_json),
-        // This is a legacy/optional artifact included by some exporters (e.g. PrismLauncher).
-        ("modlist.html".to_string(), modlist_html),
-    ];
+    let extra_files = vec![("manifest.json".to_string(), manifest_json)];
 
     let write_tracker = ProgressTracker::new("Writing zip".into(), backend.send.clone());
     modal_action.trackers.push(write_tracker.clone());
@@ -664,30 +658,30 @@ async fn resolve_curseforge_files(
     for file in files {
         check_cancel(modal_action)?;
         if is_mod_file(&file.rel) && options.include_mods {
-            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled, true));
+            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled));
             continue;
         }
         if is_resourcepack_file(&file.rel) && options.include_resourcepacks {
-            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled, false));
+            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled));
             continue;
         }
         if is_shaderpack_file(&file.rel) && options.include_shaders {
-            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled, false));
+            candidates.push((file.rel.clone(), file.abs.clone(), file.enabled));
         }
     }
 
     tracker.set_total(candidates.len());
     tracker.notify();
 
-    let mut fingerprint_to_candidate: HashMap<u32, (SafePath, bool, bool)> = HashMap::new();
+    let mut fingerprint_to_candidate: HashMap<u32, (SafePath, bool)> = HashMap::new();
     let mut fingerprints = Vec::new();
 
-    for (rel, abs, enabled, is_mod) in candidates {
+    for (rel, abs, enabled) in candidates {
         check_cancel(modal_action)?;
         tracker.add_count(1);
         tracker.notify();
         let fingerprint = compute_murmur2(&abs)?;
-        fingerprint_to_candidate.insert(fingerprint, (rel, enabled, is_mod));
+        fingerprint_to_candidate.insert(fingerprint, (rel, enabled));
         fingerprints.push(fingerprint);
     }
 
@@ -709,7 +703,7 @@ async fn resolve_curseforge_files(
     for match_item in response.data.exact_matches.iter() {
         check_cancel(modal_action)?;
         let fingerprint = match_item.file.file_fingerprint;
-        let Some((rel, enabled, is_mod)) = fingerprint_to_candidate.get(&fingerprint) else {
+        let Some((rel, enabled)) = fingerprint_to_candidate.get(&fingerprint) else {
             continue;
         };
         resolved.push(CurseforgeResolvedFile {
@@ -717,7 +711,6 @@ async fn resolve_curseforge_files(
             project_id: match_item.file.mod_id,
             file_id: match_item.file.id,
             enabled: *enabled,
-            is_mod: *is_mod,
         });
     }
 
@@ -843,18 +836,6 @@ fn build_curseforge_manifest(
     obj.insert("files".into(), serde_json::Value::Array(files_out));
 
     serde_json::to_vec(&serde_json::Value::Object(obj)).map_err(|e| e.to_string())
-}
-
-fn build_curseforge_modlist(resolved: &[CurseforgeResolvedFile]) -> Vec<u8> {
-    let mut items = String::new();
-    for file in resolved.iter().filter(|f| f.is_mod) {
-        items.push_str(&format!(
-            "<li><a href=\"https://www.curseforge.com/minecraft/mc-mods/{}\">{}</a></li>\n",
-            file.project_id, file.project_id
-        ));
-    }
-    let html = format!("<ul>{}</ul>", items);
-    html.into_bytes()
 }
 
 fn write_zip(

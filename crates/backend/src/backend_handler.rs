@@ -10,7 +10,6 @@ use auth::{credentials::AccountCredentials, models::MinecraftAccessToken, secret
 use bridge::{
     install::{ContentDownload, ContentInstall, ContentInstallFile, ContentInstallPath, InstallTarget},
     instance::{ContentFolder, ContentSummary, ContentType, InstanceContentID, InstanceID},
-    keep_alive::KeepAlive,
     message::{
         AccountCapesResult, AccountSkinResult, BackendConfigWithPassword, EmbeddedOrRaw, GameOutputMsg, LogFiles,
         MessageToBackend, MessageToFrontend, QuickPlayLaunch,
@@ -2554,7 +2553,7 @@ impl BackendState {
         live_game_output: Option<tokio::sync::oneshot::Sender<tokio::sync::mpsc::UnboundedReceiver<GameOutputMsg>>>,
         modal_action: ModalAction,
     ) {
-        let keepalive = KeepAlive::new();
+        let keepalive = bridge::notify_signal::KeepAliveNotifySignal::new();
 
         let (dot_minecraft, configuration) = if let Some(instance) = self.instance_state.write().instances.get_mut(id) {
             if let Some(launch_keepalive) = &instance.launch_keepalive

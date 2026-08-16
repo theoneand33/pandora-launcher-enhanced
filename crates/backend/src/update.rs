@@ -11,10 +11,10 @@ use bridge::{
     message::MessageToFrontend,
     modal_action::{ModalAction, ProgressTracker},
 };
-use rand::RngCore;
 use reqwest::StatusCode;
 use schema::pandora_update::{UpdateInstallType, UpdateManifest, UpdatePrompt};
 use sha1::{Digest, Sha1};
+use uuid::Uuid;
 
 use crate::directories::LauncherDirectories;
 
@@ -308,19 +308,19 @@ async fn install_update_inner(
             replace_exe(current_exe, new_exe, &bytes, dirs)?;
         },
         UpdateInstallType::App(current_app_folder) => {
-            let mut temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", rand::thread_rng().next_u64()));
+            let mut temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", Uuid::new_v4().simple()));
             while temp_extract.exists() {
                 log::warn!(
                     "Randomly generated app_unpack folder exists... what are the chances? ({:?})",
                     temp_extract
                 );
-                temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", rand::thread_rng().next_u64()));
+                temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", Uuid::new_v4().simple()));
             }
 
-            let mut temp_backup = dirs.temp_dir.join(format!("app_backup_{}", rand::thread_rng().next_u64()));
+            let mut temp_backup = dirs.temp_dir.join(format!("app_backup_{}", Uuid::new_v4().simple()));
             while temp_backup.exists() {
                 log::warn!("Randomly generated app_backup folder exists... what are the chances? ({:?})", temp_backup);
-                temp_backup = dirs.temp_dir.join(format!("app_backup_{}", rand::thread_rng().next_u64()));
+                temp_backup = dirs.temp_dir.join(format!("app_backup_{}", Uuid::new_v4().simple()));
             }
 
             let result = install_app_update(current_app_folder, &bytes, &temp_extract, &temp_backup);
@@ -340,13 +340,13 @@ async fn install_update_inner(
 }
 
 fn add_new_extension(path: &Path) -> PathBuf {
-    let mut new_exe_data = path.with_added_extension(format!("{}.new", rand::thread_rng().next_u64()));
+    let mut new_exe_data = path.with_added_extension(format!("{}.new", Uuid::new_v4().simple()));
     while new_exe_data.exists() {
         log::warn!(
             "Randomly generated new_exe_data file exists... what are the chances? ({:?})",
             new_exe_data
         );
-        new_exe_data = path.with_added_extension(format!("{}.new", rand::thread_rng().next_u64()));
+        new_exe_data = path.with_added_extension(format!("{}.new", Uuid::new_v4().simple()));
     }
     return new_exe_data;
 }
@@ -612,46 +612,6 @@ fn install_app_update(
     }
 
     Ok(())
-}
-
-#[cfg(windows)]
-fn run_admin_powershell(script: &OsStr) -> std::process::ExitStatus {
-    unsafe {
-        let mut sei: windows::Win32::UI::Shell::SHELLEXECUTEINFOW = std::mem::zeroed();
-        _ = windows::Win32::System::Com::CoInitializeEx(
-            None,
-            windows::Win32::System::Com::COINIT_APARTMENTTHREADED | windows::Win32::System::Com::COINIT_DISABLE_OLE1DDE,
-        );
-
-        use std::os::windows::ffi::OsStrExt;
-        let encoded = crate::join_windows_shell_os(&[OsStr::new("-Command"), script])
-            .encode_wide()
-            .chain(OsStr::new("\0").encode_wide())
-            .collect::<Vec<_>>();
-
-        sei.fMask = windows::Win32::UI::Shell::SEE_MASK_NOASYNC | windows::Win32::UI::Shell::SEE_MASK_NOCLOSEPROCESS;
-        sei.cbSize = std::mem::size_of::<windows::Win32::UI::Shell::SHELLEXECUTEINFOW>() as _;
-        sei.lpVerb = windows::core::w!("runas");
-        sei.lpFile = windows::core::w!("powershell.exe");
-        sei.lpParameters = windows::core::PCWSTR::from_raw(encoded.as_ptr());
-        sei.nShow = windows::Win32::UI::WindowsAndMessaging::SW_NORMAL.0;
-
-        if windows::Win32::UI::Shell::ShellExecuteExW(&mut sei).is_err() || sei.hProcess.is_invalid() {
-            return std::mem::transmute(!0);
-        }
-
-        windows::Win32::System::Threading::WaitForSingleObject(
-            sei.hProcess,
-            windows::Win32::System::Threading::INFINITE,
-        );
-
-        let mut code = 0;
-        if windows::Win32::System::Threading::GetExitCodeProcess(sei.hProcess, &mut code).is_err() {
-            std::mem::transmute(!0)
-        } else {
-            std::mem::transmute(code)
-        }
-    }
 }
 
 fn replace_os_str(input: &OsStr, from: &str, to: &str) -> OsString {

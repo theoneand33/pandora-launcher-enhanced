@@ -528,17 +528,15 @@ impl CurseforgeSearchPage {
 
                 let author_line = div().text_color(theme.muted_foreground).text_sm().pb_px().child(author);
 
-                let mut is_categories_empty = true;
-                let categories = hit.categories.iter().filter_map(|category| {
-                    if category.is_class {
-                        return None;
+                let mut categories = Vec::new();
+                let mut yielded = 0;
+                for category in hit.categories.iter().filter(|category| !category.is_class) {
+                    if yielded > 0 {
+                        categories.push(div().flex_shrink_0().child(tag_separator.clone()).into_any_element());
                     }
-                    is_categories_empty = false;
-                    Some(SharedString::new(category.name.clone()).into_any_element())
-                });
-                let categories = itertools::Itertools::intersperse_with(categories, || {
-                    div().flex_shrink_0().child(tag_separator.clone()).into_any_element()
-                });
+                    categories.push(SharedString::new(category.name.clone()).into_any_element());
+                    yielded += 1;
+                }
 
                 let downloads =
                     h_flex().gap_1().child(PandoraIcon::Download).child(format_downloads(hit.download_count));

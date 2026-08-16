@@ -13,7 +13,6 @@ bridge.workspace = true
 backtrace.workspace = true
 parking_lot.workspace = true
 directories.workspace = true
-clap.workspace = true
 native-dialog.workspace = true
 fern.workspace = true
 log.workspace = true
