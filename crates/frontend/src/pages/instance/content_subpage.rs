@@ -307,13 +307,14 @@ impl InstanceContentSubpage {
 }
 
 fn calculate_update_count(loader: Loader, version: Ustr, content: &Arc<[InstanceContentSummary]>) -> (bool, usize) {
+    let mut needs_check = false;
     let mut update_count = 0;
 
     for content in content.iter() {
         let status = content.update.status_if_matches(loader, version.as_str());
         match status {
             bridge::instance::ContentUpdateStatus::Unknown => {
-                return (true, 0);
+                needs_check = true;
             },
             bridge::instance::ContentUpdateStatus::Modrinth | bridge::instance::ContentUpdateStatus::Curseforge => {
                 update_count += 1;
@@ -322,7 +323,7 @@ fn calculate_update_count(loader: Loader, version: Ustr, content: &Arc<[Instance
         }
     }
 
-    (false, update_count)
+    (needs_check, update_count)
 }
 
 impl Render for InstanceContentSubpage {
@@ -437,7 +438,7 @@ impl Render for InstanceContentSubpage {
                         })
                     }),
             )
-            .when(!self.needs_update_check && self.update_count > 0, |this| {
+            .when(self.update_count > 0, |this| {
                 this.child(
                     Button::new("update_all")
                         .label(match self.content_type {
@@ -452,16 +453,21 @@ impl Render for InstanceContentSubpage {
                         .small()
                         .on_click(cx.listener(move |page, _, window, cx| {
                             if let Some(content) = page.content.read(cx).clone() {
-                                for summary in content.iter() {
-                                    if summary.update.can_update(page.instance_loader, page.instance_version.as_str()) {
-                                        crate::root::update_single_mod(
-                                            page.instance,
-                                            summary.id,
-                                            &page.backend_handle,
-                                            window,
-                                            cx,
-                                        );
-                                    }
+                                let ids: Vec<_> = content
+                                    .iter()
+                                    .filter(|s| {
+                                        s.update.can_update(page.instance_loader, page.instance_version.as_str())
+                                    })
+                                    .map(|s| s.id)
+                                    .collect();
+                                if !ids.is_empty() {
+                                    crate::root::update_multiple_mods(
+                                        page.instance,
+                                        ids,
+                                        &page.backend_handle,
+                                        window,
+                                        cx,
+                                    );
                                 }
                             }
                         })),
