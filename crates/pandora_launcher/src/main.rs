@@ -39,10 +39,11 @@ fn parse_args(args: Vec<OsString>) -> Cli {
         }
         #[cfg(windows)]
         if arg == *OsStr::new("--internal-set-traverse-acls") {
-            let rest: Vec<OsString> = args.collect();
+            let rest: Vec<OsString> = args.by_ref().collect();
             if !rest.is_empty() {
                 cli.internal_set_traverse_acls = Some(rest);
             }
+            break;
         }
     }
     cli
