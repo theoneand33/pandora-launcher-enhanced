@@ -29,16 +29,54 @@ pub async fn start_server(
 ) -> Result<FinishedAuthorization, ProcessAuthorizationError> {
     log::info!("Starting auth redirect server on {}", constants::SERVER_ADDRESS);
 
-    let listener = tokio::net::TcpListener::bind(constants::SERVER_ADDRESS).await?;
+    let mut listeners = Vec::new();
 
-    log::info!("Successfully started listening on {}", constants::SERVER_ADDRESS);
+    match tokio::net::TcpListener::bind(constants::SERVER_ADDRESS).await {
+        Ok(l) => {
+            log::info!("Successfully started listening on {}", constants::SERVER_ADDRESS);
+            listeners.push(l);
+        },
+        Err(e) => {
+            log::warn!("Failed to bind {}: {}", constants::SERVER_ADDRESS, e);
+        },
+    }
+
+    // On Linux, localhost often resolves to ::1 first. If we only bind 127.0.0.1,
+    // a redirect to http://localhost:3160/auth can hit ::1 and get connection
+    // refused. Bind ::1 as well when available.
+    if constants::SERVER_ADDRESS == "127.0.0.1:3160" {
+        match tokio::net::TcpListener::bind("[::1]:3160").await {
+            Ok(l) => {
+                log::info!("Successfully started listening on [::1]:3160");
+                listeners.push(l);
+            },
+            Err(e) => {
+                log::debug!("Failed to bind [::1]:3160: {}", e);
+            },
+        }
+    }
+
+    if listeners.is_empty() {
+        return Err(ProcessAuthorizationError::StartServer(Box::new(std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "failed to bind auth redirect server",
+        ))));
+    }
 
     let mut buf = vec![0_u8; 1024];
     let mut read;
 
     loop {
         log::info!("Waiting for a new connection");
-        let (mut stream, _addr) = listener.accept().await?;
+        let (mut stream, _addr) = if listeners.len() == 1 {
+            listeners[0].accept().await?
+        } else {
+            // Wait on both listeners; Linux may deliver the redirect to either 127.0.0.1 or ::1.
+            tokio::select! {
+                res = listeners[0].accept() => res?,
+                res = listeners[1].accept() => res?,
+            }
+        };
         log::info!("Got a new connection");
 
         read = 0;
@@ -76,17 +114,30 @@ pub async fn start_server(
             const NOT_FOUND_RESPONSE: &[u8] = b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
 
             if req.method != Some("GET") || req.path.is_none() {
+                log::warn!("404: unexpected method or missing path: {:?}", req.path);
                 stream.write_all(NOT_FOUND_RESPONSE).await?;
                 break;
             }
-            let path = req.path.unwrap();
+            let raw_path = req.path.unwrap();
 
-            let Ok(url) = Url::parse(&format!("{}{}", constants::REDIRECT_URL_BASE, path)) else {
+            // Browsers normally send origin-form "GET /auth?code=... HTTP/1.1".
+            // With a proxy they can send absolute-form "GET http://localhost:3160/auth?code=... HTTP/1.1".
+            let url_str = if raw_path.starts_with("http://") || raw_path.starts_with("https://") {
+                raw_path.to_string()
+            } else {
+                format!("{}{}", constants::REDIRECT_URL_BASE, raw_path)
+            };
+
+            let Ok(url) = Url::parse(&url_str) else {
+                log::warn!("400: failed to parse URL from path {:?}", raw_path);
                 stream.write_all(BAD_REQUEST_RESPONSE).await?;
                 break;
             };
 
-            if url.path() != "/auth" {
+            // Allow "/auth" and "/auth/" (some browsers or proxies normalize the slash).
+            let path_no_slash = url.path().trim_end_matches('/');
+            if path_no_slash != "/auth" {
+                log::warn!("404: unexpected path {:?} (raw {:?})", url.path(), raw_path);
                 stream.write_all(NOT_FOUND_RESPONSE).await?;
                 break;
             }
@@ -152,7 +203,7 @@ pub async fn start_server(
 }
 
 fn create_response(main: &str, secondary: &str, error: bool) -> String {
-    let status = if error { "200 OK" } else { "400 Bad Request" };
+    let status = if error { "400 Bad Request" } else { "200 OK" };
 
     let body = format!(include_str!("auth_page.html"), main, secondary);
     let body_length = body.len();
