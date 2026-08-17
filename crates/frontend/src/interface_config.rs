@@ -36,6 +36,8 @@ pub struct InterfaceConfig {
     #[serde(default, deserialize_with = "schema::try_deserialize")]
     pub quick_delete_skins: bool,
     #[serde(default, deserialize_with = "schema::try_deserialize")]
+    pub preferred_add_content_source: PreferredAddContentSource,
+    #[serde(default, deserialize_with = "schema::try_deserialize")]
     pub instance_mods_sort_key: InstanceContentSortKey,
     #[serde(default, deserialize_with = "schema::try_deserialize")]
     pub instance_mods_sort_enabled_first: bool,
@@ -83,6 +85,8 @@ pub struct InterfaceConfig {
     pub instance_subpage: InstanceSubpageType,
     #[serde(default, deserialize_with = "schema::try_deserialize")]
     pub collapse_capes_in_skins_page: bool,
+    #[serde(default, deserialize_with = "schema::try_deserialize")]
+    pub skin_list_sort_desc: bool,
     #[serde(default = "schema::default_true", deserialize_with = "schema::try_deserialize")]
     pub skin_list_show_3d: bool,
 }
@@ -166,6 +170,15 @@ impl InstanceContentSortKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PreferredAddContentSource {
+    #[default]
+    Modrinth,
+    CurseForge,
+    File,
+}
+
 fn default_modrinth_project_type() -> ModrinthProjectType {
     ModrinthProjectType::Mod
 }
@@ -186,6 +199,7 @@ impl Default for InterfaceConfig {
             quick_delete_mods: Default::default(),
             quick_delete_instance: Default::default(),
             quick_delete_skins: Default::default(),
+            preferred_add_content_source: Default::default(),
             instance_mods_sort_key: Default::default(),
             instance_mods_sort_enabled_first: Default::default(),
             instance_resourcepacks_sort_key: Default::default(),
@@ -207,6 +221,7 @@ impl Default for InterfaceConfig {
             instances_view_mode: Default::default(),
             instance_subpage: Default::default(),
             collapse_capes_in_skins_page: false,
+            skin_list_sort_desc: false,
             skin_list_show_3d: true,
         }
     }

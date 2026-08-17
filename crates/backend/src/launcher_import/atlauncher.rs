@@ -1,13 +1,9 @@
-use crate::{BackendState, account::BackendAccount, write_safe};
 use auth::{
     credentials::AccountCredentials,
     models::{TokenWithExpiry, XstsToken},
     secret::PlatformSecretStorage,
 };
-use bridge::{
-    import::ImportFromOtherLauncherJob,
-    modal_action::{ModalAction, ProgressTracker},
-};
+use bridge::{import::ImportFromOtherLauncherJob, modal_action::ModalAction};
 use chrono::DateTime;
 use log::debug;
 use schema::{
@@ -21,6 +17,8 @@ use std::{
     sync::Arc,
 };
 use uuid::Uuid;
+
+use crate::{BackendState, account::BackendAccount};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,9 +139,8 @@ async fn import_accounts_from_atlauncher(
         return None;
     }
 
-    let tracker = ProgressTracker::new("Reading accounts.json".into(), backend.send.clone());
-    modal_action.trackers.push(tracker.clone());
-    tracker.notify();
+    let tracker = modal_action.push_tracker("Reading accounts.json".into());
+    tracker.set_total(1);
 
     let accounts_path = import_job.root.join("configs/accounts.json");
     let Ok(accounts_bytes) = std::fs::read(&accounts_path) else {
@@ -162,15 +159,16 @@ async fn import_accounts_from_atlauncher(
         },
     };
 
+    tracker.set_count(1);
+
     let num_accounts = accounts_json.len();
-    tracker.set_title("Importing accounts".into());
-    tracker.add_total(num_accounts);
+    let tracker = modal_action.push_tracker("Importing accounts".into());
+    tracker.set_total(num_accounts);
 
     backend.account_info.write().modify(|accounts| {
         let mut last_account_username = None;
         for account in &accounts_json {
             tracker.add_count(1);
-            tracker.notify();
             accounts.accounts.insert(
                 account.uuid,
                 BackendAccount {
@@ -190,10 +188,8 @@ async fn import_accounts_from_atlauncher(
         accounts.selected_account = last_account_username;
     });
 
-    tracker.set_title("Importing credentials".into());
-    tracker.set_count(0);
+    let tracker = modal_action.push_tracker("Importing credentials".into());
     tracker.set_total(num_accounts);
-    tracker.notify();
 
     for account in &accounts_json {
         let mut credentials = AccountCredentials::default();
@@ -229,7 +225,6 @@ async fn import_accounts_from_atlauncher(
 
     tracker.set_count(num_accounts);
     tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Normal);
-    tracker.notify();
 
     Some(accounts_json)
 }
@@ -313,9 +308,7 @@ fn import_instances_from_atlauncher(
         return;
     }
 
-    let all_tracker = ProgressTracker::new("Importing instances".into(), backend.send.clone());
-    modal_action.trackers.push(all_tracker.clone());
-    all_tracker.notify();
+    let all_tracker = modal_action.push_tracker("Importing instances".into());
 
     let mut to_import = Vec::new();
 
@@ -351,9 +344,7 @@ fn import_instances_from_atlauncher(
 
     for to_import in to_import {
         let title = format!("Importing {}", to_import.folder.file_name().unwrap().to_string_lossy());
-        let tracker = ProgressTracker::new(title.into(), backend.send.clone());
-        modal_action.trackers.push(tracker.clone());
-        tracker.notify();
+        let tracker = modal_action.push_tracker(title.into());
 
         let Ok(configuration) = try_load_from_atlauncher(&to_import.config_path, launcher_config, accounts) else {
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
@@ -361,13 +352,11 @@ fn import_instances_from_atlauncher(
                 "Failed to load config path from atlauncher for {:?}",
                 to_import.folder.file_name().unwrap()
             );
-            tracker.notify();
             continue;
         };
 
         let Ok(configuration_bytes) = serde_json::to_vec(&configuration) else {
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
-            tracker.notify();
             continue;
         };
 
@@ -375,10 +364,9 @@ fn import_instances_from_atlauncher(
         let target_dot_minecraft = to_import.pandora_path.join(".minecraft");
 
         _ = std::fs::create_dir_all(&target_dot_minecraft);
-        _ = crate::copy_content_recursive(&to_import.folder, &target_dot_minecraft, false, &|copied, total| {
+        _ = crate::fs::copy_content_recursive(&to_import.folder, &target_dot_minecraft, false, &|copied, total| {
             tracker.set_total(total as usize);
             tracker.set_count(copied as usize);
-            tracker.notify();
         });
 
         // remove old configuration, rename icon path.
@@ -418,15 +406,12 @@ fn import_instances_from_atlauncher(
         }
 
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = write_safe(&info_path, &configuration_bytes);
+        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
 
         all_tracker.add_count(1);
-        all_tracker.notify();
 
         tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Fast);
-        tracker.notify();
     }
 
     all_tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Normal);
-    all_tracker.notify()
 }

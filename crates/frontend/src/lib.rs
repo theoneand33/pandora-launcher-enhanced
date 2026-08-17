@@ -71,7 +71,7 @@ pub const MAIN_FONT: &'static str = "Inter 24pt 24pt";
 #[cfg(not(windows))]
 pub const MAIN_FONT: &'static str = "Inter 24pt";
 
-actions!([Quit, CloseWindow, OpenSettings, Forwards, Backwards]);
+actions!([Quit, CloseWindow, OpenSettings, Forwards, Backwards, Confirm]);
 
 pub fn start(
     launcher_dir: PathBuf,
@@ -101,6 +101,8 @@ pub fn start(
 
             gpui_component::init(cx);
             InterfaceConfig::init(cx, launcher_dir.join("interface.json").into());
+
+            t::set_lang(&InterfaceConfig::get(cx).language);
 
             gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
 
@@ -176,6 +178,7 @@ pub fn start(
                 KeyBinding::new("secondary-,", OpenSettings, None),
                 KeyBinding::new("secondary-[", Backwards, None),
                 KeyBinding::new("secondary-]", Forwards, None),
+                KeyBinding::new("enter", Confirm, None),
             ]);
 
             cx.on_action(|_: &Quit, cx| {
@@ -248,13 +251,13 @@ pub fn open_main_window(data: &DataEntities, cx: &mut App) -> AnyWindowHandle {
                     appears_transparent: use_custom_titlebar,
                     ..Default::default()
                 }),
+                app_owns_titlebar_drag: use_custom_titlebar,
                 window_bounds,
                 window_decorations: Some(if use_custom_titlebar {
                     WindowDecorations::Client
                 } else {
                     WindowDecorations::Server
                 }),
-                app_owns_titlebar_drag: use_custom_titlebar,
                 ..Default::default()
             },
             |window, cx| {
@@ -351,14 +354,13 @@ pub(crate) fn get_unique_instance_name(original_name: &str, existing_names: &[&s
     if !existing_names.iter().any(|n| *n == original_name) {
         return original_name.to_string();
     }
-    let mut i = 1;
-    loop {
+    for i in 1..100 {
         let numbered = format!("{original_name} ({i})");
         if !existing_names.iter().any(|n| *n == &numbered) {
             return numbered;
         }
-        i += 1;
     }
+    String::new()
 }
 
 #[inline]

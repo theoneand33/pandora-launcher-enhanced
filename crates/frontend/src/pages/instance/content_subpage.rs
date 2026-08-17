@@ -11,10 +11,11 @@ use bridge::{
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, IndexPath, Sizable, WindowExt,
-    button::{Button, ButtonVariants},
+    button::{Button, ButtonVariants, DropdownButton},
     h_flex,
     input::SelectAll,
     list::{List, ListState},
+    menu::PopupMenuItem,
     notification::{Notification, NotificationType},
     select::{Select, SelectEvent, SelectState},
     switch::Switch,
@@ -34,7 +35,7 @@ use crate::{
         named_dropdown::{NamedDropdown, NamedDropdownItem},
     },
     entity::instance::{ContentStates, InstanceEntry},
-    interface_config::{InstanceContentSortKey, InterfaceConfig},
+    interface_config::{InstanceContentSortKey, InterfaceConfig, PreferredAddContentSource},
     root,
     ui::PageType,
 };
@@ -50,8 +51,10 @@ pub struct InstanceContentSubpage {
     content_list: Entity<ListState<ContentListDelegate>>,
     content: Entity<Option<Arc<[InstanceContentSummary]>>>,
     sort_dropdown: Entity<SelectState<NamedDropdown<InstanceContentSortKey>>>,
+
     needs_update_check: bool,
     update_count: usize,
+
     _add_from_file_task: Option<Task<()>>,
 }
 
@@ -190,9 +193,9 @@ impl InstanceContentSubpage {
             enabled_first,
         );
 
-        let (needs_update_check, update_count) = if let Some(new_content) = content.read(cx).clone() {
-            content_list_delegate.set_content(&new_content);
-            calculate_update_count(instance_loader, instance_version, &new_content)
+        let (needs_update_check, update_count) = if let Some(new_content) = content.read(cx) {
+            content_list_delegate.set_content(new_content);
+            calculate_update_count(instance_loader, instance_version, new_content)
         } else {
             (false, 0)
         };
@@ -214,9 +217,9 @@ impl InstanceContentSubpage {
             cx.new(move |cx| ListState::new(content_list_delegate, window, cx).selectable(false).searchable(true));
 
         cx.observe(&content, |page, content, cx| {
-            if let Some(new_content) = content.read(cx).clone() {
+            if let Some(new_content) = content.read(cx) {
                 let (needs_update_check, update_count) =
-                    calculate_update_count(page.instance_loader, page.instance_version, &new_content);
+                    calculate_update_count(page.instance_loader, page.instance_version, new_content);
                 page.needs_update_check = needs_update_check;
                 page.update_count = update_count;
             }
@@ -328,17 +331,21 @@ fn calculate_update_count(loader: Loader, version: Ustr, content: &Arc<[Instance
 
 impl Render for InstanceContentSubpage {
     fn render(&mut self, _window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
-        let theme = cx.theme();
+        let (source, sort_enabled_first) = {
+            let config = InterfaceConfig::get(cx);
+            (config.preferred_add_content_source, self.content_type.sort_enabled_first(config))
+        };
 
         self.content_states.observe(self.content_type.content_folder());
 
+        let self_entity = cx.entity();
         let header = h_flex()
             .gap_3()
             .mb_1()
             .ml_1()
             .child(div().text_lg().child(self.content_type.title()))
             .child(
-                Button::new("update")
+                Button::new("update_check")
                     .label(t::instance::content::update::check::label(false))
                     .success()
                     .compact()
@@ -352,90 +359,30 @@ impl Render for InstanceContentSubpage {
                     }),
             )
             .child(
-                Button::new("addmr")
-                    .label(t::instance::content::install::from_modrinth())
+                DropdownButton::new("addcontent")
                     .success()
                     .compact()
                     .small()
-                    .on_click({
-                        let instance_name = self.instance_name.clone();
-                        let project_type = self.content_type.modrinth_project_type();
-                        move |_, window, cx| {
-                            let page = crate::ui::PageType::Modrinth {
-                                installing_for: Some(instance_name.clone()),
-                            };
-                            InterfaceConfig::get_mut(cx).modrinth_page_project_type = project_type;
-                            let path = &[
-                                PageType::Instances,
-                                PageType::InstancePage {
-                                    name: instance_name.clone(),
-                                },
-                            ];
-                            root::switch_page(page, path, window, cx);
-                        }
-                    }),
-            )
-            .child(
-                Button::new("addcf")
-                    .label(t::instance::content::install::from_curseforge())
-                    .success()
-                    .compact()
-                    .small()
-                    .on_click({
-                        let instance_name = self.instance_name.clone();
-                        let class_id = self.content_type.curseforge_class_id();
-                        move |_, window, cx| {
-                            let page = crate::ui::PageType::Curseforge {
-                                installing_for: Some(instance_name.clone()),
-                            };
-                            InterfaceConfig::get_mut(cx).curseforge_page_class_id = class_id;
-                            let path = &[
-                                PageType::Instances,
-                                PageType::InstancePage {
-                                    name: instance_name.clone(),
-                                },
-                            ];
-                            root::switch_page(page, path, window, cx);
-                        }
-                    }),
-            )
-            .child(
-                Button::new("addfile")
-                    .label(t::instance::content::install::from_file())
-                    .success()
-                    .compact()
-                    .small()
-                    .on_click({
-                        cx.listener(move |this, _, window, cx| {
-                            let receiver = cx.prompt_for_paths(PathPromptOptions {
-                                files: true,
-                                directories: false,
-                                multiple: true,
-                                prompt: Some(this.content_type.install_select().into()),
-                            });
+                    .button(match source {
+                        PreferredAddContentSource::Modrinth => Button::new("addmr")
+                            .label(t::instance::content::install::from_modrinth())
+                            .on_click(cx.listener(InstanceContentSubpage::add_from_modrinth)),
+                        PreferredAddContentSource::CurseForge => Button::new("addcf")
+                            .label(t::instance::content::install::from_curseforge())
+                            .on_click(cx.listener(InstanceContentSubpage::add_from_curseforge)),
+                        PreferredAddContentSource::File => Button::new("addfile")
+                            .label(t::instance::content::install::from_file())
+                            .on_click(cx.listener(InstanceContentSubpage::add_from_file)),
+                    })
+                    .dropdown_menu(move |this, window, _| {
+                        let mr = PopupMenuItem::new(t::instance::content::install::from_modrinth())
+                            .on_click(window.listener_for(&self_entity, InstanceContentSubpage::add_from_modrinth));
+                        let cf = PopupMenuItem::new(t::instance::content::install::from_curseforge())
+                            .on_click(window.listener_for(&self_entity, InstanceContentSubpage::add_from_curseforge));
+                        let file = PopupMenuItem::new(t::instance::content::install::from_file())
+                            .on_click(window.listener_for(&self_entity, InstanceContentSubpage::add_from_file));
 
-                            let entity = cx.entity();
-                            let add_from_file_task = window.spawn(cx, async move |cx| {
-                                let Ok(result) = receiver.await else {
-                                    return;
-                                };
-                                _ = cx.update_window_entity(&entity, move |this, window, cx| match result {
-                                    Ok(Some(paths)) => {
-                                        this.install_paths(&paths, window, cx);
-                                    },
-                                    Ok(None) => {},
-                                    Err(error) => {
-                                        let error = format!("{}", error);
-                                        let notification = Notification::new()
-                                            .autohide(false)
-                                            .with_type(NotificationType::Error)
-                                            .title(error);
-                                        window.push_notification(notification, cx);
-                                    },
-                                });
-                            });
-                            this._add_from_file_task = Some(add_from_file_task);
-                        })
+                        this.item(mr).item(cf).item(file)
                     }),
             )
             .when(self.update_count > 0, |this| {
@@ -486,37 +433,36 @@ impl Render for InstanceContentSubpage {
                 h_flex()
                     .gap_1()
                     .child(div().text_sm().child(t::instance::content::enabled_first()))
-                    .child(
-                        Switch::new("enabled_first")
-                            .checked(self.content_type.sort_enabled_first(InterfaceConfig::get(cx)))
-                            .on_click(cx.listener(|this, checked, _, cx| {
-                                let config = InterfaceConfig::get_mut(cx);
-                                let enabled_first = *checked;
+                    .child(Switch::new("enabled_first").checked(sort_enabled_first).on_click(cx.listener(
+                        |this, checked, _, cx| {
+                            let config = InterfaceConfig::get_mut(cx);
+                            let enabled_first = *checked;
 
-                                if this.content_type.sort_enabled_first(config) == enabled_first {
-                                    return;
+                            if this.content_type.sort_enabled_first(config) == enabled_first {
+                                return;
+                            }
+
+                            let sort_key = this.content_type.sort_key(config);
+                            this.content_type.set_sort_enabled_first(config, enabled_first);
+
+                            let content = this.content.read(cx).clone();
+                            let content_list = this.content_list.clone();
+                            cx.update_entity(&content_list, |list, cx| {
+                                list.delegate_mut().set_sort_options(sort_key, enabled_first);
+                                if let Some(content) = &content {
+                                    list.delegate_mut().set_content(content);
                                 }
-
-                                let sort_key = this.content_type.sort_key(config);
-                                this.content_type.set_sort_enabled_first(config, enabled_first);
-
-                                let content = this.content.read(cx).clone();
-                                let content_list = this.content_list.clone();
-                                cx.update_entity(&content_list, |list, cx| {
-                                    list.delegate_mut().set_sort_options(sort_key, enabled_first);
-                                    if let Some(content) = &content {
-                                        list.delegate_mut().set_content(content);
-                                    }
-                                    cx.notify();
-                                });
                                 cx.notify();
-                            })),
-                    ),
+                            });
+                            cx.notify();
+                        },
+                    ))),
             )
             .absolute()
             .top(px(4.0))
             .right(px(12.0));
 
+        let theme = cx.theme();
         v_flex().p_4().size_full().child(header).child(
             div()
                 .id("content-list-area")
@@ -551,5 +497,78 @@ impl Render for InstanceContentSubpage {
                     }
                 }),
         )
+    }
+}
+
+impl InstanceContentSubpage {
+    fn add_from_modrinth(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<'_, InstanceContentSubpage>) {
+        let config = InterfaceConfig::get_mut(cx);
+        config.modrinth_page_project_type = self.content_type.modrinth_project_type();
+        config.preferred_add_content_source = PreferredAddContentSource::Modrinth;
+
+        let path = &[
+            PageType::Instances,
+            PageType::InstancePage {
+                name: self.instance_name.clone(),
+            },
+        ];
+        let page = crate::ui::PageType::Modrinth {
+            installing_for: Some(self.instance_name.clone()),
+        };
+        root::switch_page(page, path, window, cx);
+    }
+
+    fn add_from_curseforge(
+        &mut self,
+        _: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, InstanceContentSubpage>,
+    ) {
+        let config = InterfaceConfig::get_mut(cx);
+        config.curseforge_page_class_id = self.content_type.curseforge_class_id();
+        config.preferred_add_content_source = PreferredAddContentSource::CurseForge;
+
+        let path = &[
+            PageType::Instances,
+            PageType::InstancePage {
+                name: self.instance_name.clone(),
+            },
+        ];
+        let page = crate::ui::PageType::Curseforge {
+            installing_for: Some(self.instance_name.clone()),
+        };
+        root::switch_page(page, path, window, cx);
+    }
+
+    fn add_from_file(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<'_, InstanceContentSubpage>) {
+        let config = InterfaceConfig::get_mut(cx);
+        config.preferred_add_content_source = PreferredAddContentSource::File;
+
+        let receiver = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some(self.content_type.install_select().into()),
+        });
+
+        let entity = cx.entity();
+        let add_from_file_task = window.spawn(cx, async move |cx| {
+            let Ok(result) = receiver.await else {
+                return;
+            };
+            _ = cx.update_window_entity(&entity, move |this, window, cx| match result {
+                Ok(Some(paths)) => {
+                    this.install_paths(&paths, window, cx);
+                },
+                Ok(None) => {},
+                Err(error) => {
+                    let error = format!("{}", error);
+                    let notification =
+                        Notification::new().autohide(false).with_type(NotificationType::Error).title(error);
+                    window.push_notification(notification, cx);
+                },
+            });
+        });
+        self._add_from_file_task = Some(add_from_file_task);
     }
 }

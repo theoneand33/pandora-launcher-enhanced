@@ -34,7 +34,8 @@ use thiserror::Error;
 use ustr::Ustr;
 
 use crate::{
-    BackendState, BackendStateFileWatching, FolderChanges, IoOrSerializationError, WatchTarget,
+    BackendState, BackendStateFileWatching, WatchTarget,
+    fs::{FolderChanges, IoOrSerializationError},
     id_slab::{GetId, Id},
     launcher_import,
     mod_metadata::{ContentUpdateAction, ContentUpdateKey, ModMetadataManager},
@@ -448,7 +449,7 @@ impl Instance {
             }
 
             let bytes = nbt::encode::write_named(&result);
-            if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
+            if let Err(err) = crate::fs::write_safe(&server_dat_path, &bytes) {
                 log::error!("Error while writing server.dat: {err:?}");
                 backend_clone.send.send_error(format!("Error while writing server.dat: {err}"));
             }
@@ -504,7 +505,7 @@ impl Instance {
             }
 
             let bytes = nbt::encode::write_named(&result);
-            if let Err(err) = crate::write_safe(&server_dat_path, &bytes) {
+            if let Err(err) = crate::fs::write_safe(&server_dat_path, &bytes) {
                 log::error!("error while writing server.dat: {err:?}");
                 backend_clone.send.send_error(format!("error while writing server.dat: {err}"));
             }
@@ -991,7 +992,7 @@ impl Instance {
                 let mut used_aux_paths = FxHashSet::default();
                 if let Some(summaries) = &state.summaries {
                     for summary in summaries.iter() {
-                        let Some(aux_path) = crate::pandora_aux_path_for_content(&summary) else {
+                        let Some(aux_path) = crate::fs::pandora_aux_path_for_content(&summary) else {
                             continue;
                         };
                         if paths.contains(aux_path.as_path()) {
@@ -1377,8 +1378,8 @@ fn try_load_resourcepack_folder(
 }
 
 fn read_disabled_children_for(summary: &ContentSummary, path: &Path) -> Option<AuxDisabledChildren> {
-    let aux_path = crate::pandora_aux_path(&summary.id, &summary.name, path)?;
-    let aux: AuxiliaryContentMeta = crate::read_json(&aux_path).ok()?;
+    let aux_path = crate::fs::pandora_aux_path(&summary.id, &summary.name, path)?;
+    let aux: AuxiliaryContentMeta = crate::fs::read_json(&aux_path).ok()?;
     Some(aux.disabled_children)
 }
 

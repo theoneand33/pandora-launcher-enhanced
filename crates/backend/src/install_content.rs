@@ -193,7 +193,7 @@ impl BackendState {
         let mut files = match result {
             Ok(files) => files,
             Err(error) => {
-                modal_action.set_error_message(Arc::from(format!("{}", error).as_str()));
+                modal_action.set_finished_with_error(Arc::from(format!("{}", error).as_str()));
                 return;
             },
         };
@@ -318,7 +318,7 @@ impl BackendState {
                 // Check if this is a reinstall (file already exists)
                 let is_reinstall = target_path.exists();
 
-                match crate::hard_link_or_copy(&install.from, &target_path) {
+                match crate::fs::fastcopy(&install.from, &target_path, true, true) {
                     Ok(()) => {
                         // Mirror the install into the backup mods folder so it persists past stop.
                         if let Some(original_mods_dir) = &original_mods_dir
@@ -328,7 +328,7 @@ impl BackendState {
                             if let Some(parent) = backup_target.parent() {
                                 let _ = std::fs::create_dir_all(parent);
                             }
-                            if let Err(err) = crate::hard_link_or_copy(&install.from, &backup_target) {
+                            if let Err(err) = crate::fs::fastcopy(&install.from, &backup_target, true, true) {
                                 log::error!("Failed to mirror install into {:?}: {err}", backup_target);
                             } else {
                                 installed_into_frozen_backup = true;
@@ -355,7 +355,7 @@ impl BackendState {
                     Err(err) => {
                         log::error!("Failed to install content to {:?}: {err}", target_path);
                         let message = format!("Failed to install content to {}: {err}", target_path.display());
-                        modal_action.set_error_message(Arc::from(message.as_str()));
+                        modal_action.set_finished_with_error(Arc::from(message.as_str()));
                     },
                 }
             }
@@ -408,9 +408,8 @@ impl BackendState {
                 let permit = self.content_install_semaphore.acquire().await;
 
                 let title = format!("Fetching versions for Modrinth project {}", project_id);
-                let tracker = ProgressTracker::new(title.into(), self.send.clone());
+                let tracker = modal_action.push_tracker(title.into());
                 tracker.add_total(1);
-                modal_action.trackers.push(tracker.clone());
 
                 let mut is_wrong_version = false;
                 let mut is_wrong_loader = false;
@@ -629,9 +628,8 @@ impl BackendState {
                 let permit = self.content_install_semaphore.acquire().await;
 
                 let title = format!("Fetching versions for Curseforge project {}", project_id);
-                let tracker = ProgressTracker::new(title.into(), self.send.clone());
+                let tracker = modal_action.push_tracker(title.into());
                 tracker.add_total(1);
-                modal_action.trackers.push(tracker.clone());
 
                 let mod_loader_type = match content.loader {
                     Loader::Vanilla => None,
@@ -868,16 +866,13 @@ impl BackendState {
             },
             ContentDownload::File { path: ref copy_path } => {
                 let title = format!("Copying {}", copy_path.file_name().unwrap().to_string_lossy());
-                let tracker = ProgressTracker::new(title.into(), self.send.clone());
-                modal_action.trackers.push(tracker.clone());
+                let tracker = modal_action.push_tracker(title.into());
 
                 tracker.set_total(3);
-                tracker.notify();
 
                 let data = tokio::fs::read(copy_path).await?;
 
                 tracker.set_count(1);
-                tracker.notify();
 
                 let mut hasher = Sha1::new();
                 hasher.update(&data);
@@ -908,10 +903,9 @@ impl BackendState {
                     let tracker = tracker.clone();
                     let extension = extension.map(OsString::from);
                     tokio::task::spawn_blocking(move || {
-                        let valid_hash_on_disk = crate::check_sha1_hash(&path, hash).unwrap_or(false);
+                        let valid_hash_on_disk = crate::fs::check_sha1_hash(&path, hash).unwrap_or(false);
 
                         tracker.set_count(2);
-                        tracker.notify();
 
                         if !valid_hash_on_disk {
                             std::fs::write(&path, &data)?;
@@ -924,7 +918,6 @@ impl BackendState {
                 };
 
                 tracker.set_count(3);
-                tracker.notify();
 
                 let install_path = match &content_file.path {
                     ContentInstallPath::Raw(path) => Some(path.clone()),
@@ -985,7 +978,7 @@ impl BackendState {
             return;
         }
 
-        let Some(old_aux_path) = crate::pandora_aux_path(&old_summary.id, &old_summary.name, &replace) else {
+        let Some(old_aux_path) = crate::fs::pandora_aux_path(&old_summary.id, &old_summary.name, &replace) else {
             return;
         };
 
@@ -998,7 +991,7 @@ impl BackendState {
             return;
         }
 
-        let Some(new_aux_path) = crate::pandora_aux_path(&new_summary.id, &new_summary.name, new_path) else {
+        let Some(new_aux_path) = crate::fs::pandora_aux_path(&new_summary.id, &new_summary.name, new_path) else {
             _ = std::fs::remove_file(&old_aux_path);
             return;
         };
@@ -1009,7 +1002,7 @@ impl BackendState {
 
         // Clear disabled_children when reinstalling a modpack to restore deleted mods
         if new_summary.extra.is_modpack() {
-            if let Ok(aux_data) = crate::read_json::<AuxiliaryContentMeta>(&new_aux_path) {
+            if let Ok(aux_data) = crate::fs::read_json::<AuxiliaryContentMeta>(&new_aux_path) {
                 let mut aux = aux_data;
                 // Clear all disabled_children to restore any deleted mods
                 if !aux.disabled_children.deleted_filenames.is_empty()
@@ -1022,7 +1015,7 @@ impl BackendState {
                 {
                     aux.disabled_children = Default::default();
                     if let Ok(bytes) = serde_json::to_vec(&aux) {
-                        _ = crate::write_safe(&new_aux_path, &bytes);
+                        _ = crate::fs::write_safe(&new_aux_path, &bytes);
                     }
                 }
             }
@@ -1035,7 +1028,7 @@ impl BackendState {
             return;
         }
 
-        let Some(aux_path) = crate::pandora_aux_path(&mod_summary.id, &mod_summary.name, target_path) else {
+        let Some(aux_path) = crate::fs::pandora_aux_path(&mod_summary.id, &mod_summary.name, target_path) else {
             return;
         };
 
@@ -1044,7 +1037,7 @@ impl BackendState {
         }
 
         // Read and clear disabled_children
-        if let Ok(aux_data) = crate::read_json::<AuxiliaryContentMeta>(&aux_path) {
+        if let Ok(aux_data) = crate::fs::read_json::<AuxiliaryContentMeta>(&aux_path) {
             let mut aux = aux_data;
             // Clear all disabled_children to restore any deleted mods
             if !aux.disabled_children.deleted_filenames.is_empty()
@@ -1058,7 +1051,7 @@ impl BackendState {
                 log::info!("Clearing disabled_children for modpack reinstall at {:?}", target_path);
                 aux.disabled_children = Default::default();
                 if let Ok(bytes) = serde_json::to_vec(&aux) {
-                    _ = crate::write_safe(&aux_path, &bytes);
+                    _ = crate::fs::write_safe(&aux_path, &bytes);
                 }
             }
         }
@@ -1250,15 +1243,13 @@ impl BackendState {
                 .map(|s| s.to_string_lossy())
                 .unwrap_or(std::borrow::Cow::Borrowed("???"))
         );
-        let tracker = ProgressTracker::new(title.into(), self.send.clone());
-        modal_action.trackers.push(tracker.clone());
+        let tracker = modal_action.push_tracker(title.into());
 
         tracker.set_total(size);
-        tracker.notify();
 
         let valid_hash_on_disk = {
             let path = path.clone();
-            tokio::task::spawn_blocking(move || crate::check_sha1_hash(&path, sha1).unwrap_or(false))
+            tokio::task::spawn_blocking(move || crate::fs::check_sha1_hash(&path, sha1).unwrap_or(false))
                 .await
                 .unwrap()
         };
@@ -1266,7 +1257,6 @@ impl BackendState {
         if valid_hash_on_disk {
             tracker.set_count(size);
             tracker.set_finished(ProgressTrackerFinishType::Normal);
-            tracker.notify();
             let summary = self.mod_metadata_manager.get_path(&path);
             return Ok((path, sha1, summary));
         }
@@ -1295,7 +1285,6 @@ impl BackendState {
 
             total_bytes += item.len();
             tracker.add_count(item.len());
-            tracker.notify();
 
             hasher.write_all(&item)?;
             file.write_all(&item)?;

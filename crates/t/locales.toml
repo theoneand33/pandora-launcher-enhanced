@@ -6,7 +6,6 @@ hu = "Magyar"
 sv = "Svenska"
 ru = "Русский"
 fr = "Français"
-
 [modrinth.name]
 en = "Modrinth"
 pl = "Modrinth"
@@ -15,7 +14,6 @@ hu = "Modrinth"
 sv = "Modrinth"
 ru = "Modrinth"
 fr = "Modrinth"
-
 [modrinth.category.fabric]
 en = "Fabric"
 pl = "Fabric"
@@ -613,6 +611,7 @@ sv_short = "Generering"
 ru = "Генерация мира"
 ru_short = "Генерация"
 fr = "Génération du monde"
+fr_short = "Génération"
 [modrinth.category.multiplayer]
 en = "Multiplayer"
 pl = "Gra wieloosobowa"
@@ -765,7 +764,6 @@ hu = "512x vagy nagyobb"
 sv = "512x eller högre"
 ru = "512x или выше"
 fr = "512x ou plus"
-
 [modrinth.sort.relevance]
 en = "Relevance"
 pl = "Trafność"
@@ -806,7 +804,6 @@ hu = "Frissítve"
 sv = "Uppdaterat"
 ru = "Недавно обновл."
 fr = "Mise à jour"
-
 [modrinth.environment.client_and_server]
 en = "Client and Server"
 pl = "Klient i serwer"
@@ -863,7 +860,6 @@ hu = "Ismeretlen környezet"
 sv = "Okänd miljö"
 ru = "Неизвестная среда"
 fr = "Environnement inconnu"
-
 [modrinth.versions.alpha]
 en = "${name: &str} (Alpha)"
 pl = "${name: &str} (Alpha)"
@@ -880,7 +876,6 @@ hu = "${name: &str} (Beta)"
 sv = "${name: &str} (Beta)"
 ru = "${name: &str} (бета)"
 fr = "${name: &str} (Beta)"
-
 [curseforge.name]
 en = "Curseforge"
 pl = "Curseforge"
@@ -889,7 +884,6 @@ hu = "Curseforge"
 sv = "Curseforge"
 ru = "Curseforge"
 fr = "Curseforge"
-
 [curseforge.sort.popularity]
 en = "Popularity"
 pl = "Popularność"
@@ -930,7 +924,6 @@ hu = "Készítő"
 sv = "Skapare"
 ru = "По автору"
 fr = "Auteur"
-
 [common.app_name]
 en = "Pandora"
 pl = "Pandora"
@@ -1110,7 +1103,6 @@ hu = "MiB"
 sv = "MiB"
 ru = "МиБ"
 fr = "MiB"
-
 [file_system.open_folder.error]
 en = "Unable to open folder: ${err: std::io::Error}"
 pl = "Nie można otworzyć folderu: ${err: std::io::Error}"
@@ -1127,7 +1119,6 @@ hu = "Nem sikerült megnyitni a mappát: nem egy mappa"
 sv = "Kunde ej öppna foldern: inte en katalog"
 ru = "Не удалось открыть папку: не является директорией"
 fr = "Impossible d'ouvrir le dossier : ce n'est pas un répertoire"
-
 [system.backend_shutdown]
 en = "Backend has abruptly shutdown"
 pl = "Proces pomocniczy został nagle zakończony"
@@ -1168,7 +1159,6 @@ hu = "Csatlakozz a Discord-szerverhez"
 sv = "Gå med i Discord-servern"
 ru = "Присоединиться к Discord"
 fr = "Rejoins le serveur Discord"
-
 [system.update.available]
 en = "Update Available"
 de = "Update verfügbar"
@@ -1249,7 +1239,6 @@ hu = "Nem sikerült a frissítés telepítése"
 sv = "Kunde ej installera uppdateringen"
 ru = "Не удалось установить обновление"
 fr = "Impossible d'installer la mise à jour"
-
 [account.title]
 en = "Accounts"
 pl = "Konta"
@@ -1338,7 +1327,6 @@ hu = "Hiba történt a fiók hozzáadásakor"
 sv = "Kunde ej lägga till konto"
 ru = "Ошибка при добавлении учётной записи"
 fr = "Erreur lors de l'ajout du compte"
-
 [instance.title]
 en = "Instances"
 pl = "Instancje"
@@ -2005,7 +1993,6 @@ hu = "OpenAL könyvtár választása"
 sv = "Välj OpenAL Bibliotek"
 ru = "Выбрать библиотеку OpenAL"
 fr = "Sélectionner la bibliothèque OpenAL"
-
 [instance.security.label]
 en = "Security"
 pl = "Bezpieczeństwo"
@@ -2036,7 +2023,6 @@ pl = "Nie można uruchomić w piaskownicy: brak bwrap oraz xdg-dbus-proxy"
 hu = "Nem lehet izolálni: hiányzó bwrap és xdg-dbus-proxy parancsok"
 ru = "Невозможно использовать песочницу: отсутствуют команды bwrap и xdg-dbus-proxy"
 fr = "Impossible de lancer le mode sandbox : les commandes « bwrap » et « xdg-dbus-proxy » sont manquantes"
-
 [instance.linux.label]
 en = "Linux Performance"
 pl = "Wydajność w systemie Linux"
@@ -2077,7 +2063,6 @@ hu = "GL-Thread-Optimizációk kikapcsolása"
 sv = "Inaktivera GL-trådade optimeringar"
 ru = "Отключить потоковые оптимизации GL"
 fr = "Désactiver les optimisations GL par threads"
-
 [instance.delete_dialog.title]
 en = "Delete Instance: ${name: &str}"
 pl = "Usuń instancję: ${name: &str}"
@@ -2118,7 +2103,6 @@ hu = "Ez örökre törölni fogja a(z) '${name: &str}' példányt és a hozzá t
 sv = "Detta kommer att permanent radera instansen med namn: '${name: &str}' och tillhörande sparade världar, resurspaket, mods, konfigurationsfiler och mer. Dessa filer kommer inte att kunna återställas"
 ru = "Это навсегда удалит экземпляр \"${name: &str}\" и связанные с ним сохранения, ресурспаки, моды, конфигурационные файлы и другое. Эти файлы невозможно будет восстановить."
 fr = "Cette opération supprimera définitivement l'instance « ${name: &str} » ainsi que les sauvegardes, packs de ressources, mods, fichiers de configuration et autres éléments associés. Ces fichiers ne pourront pas être récupérés."
-
 [instance.logs.title]
 en = "Logs"
 pl = "Logi"
@@ -2207,7 +2191,6 @@ hu = "Hiba a naplófájl feltöltésekor"
 sv = "Fel vid uppladdninga var loggar"
 ru = "Ошибка отправки логов"
 fr = "Erreur lors du téléchargement du fichier journal"
-
 [instance.content.title]
 en = "Content"
 pl = "Zawartość"
@@ -2455,7 +2438,6 @@ sv = "Sortera efter"
 ru = "Сортировка"
 fr = "Trier par"
 [instance.content.downloads.b]
-# Billion
 en = "${num: f64}B Downloads"
 pl = "${num: f64} mld pobrań"
 de = "${num: f64}Mrd. Downloads"
@@ -2464,7 +2446,6 @@ sv = "${num: f64}md Nedladdningar"
 ru = "${num: f64} млрд загрузок"
 fr = "${num: f64} Md téléchargements"
 [instance.content.downloads.m]
-# Million
 en = "${num: f64}M Downloads"
 pl = "${num: f64} mln pobrań"
 de = "${num: f64}Mil. Downloads"
@@ -2473,7 +2454,6 @@ sv = "${num: f64}mn Nedladdningar"
 ru = "${num: f64} млн загрузок"
 fr = "${num: f64} millions de téléchargements"
 [instance.content.downloads.k]
-# Thousand
 en = "${num: f64}K Downloads"
 pl = "${num: f64} tyś. pobrań"
 de = "${num: f64}Tsd. Downloads"
@@ -2795,6 +2775,7 @@ sv_short = "Uppdateringskontroll"
 ru = "Проверить обновления"
 ru_short = "Проверить обновления"
 fr = "Vérifier les mises à jour"
+fr_short = "Vérification des mises à jour"
 [instance.content.update.check.title]
 en = "Checking for updates"
 pl = "Sprawdzanie aktualizacji"
@@ -2873,14 +2854,12 @@ de = "Alle aktualisieren"
 hu = "Összes frissítése"
 sv = "Uppdatera alla"
 ru = "Обновить всё"
-
 [instance.content.update_all_mods]
 en = "Update all mods (${count: usize})"
 [instance.content.update_all_resourcepacks]
 en = "Update all resourcepacks (${count: usize})"
 [instance.content.update_all_shaders]
 en = "Update all shaders (${count: usize})"
-
 [instance.content.update.error]
 en = "Error updating mod"
 pl = "Błąd aktualizowania moda"
@@ -2897,7 +2876,6 @@ hu = "Telepítés egyedileg - nem lehet autómatikusan frissíteni"
 sv = "Installera manuellt - kan inte automatiskt uppdatera"
 ru = "Установлено вручную - автоматическое обновление невозможно"
 fr = "Installé manuellement - ne peut pas être mis à jour automatiquement"
-
 [instance.content.sort_key.name]
 en = "Name"
 pl = "Nazwa"
@@ -2928,7 +2906,6 @@ pl = "Rozmiar pliku"
 hu = "Fájlméret"
 ru = "Размер файла"
 fr = "Taille du fichier"
-
 [instance.content.blocked]
 en = "Blocked"
 de = "Blockiert"
@@ -3035,7 +3012,6 @@ pl = "Wybierz pusty katalog"
 hu = "Üres mappa választása"
 ru = "Выберите пустую папку"
 fr = "Sélectionnez un répertoire vide"
-
 [instance.already_running.title]
 en = "Instance already running"
 pl = "Instancja jest już uruchomiona"
@@ -3060,7 +3036,6 @@ pl = "Uruchom mimo to"
 hu = "Indítsd el ígyis"
 ru = "Всё равно запустить"
 fr = "Démarrer quand même"
-
 [instance.sync.label]
 en = "Syncing"
 pl = "Synchronizacja"
@@ -3324,7 +3299,6 @@ hu = "Litematic (schematic) mappájának szinkronizálása"
 sv = "Synka Litematic (schematic) folder"
 ru = "Синхронизировать папку Litematic (schematic)"
 fr = "Synchroniser le dossier « Litematic » (schémas)"
-
 [instance.sync.custom_placeholder]
 en = "e.g. kubejs or config/custom.toml"
 pl = "np. kubejs lub config/custom.toml"
@@ -3333,7 +3307,6 @@ hu = "pl. kubejs vagy config/custom.toml"
 sv = "t.ex. kubejs eller config/custom.toml"
 ru = "например kubejs или config/custom.toml"
 fr = "p. ex. kubejs ou config/custom.toml"
-
 [instance.sync.custom_hint]
 en = "Folder is symlinked (all instances share one copy). File copies newest version when you launch."
 pl = "Folder jest dowiązaniem symbolicznym (wszystkie instancje dzielą jedną kopię). Plik kopiuje najnowszą wersję przy uruchomieniu."
@@ -3342,7 +3315,6 @@ hu = "A mappa szimlinkelve van (minden példány egy példányt használ). A fá
 sv = "Mappen är symlänkad (alla instanser delar en kopia). Filen kopierar nyaste versionen vid start."
 ru = "Папка создаёт симлинк (один экземпляр для всех). Файл копирует новейшую версию при запуске."
 fr = "Le dossier est lié (toutes les instances partagent une copie). Le fichier copie la version la plus récente au lancement."
-
 [instance.group.label]
 en = "Group"
 pl = "Grupa"
@@ -3351,7 +3323,6 @@ hu = "Csoport"
 sv = "Grupp"
 ru = "Группа"
 fr = "Groupe"
-
 [instance.group.all]
 en = "All Groups"
 pl = "Wszystkie grupy"
@@ -3360,7 +3331,6 @@ hu = "Minden csoport"
 sv = "Alla grupper"
 ru = "Все группы"
 fr = "Tous les groupes"
-
 [instance.group.ungrouped]
 en = "Ungrouped"
 pl = "Bez grupy"
@@ -3369,7 +3339,6 @@ hu = "Csoport nélküli"
 sv = "Ogrupperad"
 ru = "Без группы"
 fr = "Sans groupe"
-
 [instance.group.placeholder]
 en = "e.g. Favorites or modpacks"
 pl = "np. Ulubione lub paczki modów"
@@ -3378,7 +3347,6 @@ hu = "pl. Kedvencek vagy modpackok"
 sv = "t.ex. Favoriter eller modpacks"
 ru = "например Избранное или сборки"
 fr = "p. ex. Favoris ou modpacks"
-
 [settings.title]
 en = "Settings"
 pl = "Ustawienia"
@@ -3439,7 +3407,6 @@ hu = "Téma repository megnyitása"
 sv = "Öppna tema git-repo"
 ru = "Открыть онлайн-репозиторий с темами"
 fr = "Accéder au référentiel de thèmes"
-
 [settings.delete.title]
 en = "Deletion"
 pl = "Usuwanie"
@@ -3620,7 +3587,6 @@ de = "Änderungen während des Betriebs erlauben"
 hu = "Módosítás engedélyezése futás közben"
 sv = "Tillåt ändring medan spelet körs"
 ru = "Разрешить изменения во время работы"
-
 [settings.update.title]
 en = "Updates"
 pl = "Aktualizacje"
@@ -3645,7 +3611,6 @@ hu = "Frissítések automatikus letöltése és telepítése indításkor (a Rus
 sv = "Ladda ner och installera uppdateringar automatiskt vid start (Rust-binärer är små)"
 ru = "Загружать и устанавливать обновления автоматически при запуске (бинарники Rust небольшие)"
 fr = "Télécharger et installer les mises à jour automatiquement au lancement (les binaires Rust sont légers)"
-
 [settings.proxy.launcher_only_note]
 en = "Note - Proxy settings only apply to the launcher, not the game itself"
 pl = "Uwaga - ustawienia proxy dotyczą tylko launchera, a nie samej gry"
@@ -3654,7 +3619,6 @@ hu = "Megjegyzés - A proxy beállítások csak az indítóra hatnak, nem a ját
 sv = "Observera - Proxy inställningar gäller endast för launchern inte för själva spelet"
 ru = "Примечание: настройки прокси применяются только к лаунчеру, а не к самой игре"
 fr = "Remarque : les paramètres de proxy s'appliquent uniquement au lanceur, et non au jeu lui-même."
-
 [skins.title]
 en = "Skins"
 pl = "Skiny"
@@ -3932,7 +3896,6 @@ hu = "A fentiek közül kiválasztottak importálása innen: ${launcher: &str}"
 sv = "Importera det valda ovanstående från ${launcher: &str}"
 ru = "Импортировать выбранное из ${launcher: &str}"
 fr = "Importer les éléments sélectionnés ci-dessus à partir de ${launcher: &str}"
-
 [time.h]
 en = "h"
 pl = "g"
@@ -3951,229 +3914,194 @@ pl = "s"
 hu = "mp"
 ru = "с"
 fr = "s"
-
 [instance.duplicate_instance]
 en = "Duplicate this instance"
 de = "Diese Instanz duplizieren"
 hu = "Példány másolása"
-
 [settings.delete.skip_skin_delete_confirmation]
 en = "Shift+Click to skip skin delete confirmation"
 de = "Shift+Klick um Skin-Löschungsbestätigung zu überspringen"
 hu = "Shift+Katt a skin törlésének megerősítésének az átlépéséhez"
-
 [instance.content.install.datapack.prime.title]
 en = "Create World"
 de = "Welt erstellen"
 hu = "Világ létrehozása"
-
 [instance.content.install.datapack.prime.message]
 en = "No worlds found. Create a default world to install the datapack?"
 de = "Keine Welten gefunden. Eine Standardwelt erstellen um das Datenpaket zu installieren?"
 hu = "Nem található világ. Létrehozzon egy alapértelmezett világot az adatcsomag telepítéséhez?"
-
 [instance.content.install.datapack.prime.yes]
 en = "Create & Install"
 de = "Erstellen & Installieren"
 hu = "Létrehozás és telepítés"
-
 [instance.content.install.datapack.prime.cancel]
 en = "Cancel"
 de = "Abbrechen"
 hu = "Mégse"
-
 [instance.content.install.datapack.select_world.title]
 en = "Select World"
 de = "Welt auswählen"
 hu = "Világ kiválasztása"
-
 [instance.content.install.datapack.select_world.prime_for_next]
 en = "Use default for future"
 de = "Standard für zukünftige verwenden"
 hu = "Alapértelmezett használata a jövőben"
-
 [instance.pin]
 en = "Pin"
 de = "Anpinnen"
 hu = "Kitűzés"
 sv = "Fäst"
 ru = "Закрепить"
-
 [instance.unpin]
 en = "Unpin"
 de = "Lösen"
 hu = "Feloldás"
 sv = "Ta bort fäst"
 ru = "Открепить"
-
 [common.no_matches]
 en = "No matches"
 de = "Keine Treffer"
 hu = "Nincs találat"
 sv = "Inga träffar"
 ru = "Совпадений не найдено"
-
 [instance.content.outdated_only]
 en = "Outdated only"
 de = "Nur veraltete"
 hu = "Csak elavult"
 sv = "Endast föråldrade"
 ru = "Только устаревшие"
-
 [instance.content.enable_all]
 en = "Enable all"
 de = "Alle aktivieren"
 hu = "Összes bekapcsolása"
 sv = "Aktivera alla"
 ru = "Включить всё"
-
 [instance.content.enable_outdated]
 en = "Enable outdated"
 de = "Veraltete aktivieren"
 hu = "Elavultak bekapcsolása"
 sv = "Aktivera föråldrade"
 ru = "Включить устаревшие"
-
 [instance.content.disable_all]
 en = "Disable all"
 de = "Alle deaktivieren"
 hu = "Összes kikapcsolása"
 sv = "Inaktivera alla"
 ru = "Отключить всё"
-
 [instance.content.disable_outdated]
 en = "Disable outdated"
 de = "Veraltete deaktivieren"
 hu = "Elavultak kikapcsolása"
 sv = "Inaktivera föråldrade"
 ru = "Отключить устаревшие"
-
 [instance.content.enable_filtered]
 en = "Enable filtered"
 de = "Gefilterte aktivieren"
 hu = "Szűrt bekapcsolása"
 sv = "Aktivera filtrerade"
 ru = "Включить отфильтрованные"
-
 [instance.content.disable_filtered]
 en = "Disable filtered"
 de = "Gefilterte deaktivieren"
 hu = "Szűrt kikapcsolása"
 sv = "Inaktivera filtrerade"
 ru = "Отключить отфильтрованные"
-
 [instance.jvm_binary.detect]
 en = "Detect"
 de = "Erkennen"
 hu = "Felkutatás"
 sv = "Sök"
 ru = "Найти"
-
 [instance.memory.system_ram]
 en = "System RAM: ${total: u32} MiB"
 de = "System-RAM: ${total: u32} MiB"
 hu = "Rendszermemória: ${total: u32} MiB"
 sv = "System-RAM: ${total: u32} MiB"
 ru = "Оперативная память: ${total: u32} МиБ"
-
 [instance.memory.warning_high]
 en = "— warning: max ${max: u32} MiB > 85% of system RAM"
 de = "— Warnung: max ${max: u32} MiB > 85% des System-RAM"
 hu = "— figyelmeztetés: max ${max: u32} MiB > a rendszermemória 85%-a"
 sv = "— varning: max ${max: u32} MiB > 85% av system-RAM"
 ru = "— предупреждение: макс. ${max: u32} МиБ > 85% оперативной памяти"
-
 [instance.memory.min_gt_max]
 en = "— min > max"
 de = "— min > max"
 hu = "— min > max"
 sv = "— min > max"
 ru = "— мин. > макс."
-
 [instance.folder.mods]
 en = "Mods"
 de = "Mods"
 hu = "Modok"
 sv = "Mods"
 ru = "Моды"
-
 [instance.folder.saves]
 en = "Saves"
 de = "Welten"
 hu = "Mentések"
 sv = "Världar"
 ru = "Сохранения"
-
 [instance.folder.logs]
 en = "Logs"
 de = "Logs"
 hu = "Naplók"
 sv = "Loggar"
 ru = "Логи"
-
 [instance.exit.crash1]
 en = "Minecraft crashed (exit 1) — check Logs / Game Output for the stacktrace"
 de = "Minecraft abgestürzt (Exit 1) — siehe Logs / Spielausgabe für den Stacktrace"
 hu = "Minecraft összeomlott (1-es kilépés) — nézd meg a Naplókat / Játéknaplót"
 sv = "Minecraft kraschade (exit 1) — se Loggar / Spelutmatning för stacktrace"
 ru = "Minecraft аварийно завершился (код 1) — смотри Логи / вывод игры"
-
 [instance.exit.abort134]
 en = "Aborted (exit 134) — native library crash, try updating GLFW/OpenAL or Java"
 de = "Abgebrochen (Exit 134) — nativer Bibliotheksfehler, versuche GLFW/OpenAL oder Java zu aktualisieren"
 hu = "Megszakítva (134-es kilépés) — natív könyvtár hiba, próbáld frissíteni a GLFW/OpenAL-t vagy a Java-t"
 sv = "Avbruten (exit 134) — krasch i nativt bibliotek, prova att uppdatera GLFW/OpenAL eller Java"
 ru = "Прервано (код 134) — сбой нативной библиотеки, попробуйте обновить GLFW/OpenAL или Java"
-
 [instance.exit.segfault139]
 en = "Segfault (exit 139) — native crash, check graphics drivers"
 de = "Segfault (Exit 139) — nativer Absturz, prüfe Grafiktreiber"
 hu = "Szegmens hiba (139-es kilépés) — natív összeomlás, ellenőrizd a videó-illesztőket"
 sv = "Segfault (exit 139) — nativ krasch, kontrollera grafikdrivrutiner"
 ru = "Segfault (код 139) — нативный сбой, проверьте драйверы видеокарты"
-
 [instance.exit.killed9]
 en = "Killed (signal 9) — likely out of memory, try lower -Xmx or closing apps"
 de = "Beendet (Signal 9) — vermutlich zu wenig Speicher, senke -Xmx oder schließe Apps"
 hu = "Kilőve (9-es szignál) — valószínűleg kevés memória, csökkentsd az -Xmx-et"
 sv = "Dödad (signal 9) — troligen slut på minne, sänk -Xmx eller stäng appar"
 ru = "Завершено (сигнал 9) — вероятно, нехватка памяти, уменьшите -Xmx"
-
 [instance.exit.segfault11]
 en = "Segmentation fault (signal 11) — faulty native library or driver"
 de = "Segmentation Fault (Signal 11) — fehlerhafte native Bibliothek oder Treiber"
 hu = "Szegmens hiba (11-es szignál) — hibás natív könyvtár vagy illesztő"
 sv = "Segmentation fault (signal 11) — felaktigt nativt bibliotek eller drivrutin"
 ru = "Ошибка сегментации (сигнал 11) — сбой нативной библиотеки или драйвера"
-
 [instance.exit.abort6]
 en = "Aborted (signal 6) — native library aborted"
 de = "Abgebrochen (Signal 6) — native Bibliothek abgebrochen"
 hu = "Megszakítva (6-os szignál) — natív könyvtár megszakadt"
 sv = "Avbruten (signal 6) — nativt bibliotek avbröts"
 ru = "Прервано (сигнал 6) — нативная библиотека прервана"
-
 [instance.exit.access_violation]
 en = "Access violation (0xC0000005) — faulty native library (GLFW/OpenAL) or wrong Java version"
 de = "Zugriffsverletzung (0xC0000005) — fehlerhafte native Bibliothek (GLFW/OpenAL) oder falsche Java-Version"
 hu = "Hozzáférési hiba (0xC0000005) — hibás natív könyvtár (GLFW/OpenAL) vagy rossz Java-verzió"
 sv = "Åtkomstfel (0xC0000005) — felaktigt nativt bibliotek (GLFW/OpenAL) eller fel Java-version"
 ru = "Нарушение доступа (0xC0000005) — сбой нативной библиотеки (GLFW/OpenAL) или неверная версия Java"
-
 [instance.exit.stack_overrun]
 en = "Stack buffer overrun (0xC0000409) — native crash, update drivers/Java"
 de = "Stack-Überlauf (0xC0000409) — nativer Absturz, aktualisiere Treiber/Java"
 hu = "Stack túlcsordulás (0xC0000409) — natív összeomlás, frissítsd az illesztőket/Java-t"
 sv = "Stack buffer overrun (0xC0000409) — nativ krasch, uppdatera drivrutiner/Java"
 ru = "Переполнение стека (0xC0000409) — нативный сбой, обновите драйверы/Java"
-
 [instance.exit.windows_exception]
 en = "Minecraft crashed with a Windows exception — check Logs"
 de = "Minecraft mit Windows-Exception abgestürzt — siehe Logs"
 hu = "Minecraft Windows kivétellel omlott össze — nézd meg a Naplókat"
 sv = "Minecraft kraschade med Windows-undantag — se Loggar"
 ru = "Minecraft аварийно завершился с исключением Windows — смотри Логи"
-
 [instance.p2p.share_title]
 en = "Share Instance"
 pl = "Udostępnij instancję"
@@ -4278,43 +4206,30 @@ hu = "Lejár ${remaining: i64} perc múlva — ne zárd be az indítót"
 sv = "Går ut om ${remaining: i64} min — håll startprogrammet öppet"
 ru = "Истекает через ${remaining: i64} мин — не закрывайте лаунчер"
 fr = "Expire dans ${remaining: i64} min — gardez le lanceur ouvert"
-
 [instance.p2p.unknown_instance]
 en = "Unknown instance"
-
 [instance.p2p.bundle_too_large]
 en = "Bundle too large (2 GiB cap)"
-
 [instance.p2p.uploading_to_relay]
 en = "Uploading to relay..."
-
 [instance.p2p.downloading_share]
 en = "Downloading share"
-
 [instance.p2p.extracting_share]
 en = "Extracting share..."
-
 [instance.p2p.collecting_files]
 en = "Collecting files..."
-
 [instance.p2p.writing_bundle]
 en = "Writing bundle"
-
 [instance.p2p.share_uploaded]
 en = "Share uploaded — link works from anywhere"
-
 [instance.p2p.share_ready]
 en = "Share ready — keep launcher open"
-
 [instance.p2p.share_ready_local]
 en = "Share ready (local fallback) — keep launcher open"
-
 [instance.p2p.import_done]
 en = "P2P import done: ${name: String}"
-
 [instance.p2p.bind_failed]
 en = "Bind failed: ${error: String}"
-
 [instance.p2p.use_relay]
 en = "Share outside local network"
 pl = "Udostępnij poza siecią lokalną"
@@ -4323,37 +4238,26 @@ hu = "Megosztás helyi hálózaton kívül"
 sv = "Dela utanför lokalt nätverk"
 ru = "Поделиться вне локальной сети"
 fr = "Partager hors réseau local"
-
 [instance.p2p.delete_failed]
 en = "Failed to delete share from relay"
-
 [instance.p2p.delete_failed_status]
 en = "Failed to delete share from relay: relay returned ${status: String}"
-
 [instance.p2p.upload_failed]
 en = "Relay upload failed: ${error: String}"
-
 [instance.p2p.upload_failed_status]
 en = "Relay returned ${status: String}"
-
 [instance.p2p.using_local_link]
 en = "${failure: String} — using local link (LAN only)"
-
 [instance.p2p.local_fallback_failed]
 en = "${failure: String}, local fallback also failed"
-
 [instance.p2p.relay_local_bind_failed]
 en = "${failure: String} (local bind also failed: ${error: String})"
-
 [instance.p2p.bad_link]
 en = "Bad link: ${error: String}"
-
 [instance.p2p.link_scheme_invalid]
 en = "Link must be http or https"
-
 [instance.p2p.link_shape_invalid]
 en = "Link must be /p2p/<token> or contain ?token="
-
 [settings.p2p.title]
 en = "P2P Sync"
 pl = "Synchronizacja P2P"
@@ -4386,8 +4290,6 @@ hu = "A relay URL http:// vagy https:// előtaggal kezdődjön"
 sv = "Relay-URL måste börja med http:// eller https://"
 ru = "URL релея должен начинаться с http:// или https://"
 fr = "L'URL du relais doit commencer par http:// ou https://"
-
-
 [instance.live_game_output]
 en = "Live Game Output"
 [instance.duplicate.action]

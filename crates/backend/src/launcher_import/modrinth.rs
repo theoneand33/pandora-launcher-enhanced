@@ -4,10 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use bridge::{
-    import::ImportFromOtherLauncherJob,
-    modal_action::{ModalAction, ProgressTracker},
-};
+use bridge::{import::ImportFromOtherLauncherJob, modal_action::ModalAction};
 use image::ImageFormat;
 use rustc_hash::FxHashMap;
 use schema::{instance::InstanceConfiguration, loader::Loader};
@@ -32,13 +29,11 @@ pub fn import_instances_from_modrinth(
 
     let app_db = import_job.root.join("app.db");
     if !app_db.exists() {
-        modal_action.set_error_message("Unable to find app.db in selected directory".into());
+        modal_action.set_finished_with_error("Unable to find app.db in selected directory".into());
         return Ok(());
     }
 
-    let all_tracker = ProgressTracker::new("Importing instances".into(), backend.send.clone());
-    modal_action.trackers.push(all_tracker.clone());
-    all_tracker.notify();
+    let all_tracker = modal_action.push_tracker("Importing instances".into());
 
     let conn = rusqlite::Connection::open(app_db)?;
 
@@ -93,13 +88,10 @@ pub fn import_instances_from_modrinth(
 
     for to_import in to_import {
         let title = format!("Importing {}", to_import.pandora_path.file_name().unwrap().to_string_lossy());
-        let tracker = ProgressTracker::new(title.into(), backend.send.clone());
-        modal_action.trackers.push(tracker.clone());
-        tracker.notify();
+        let tracker = modal_action.push_tracker(title.into());
 
         let Ok(configuration_bytes) = serde_json::to_vec(&to_import.instance_configuration) else {
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
-            tracker.notify();
             continue;
         };
 
@@ -109,14 +101,13 @@ pub fn import_instances_from_modrinth(
         let target_dot_minecraft = to_import.pandora_path.join(".minecraft");
 
         _ = std::fs::create_dir_all(&target_dot_minecraft);
-        _ = crate::copy_content_recursive(
+        _ = crate::fs::copy_content_recursive(
             &to_import.minecraft_folder,
             &target_dot_minecraft,
             false,
             &|copied, total| {
                 tracker.set_total(total as usize);
                 tracker.set_count(copied as usize);
-                tracker.notify();
             },
         );
 
@@ -129,12 +120,12 @@ pub fn import_instances_from_modrinth(
                 // Unsupported when image is trimmed to png/jpeg/bmp/gif/webp - icon is dropped.
                 if let Ok(format) = image::guess_format(&icon_bytes) {
                     if format == ImageFormat::Png {
-                        _ = crate::write_safe(&to_import.pandora_path.join("icon.png"), &icon_bytes);
+                        _ = crate::fs::write_safe(&to_import.pandora_path.join("icon.png"), &icon_bytes);
                     } else if let Ok(image) = image::load_from_memory_with_format(&icon_bytes, format) {
                         let mut png_bytes = Vec::new();
                         let mut cursor = Cursor::new(&mut png_bytes);
                         if image.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
-                            _ = crate::write_safe(&to_import.pandora_path.join("icon.png"), &png_bytes);
+                            _ = crate::fs::write_safe(&to_import.pandora_path.join("icon.png"), &png_bytes);
                         }
                     } else {
                         log::warn!("modrinth icon format {:?} not enabled, icon dropped", format);
@@ -145,17 +136,14 @@ pub fn import_instances_from_modrinth(
 
         // Write info_v1.json
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = crate::write_safe(&info_path, &configuration_bytes);
+        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
 
         all_tracker.add_count(1);
-        all_tracker.notify();
 
         tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Fast);
-        tracker.notify();
     }
 
     all_tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Normal);
-    all_tracker.notify();
 
     Ok(())
 }

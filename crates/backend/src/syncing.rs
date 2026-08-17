@@ -82,8 +82,8 @@ pub fn apply_to_instance(
             let fallback = &directories.synced_dir.join("fallback_options.txt");
             let target = dot_minecraft.join("options.txt");
             let combined = create_combined_options_txt(fallback, &target, instances);
-            _ = crate::write_safe(&fallback, combined.as_bytes());
-            _ = crate::write_safe(&target, combined.as_bytes());
+            _ = crate::fs::write_safe(&fallback, combined.as_bytes());
+            _ = crate::fs::write_safe(&target, combined.as_bytes());
         } else if let Some(path) = SafePath::new(file_target) {
             if let Some(latest) = find_latest(&path, instances) {
                 let target = path.to_path(&dot_minecraft);
@@ -91,7 +91,7 @@ pub fn apply_to_instance(
                     if let Some(parent) = target.parent() {
                         _ = std::fs::create_dir_all(parent);
                     }
-                    _ = std::fs::copy(latest, target);
+                    _ = crate::fs::fastcopy(&latest, &target, true, false);
                 }
             }
         } else {
