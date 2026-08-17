@@ -140,8 +140,10 @@ impl Authenticator {
             .oauth2_client()
             .authorize_url(CsrfToken::new_random)
             .add_extra_param("prompt", "select_account")
+            .add_scope(Scope::new("openid".to_string()))
+            .add_scope(Scope::new("profile".to_string()))
             .add_scope(Scope::new("XboxLive.signin".to_string()))
-            .add_scope(Scope::new("XboxLive.offline_access".to_string()))
+            .add_scope(Scope::new("offline_access".to_string()))
             .set_pkce_challenge(pkce_challenge)
             .url();
 
@@ -228,10 +230,24 @@ impl Authenticator {
             token_type: "JWT",
         };
 
-        let response = self.client.post(constants::XBOX_AUTHENTICATE_URL).json(&request).send().await?;
+        let response = self
+            .client
+            .post(constants::XBOX_AUTHENTICATE_URL)
+            .header("x-xbl-contract-version", "1")
+            .header("Accept", "application/json")
+            .json(&request)
+            .send()
+            .await?;
 
         if response.status() != reqwest::StatusCode::OK {
-            return Err(XboxAuthenticateError::NonOkHttpStatus(response.status()));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            log::error!(
+                "Xbox authenticate failed: status {} body {}",
+                status,
+                &body.chars().take(1024).collect::<String>()
+            );
+            return Err(XboxAuthenticateError::NonOkHttpStatus(status));
         }
 
         let bytes = response.bytes().await?;
@@ -256,10 +272,24 @@ impl Authenticator {
             token_type: "JWT",
         };
 
-        let response = self.client.post(constants::XSTS_AUTHORIZE_URL).json(&request).send().await?;
+        let response = self
+            .client
+            .post(constants::XSTS_AUTHORIZE_URL)
+            .header("x-xbl-contract-version", "1")
+            .header("Accept", "application/json")
+            .json(&request)
+            .send()
+            .await?;
 
         if response.status() != reqwest::StatusCode::OK {
-            return Err(XboxAuthenticateError::NonOkHttpStatus(response.status()));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            log::error!(
+                "XSTS authorize failed: status {} body {}",
+                status,
+                &body.chars().take(1024).collect::<String>()
+            );
+            return Err(XboxAuthenticateError::NonOkHttpStatus(status));
         }
 
         let bytes = response.bytes().await?;
@@ -292,10 +322,23 @@ impl Authenticator {
             identity_token: &format!("XBL3.0 x={};{}", userhash, xsts),
         };
 
-        let response = self.client.post(constants::MINECRAFT_LOGIN_WITH_XBOX_URL).json(&request).send().await?;
+        let response = self
+            .client
+            .post(constants::MINECRAFT_LOGIN_WITH_XBOX_URL)
+            .header("Accept", "application/json")
+            .json(&request)
+            .send()
+            .await?;
 
         if response.status() != reqwest::StatusCode::OK {
-            return Err(XboxAuthenticateError::NonOkHttpStatus(response.status()));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            log::error!(
+                "Minecraft login_with_xbox failed: status {} body {}",
+                status,
+                &body.chars().take(1024).collect::<String>()
+            );
+            return Err(XboxAuthenticateError::NonOkHttpStatus(status));
         }
 
         let bytes = response.bytes().await?;
@@ -317,11 +360,19 @@ impl Authenticator {
             .client
             .get(constants::MINECRAFT_PROFILE_URL)
             .bearer_auth(access_token.secret())
+            .header("Accept", "application/json")
             .send()
             .await?;
 
         if response.status() != reqwest::StatusCode::OK {
-            return Err(XboxAuthenticateError::NonOkHttpStatus(response.status()));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            log::error!(
+                "Minecraft profile failed: status {} body {}",
+                status,
+                &body.chars().take(1024).collect::<String>()
+            );
+            return Err(XboxAuthenticateError::NonOkHttpStatus(status));
         }
 
         let bytes = response.bytes().await?;
