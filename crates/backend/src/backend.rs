@@ -1589,15 +1589,39 @@ impl BackendState {
         }
 
         let new_path = self.directories.instances_dir.join(&new_name);
-        if let Err(err) = std::fs::create_dir_all(&new_path) {
-            self.send.send_error(format!("Unable to create duplicate instance folder: {}", err));
-            return;
+        let new_path_for_dir = new_path.clone();
+        let dir_result = tokio::task::spawn_blocking(move || std::fs::create_dir_all(&new_path_for_dir)).await;
+        match dir_result {
+            Ok(Ok(())) => {},
+            Ok(Err(err)) => {
+                self.send.send_error(format!("Unable to create duplicate instance folder: {}", err));
+                return;
+            },
+            Err(join_err) => {
+                self.send.send_error(format!("Duplication task failed: {}", join_err));
+                let _ = std::fs::remove_dir_all(&new_path);
+                return;
+            },
         }
 
-        if let Err(err) = crate::fs::copy_content_recursive(&old_path, &new_path, false, &|_, _| {}) {
-            self.send.send_error(format!("Failed to copy instance: {}", err));
-            let _ = std::fs::remove_dir_all(&new_path);
-            return;
+        let old_path_clone = old_path.clone();
+        let new_path_clone = new_path.clone();
+        let copy_result = tokio::task::spawn_blocking(move || {
+            crate::fs::copy_content_recursive(&old_path_clone, &new_path_clone, false, &|_, _| {})
+        })
+        .await;
+        match copy_result {
+            Ok(Ok(())) => {},
+            Ok(Err(err)) => {
+                self.send.send_error(format!("Failed to copy instance: {}", err));
+                let _ = std::fs::remove_dir_all(&new_path);
+                return;
+            },
+            Err(join_err) => {
+                self.send.send_error(format!("Duplication task failed: {}", join_err));
+                let _ = std::fs::remove_dir_all(&new_path);
+                return;
+            },
         }
 
         self.send.send(MessageToFrontend::Refresh);

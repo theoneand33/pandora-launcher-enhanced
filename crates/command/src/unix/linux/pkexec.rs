@@ -14,7 +14,7 @@ fn polkit_supports_keep_cwd() -> Option<bool> {
 }
 
 pub fn spawn(mut cmd: PandoraCommand, context: &mut SpawnContext) -> std::io::Result<PandoraChild> {
-    let Some(pkexec) = crate::path_cache::get_command_path(OsStr::new("pkexec")) else {
+    let Some(pkexec) = crate::path_cache::get_command_path_cached(OsStr::new("pkexec")) else {
         return Err(Error::new(std::io::ErrorKind::NotFound, "cannot find 'pkexec'"));
     };
 
@@ -37,8 +37,11 @@ pub fn spawn(mut cmd: PandoraCommand, context: &mut SpawnContext) -> std::io::Re
                 ));
             }
         } else {
-            let Some(path) = crate::path_cache::get_command_path(&executable.0) else {
-                return Err(Error::new(std::io::ErrorKind::NotFound, format!("cannot find '{}'", executable.0.to_string_lossy())));
+            let Some(path) = crate::path_cache::get_command_path_cached(&executable.0) else {
+                return Err(Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("cannot find '{}'", executable.0.to_string_lossy()),
+                ));
             };
             executable = path.as_os_str().to_os_string().into();
         }
@@ -56,5 +59,8 @@ pub fn spawn(mut cmd: PandoraCommand, context: &mut SpawnContext) -> std::io::Re
     cmd.args.insert(0, "--disable-internal-agent".into());
     cmd.args.insert(1, "--keep-cwd".into());
     cmd.args.insert(2, executable);
+    if crate::unix::linux::flatpak::is_inside_flatpak() {
+        return crate::unix::linux::flatpak::spawn_host_command(cmd, context);
+    }
     crate::unix::unix_spawn::spawn(cmd, context)
 }

@@ -36,62 +36,10 @@ mod update;
 pub const KNOWN_SHADER_MODS: &[&'static str] = &["iris", "oculus", "optifine"];
 
 pub fn join_windows_shell(args: &[&str]) -> String {
-    let mut string = String::new();
-
-    let mut first = true;
-    for arg in args {
-        let mut backslashes = 0;
-
-        if first {
-            first = false;
-        } else {
-            string.push(' ');
-        }
-
-        if arg.is_empty() {
-            string.push_str("\"\"");
-            continue;
-        }
-
-        let quoted = arg.contains(&[' ', '\t']);
-        if quoted {
-            string.push('"');
-        }
-
-        for char in arg.chars() {
-            if char == '\\' {
-                backslashes += 1;
-            } else if char == '"' {
-                for _ in 0..backslashes {
-                    string.push_str("\\\\");
-                }
-                string.push_str("\\\"");
-                backslashes = 0;
-            } else {
-                for _ in 0..backslashes {
-                    string.push('\\');
-                }
-                backslashes = 0;
-                string.push(char);
-            }
-        }
-
-        if quoted {
-            for _ in 0..backslashes {
-                string.push_str("\\\\");
-            }
-        } else {
-            for _ in 0..backslashes {
-                string.push('\\');
-            }
-        }
-
-        if quoted {
-            string.push('"');
-        }
-    }
-
-    string
+    let os_args: Vec<&OsStr> = args.iter().map(|s| OsStr::new(s)).collect();
+    let os_string = join_windows_shell_os(&os_args);
+    // SAFETY: os_string contains original UTF-8 argument bytes plus ASCII quoting bytes.
+    os_string.into_string().expect("join_windows_shell produced non-UTF-8 output")
 }
 
 pub fn join_windows_shell_os(args: &[&OsStr]) -> OsString {

@@ -258,29 +258,38 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
 
     let tracker = modal_action.push_tracker(t::instance::duplicate::copying_files().into());
 
-    let result = duplicate_with_content_library(
-        &source,
-        &dest,
-        &backend.directories.content_library_dir,
-        &|current, total| {
-            tracker.set_count(current as usize);
-            tracker.set_total(total as usize);
-        },
-        &|| {
-            if modal_action.has_requested_cancel() {
-                tracker.set_title(t::instance::duplicate::cancelling().into());
-                Err(Error::new(ErrorKind::Interrupted, "Operation cancelled"))
-            } else {
-                Ok(())
-            }
-        },
-    );
+    let tracker_clone = tracker.clone();
+    let modal_action_clone = modal_action.clone();
+    let source_clone = source.clone();
+    let dest_clone = dest.clone();
+    let content_library_dir_clone = backend.directories.content_library_dir.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        duplicate_with_content_library(
+            &source_clone,
+            &dest_clone,
+            &content_library_dir_clone,
+            &|current, total| {
+                tracker_clone.set_count(current as usize);
+                tracker_clone.set_total(total as usize);
+            },
+            &|| {
+                if modal_action_clone.has_requested_cancel() {
+                    tracker_clone.set_title(t::instance::duplicate::cancelling().into());
+                    Err(Error::new(ErrorKind::Interrupted, "Operation cancelled"))
+                } else {
+                    Ok(())
+                }
+            },
+        )
+    })
+    .await;
 
     match result {
-        Ok(()) => {
+        Ok(Ok(())) => {
             tracker.set_finished(ProgressTrackerFinishType::Normal);
         },
-        Err(error) => {
+        Ok(Err(error)) => {
             let _ = fs::remove_dir_all(&dest);
             if modal_action.has_requested_cancel() {
                 tracker.set_finished(ProgressTrackerFinishType::Fast);
@@ -288,6 +297,11 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
                 tracker.set_finished(ProgressTrackerFinishType::Error);
                 modal_action.set_finished_with_error(error.to_string().into());
             }
+        },
+        Err(join_error) => {
+            let _ = fs::remove_dir_all(&dest);
+            tracker.set_finished(ProgressTrackerFinishType::Error);
+            modal_action.set_finished_with_error(format!("Duplication task failed: {join_error}").into());
         },
     }
 
