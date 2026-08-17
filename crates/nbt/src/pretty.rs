@@ -49,6 +49,17 @@ fn write_node<T: Write>(
     }
 }
 
+fn escape_single(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c == '\'' || c == '\\' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn write_compound<T: Write>(
     writer: &mut T,
     nodes: &Slab<NBTNode>,
@@ -59,7 +70,7 @@ fn write_compound<T: Write>(
     // Write type header and opening brace
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Compound('{}'): {} entries", name, children.len())?;
+        write!(writer, "Compound('{}'): {} entries", escape_single(name), children.len())?;
     } else {
         write!(writer, "Compound(None): {} entries", children.len())?;
     }
@@ -93,9 +104,9 @@ fn write_string<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "String('{}'): '{}'", name, value)
+        write!(writer, "String('{}'): '{}'", escape_single(name), escape_single(value))
     } else {
-        write!(writer, "String(None): '{}'", value)
+        write!(writer, "String(None): '{}'", escape_single(value))
     }
 }
 
@@ -107,7 +118,7 @@ fn write_byte<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Byte('{}'): {}", name, value)
+        write!(writer, "Byte('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Byte(None): {}", value)
     }
@@ -121,7 +132,7 @@ fn write_short<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Short('{}'): {}", name, value)
+        write!(writer, "Short('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Short(None): {}", value)
     }
@@ -135,7 +146,7 @@ fn write_int<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Int('{}'): {}", name, value)
+        write!(writer, "Int('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Int(None): {}", value)
     }
@@ -149,7 +160,7 @@ fn write_long<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Long('{}'): {}", name, value)
+        write!(writer, "Long('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Long(None): {}", value)
     }
@@ -163,7 +174,7 @@ fn write_float<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Float('{}'): {}", name, value)
+        write!(writer, "Float('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Float(None): {}", value)
     }
@@ -177,7 +188,7 @@ fn write_double<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "Double('{}'): {}", name, value)
+        write!(writer, "Double('{}'): {}", escape_single(name), value)
     } else {
         write!(writer, "Double(None): {}", value)
     }
@@ -193,7 +204,7 @@ fn write_list<T: Write>(
     // Write type header and opening bracket
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "List('{}'): {} entries", name, children.len())?;
+        write!(writer, "List('{}'): {} entries", escape_single(name), children.len())?;
     } else {
         write!(writer, "List(None): {} entries", children.len())?;
     }
@@ -227,7 +238,7 @@ fn write_byte_array<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "ByteArray('{}'): [", name)?;
+        write!(writer, "ByteArray('{}'): [", escape_single(name))?;
     } else {
         writer.write_str("ByteArray(None): [")?;
     }
@@ -256,7 +267,7 @@ fn write_int_array<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "IntArray('{}'): [", name)?;
+        write!(writer, "IntArray('{}'): [", escape_single(name))?;
     } else {
         writer.write_str("IntArray(None): [")?;
     }
@@ -285,7 +296,7 @@ fn write_long_array<T: Write>(
 ) -> std::fmt::Result {
     writer.write_str(indentation)?;
     if let Some(name) = name {
-        write!(writer, "LongArray('{}'): [", name)?;
+        write!(writer, "LongArray('{}'): [", escape_single(name))?;
     } else {
         writer.write_str("LongArray(None): [")?;
     }

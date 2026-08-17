@@ -107,8 +107,17 @@ fn duplicate_with_content_library(
             };
             if file_type.is_symlink() {
                 let target = fs::read_link(&path)?;
-                if let Ok(internal) = target.strip_prefix(&from) {
-                    internal_symlinks.push((relative.to_path_buf(), internal.to_path_buf()));
+                // Resolve relative targets against the symlink's parent for classification,
+                // but retain the original target for recreation.
+                let resolved = if target.is_relative() {
+                    path.parent().unwrap_or(&from).join(&target)
+                } else {
+                    target.clone()
+                };
+                let normalized = crate::fs::normalize_lexically(&resolved);
+                if let Ok(rel) = normalized.strip_prefix(&from) {
+                    let stored = if target.is_absolute() { to.join(rel) } else { target };
+                    internal_symlinks.push((relative.to_path_buf(), stored));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
                 }
@@ -184,16 +193,27 @@ fn duplicate_with_content_library(
         progress(files_done, total_files);
     }
 
-    for (relative, internal) in &internal_symlinks {
+    for (relative, original_target) in &internal_symlinks {
         let dest = to.join(relative);
-        let target = to.join(internal);
-        if let Err(err) = crate::fs::symlink_dir_or_file(&target, &dest) {
+        let probe = if original_target.is_relative() {
+            let raw = dest.parent().unwrap_or(to).join(original_target);
+            crate::fs::normalize_lexically(&raw)
+        } else {
+            crate::fs::normalize_lexically(original_target)
+        };
+        if let Err(err) = crate::fs::symlink_with_probe(original_target, &dest, &probe) {
             return Err(err);
         }
     }
     for (relative, target) in &external_symlinks {
         let dest = to.join(relative);
-        if let Err(err) = crate::fs::symlink_dir_or_file(&target, &dest) {
+        let probe = if target.is_relative() {
+            let raw = dest.parent().unwrap_or(to).join(target);
+            crate::fs::normalize_lexically(&raw)
+        } else {
+            crate::fs::normalize_lexically(target)
+        };
+        if let Err(err) = crate::fs::symlink_with_probe(target, &dest, &probe) {
             return Err(err);
         }
     }

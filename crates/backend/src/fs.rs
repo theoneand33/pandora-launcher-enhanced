@@ -7,7 +7,6 @@ use std::{
 };
 
 use bridge::instance::InstanceContentSummary;
-use rand::RngCore;
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
@@ -83,7 +82,7 @@ pub(crate) fn write_safe(path: &Path, content: &[u8]) -> std::io::Result<()> {
     }
 
     let mut temp = path.to_path_buf();
-    temp.add_extension(format!("{}", rand::thread_rng().next_u32()));
+    temp.add_extension(Uuid::new_v4().simple().to_string());
     temp.add_extension("new");
 
     let mut temp_file = std::fs::File::create(&temp)?;
@@ -163,7 +162,7 @@ pub(crate) fn create_content_library_path_osstrext(
     path
 }
 
-fn normalize_lexically(path: &Path) -> PathBuf {
+pub(crate) fn normalize_lexically(path: &Path) -> PathBuf {
     let mut buf = PathBuf::new();
     for component in path.components() {
         match component {
@@ -286,8 +285,9 @@ pub fn copy_content_recursive(
                     target.clone()
                 };
                 let normalized = normalize_lexically(&resolved);
-                if normalized.strip_prefix(&from).is_ok() {
-                    internal_symlinks.push((relative.to_path_buf(), target));
+                if let Ok(rel) = normalized.strip_prefix(&from) {
+                    let stored = if target.is_absolute() { to.join(rel) } else { target };
+                    internal_symlinks.push((relative.to_path_buf(), stored));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
                 }
@@ -341,23 +341,7 @@ pub fn copy_content_recursive(
             ),
         ));
     }
-    for (relative, original_target) in internal_symlinks {
-        let dest = to.join(&relative);
-        let probe = if original_target.is_relative() {
-            let raw = dest.parent().unwrap_or(to).join(&original_target);
-            normalize_lexically(&raw)
-        } else {
-            normalize_lexically(&original_target)
-        };
-        if let Err(err) = symlink_with_probe(&original_target, &dest, &probe) {
-            if strict {
-                return Err(err);
-            } else {
-                log::error!("Failed to create symlink {:?} -> {:?}: {err}", dest, original_target);
-            }
-        }
-    }
-    for (relative, target) in external_symlinks {
+    for (relative, target) in internal_symlinks.into_iter().chain(external_symlinks) {
         let dest = to.join(&relative);
         let probe = if target.is_relative() {
             let raw = dest.parent().unwrap_or(to).join(&target);
@@ -395,7 +379,7 @@ pub fn copy_content_recursive(
     Ok(())
 }
 
-fn symlink_with_probe(target: &Path, link: &Path, probe: &Path) -> std::io::Result<()> {
+pub(crate) fn symlink_with_probe(target: &Path, link: &Path, probe: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         if !probe.exists() {

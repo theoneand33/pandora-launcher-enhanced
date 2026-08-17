@@ -1695,7 +1695,9 @@ impl BackendState {
                     Err(err) => {
                         log::error!("Failed to read log file: {err:?}");
                         tracker.set_finished(ProgressTrackerFinishType::Error);
-                        modal_action.set_finished_with_error(format!("Failed to read log file: {err}").into());
+                        modal_action.set_finished_with_error(
+                            log_reader::replace(&format!("Failed to read log file: {err}")).into(),
+                        );
                         return;
                     },
                 };

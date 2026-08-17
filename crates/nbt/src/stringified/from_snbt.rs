@@ -157,15 +157,22 @@ fn read_string(snbt: &mut &str) -> anyhow::Result<String> {
             match c {
                 '\\' => {
                     if escaping {
+                        // Escaped backslash: "\\" -> "\"
+                        string.push('\\');
                         escaping = false;
+                        start = index + 1;
                     } else {
                         string.push_str(&snbt[start..index]);
+                        escaping = true;
                         start = index + 1;
                     }
                 },
                 '"' => {
                     if escaping {
+                        // Escaped quote: "\"" -> "\""
+                        string.push('"');
                         escaping = false;
+                        start = index + 1;
                     } else {
                         string.push_str(&snbt[start..index]);
                         *snbt = &snbt[(index + 1)..];

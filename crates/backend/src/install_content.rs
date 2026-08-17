@@ -313,7 +313,22 @@ impl BackendState {
 
                 for install in to_install {
                     let raw_path = install.install_path.clone().unwrap();
-                    let Some(safe_path) = SafePath::from_std_path(&raw_path) else {
+                    let candidate: &Path = if raw_path.is_absolute() {
+                        match raw_path.strip_prefix(&dot_minecraft_for_copy) {
+                            Ok(rel) => rel,
+                            Err(_) => {
+                                let msg = format!("Rejected invalid install path: {}", raw_path.display());
+                                log::error!("{}", msg);
+                                if first_error.is_none() {
+                                    first_error = Some(msg);
+                                }
+                                continue;
+                            },
+                        }
+                    } else {
+                        &raw_path
+                    };
+                    let Some(safe_path) = SafePath::from_std_path(candidate) else {
                         let msg = format!("Rejected invalid install path: {}", raw_path.display());
                         log::error!("{}", msg);
                         if first_error.is_none() {
