@@ -35,10 +35,10 @@ impl DuplicateInstanceModalState {
             instances.read(cx).entries.iter().map(|(_, v)| v.read(cx).name.clone()).collect();
 
         let instance_name_strings: Vec<&str> = instance_names.iter().map(|s| s.as_str()).collect();
-        let default_name = SharedString::from(get_unique_instance_name(
-            &t::instance::duplicate::copy_of(&instance_name),
-            &instance_name_strings,
-        ));
+        let default_name = SharedString::from(
+            get_unique_instance_name(&t::instance::duplicate::copy_of(&instance_name), &instance_name_strings)
+                .unwrap_or_else(|| format!("{} ({})", instance_name, uuid::Uuid::new_v4())),
+        );
 
         let name_input_state = cx.new(|cx| InputState::new(window, cx).placeholder(default_name.clone()));
 

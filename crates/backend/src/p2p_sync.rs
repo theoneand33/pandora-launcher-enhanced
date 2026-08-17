@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use bridge::{
     instance::InstanceID,
     message::{ExportOptions, MessageToFrontend},
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 use parking_lot::RwLock;
@@ -176,11 +176,7 @@ pub async fn create_p2p_share(
 
         tokio::task::spawn(async move {
             let url = format!("{relay_clone}/p2p/{token_for_upload}");
-            let upload_tracker =
-                ProgressTracker::new(t::instance::p2p::uploading_to_relay().into(), backend_for_upload.send.clone());
-            modal_for_upload.trackers.push(upload_tracker.clone());
-            upload_tracker.notify();
-
+            let upload_tracker = modal_for_upload.push_tracker(t::instance::p2p::uploading_to_relay().into());
             // ponytail: stream file, do not load 2 GiB into RAM
             let file_len = match tokio::fs::metadata(&bundle_for_upload).await {
                 Ok(m) => m.len(),
@@ -269,7 +265,6 @@ pub async fn create_p2p_share(
                     Ok(r) if r.status().is_success() => {
                         uploaded = uploaded.saturating_add(n as u64);
                         upload_tracker.set_count(uploaded as usize);
-                        upload_tracker.notify();
                     },
                     Ok(r) => {
                         failure = Some(t::instance::p2p::upload_failed_status(r.status().to_string()).to_string());
@@ -443,8 +438,7 @@ fn create_bundle_blocking(
     if modal_action.has_requested_cancel() {
         return Err("Cancelled".into());
     }
-    let tracker = ProgressTracker::new(t::instance::p2p::collecting_files().into(), backend.send.clone());
-    modal_action.trackers.push(tracker.clone());
+    let tracker = modal_action.push_tracker(t::instance::p2p::collecting_files().into());
 
     let sync_target_paths = SyncTargetPaths::new(sync_targets);
     let mut files: Vec<(PathBuf, SafePath)> = Vec::new();
@@ -487,18 +481,14 @@ fn create_bundle_blocking(
         }
         files.push((entry.path().to_path_buf(), rel_safe));
     }
-    tracker.notify();
     tracker.set_finished(ProgressTrackerFinishType::Normal);
 
     let p2p_dir = backend.directories.temp_dir.join("p2p");
     let _ = std::fs::create_dir_all(&p2p_dir);
     let bundle_path = p2p_dir.join(format!("{token}.zip"));
 
-    let write_tracker = ProgressTracker::new(t::instance::p2p::writing_bundle().into(), backend.send.clone());
-    modal_action.trackers.push(write_tracker.clone());
+    let write_tracker = modal_action.push_tracker(t::instance::p2p::writing_bundle().into());
     write_tracker.set_total(files.len());
-    write_tracker.notify();
-
     let file = File::create(&bundle_path).map_err(|e| e.to_string())?;
     let limited = LimitedWriter::new(file, 2 * 1024 * 1024 * 1024);
     let mut zip = ZipWriter::new(limited);
@@ -541,7 +531,6 @@ fn create_bundle_blocking(
             }
         }
         write_tracker.add_count(1);
-        write_tracker.notify();
     }
     if let Err(e) = zip.finish() {
         let msg = e.to_string();
@@ -791,8 +780,7 @@ pub async fn join_p2p_share(
         return;
     }
 
-    let tracker = ProgressTracker::new(t::instance::p2p::downloading_share().into(), backend.send.clone());
-    modal_action.trackers.push(tracker.clone());
+    let tracker = modal_action.push_tracker(t::instance::p2p::downloading_share().into());
 
     let resp = match backend.http_client.get(url.as_str()).send().await {
         Ok(r) => r,
@@ -820,7 +808,6 @@ pub async fn join_p2p_share(
         }
         tracker.set_total(len as usize);
     }
-    tracker.notify();
 
     let tmp_dir = backend.directories.temp_dir.join("p2p").join("download");
     let _ = tokio::fs::create_dir_all(&tmp_dir).await;
@@ -869,7 +856,6 @@ pub async fn join_p2p_share(
                     return;
                 }
                 tracker.set_count(downloaded);
-                tracker.notify();
             },
             Err(e) => {
                 modal_action.set_error_message(format!("stream error: {e}").into());
@@ -891,10 +877,7 @@ pub async fn join_p2p_share(
     }
     tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    let extract_tracker = ProgressTracker::new(t::instance::p2p::extracting_share().into(), backend.send.clone());
-    modal_action.trackers.push(extract_tracker.clone());
-    extract_tracker.notify();
-
+    let extract_tracker = modal_action.push_tracker(t::instance::p2p::extracting_share().into());
     let name_raw = target_name.unwrap_or_else(|| "p2p-import".to_string());
     let sanitized = sanitize_filename::sanitize(&name_raw);
     let sanitized = if sanitized.trim().is_empty() {
@@ -908,7 +891,7 @@ pub async fn join_p2p_share(
         if !base.exists() {
             base
         } else {
-            let cow = crate::unique_name(&instances_dir, &sanitized, true);
+            let cow = crate::fs::unique_name(&instances_dir, &sanitized, true);
             instances_dir.join(cow.as_ref())
         }
     };

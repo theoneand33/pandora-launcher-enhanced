@@ -8,7 +8,7 @@ use std::{
 
 use bridge::{
     instance::InstanceID,
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 
@@ -16,7 +16,7 @@ use crate::BackendState;
 
 fn find_content_library_path(content_library_dir: &Path, hash: [u8; 20], path: &Path) -> Option<PathBuf> {
     let extension = path.extension().and_then(|s| s.to_str());
-    let lib_path = crate::create_content_library_path(content_library_dir, hash, extension);
+    let lib_path = crate::fs::create_content_library_path(content_library_dir, hash, extension);
     if lib_path.exists() {
         return Some(lib_path);
     }
@@ -27,7 +27,7 @@ fn find_content_library_path(content_library_dir: &Path, hash: [u8; 20], path: &
         .and_then(|filename| filename.strip_suffix(".disabled"))
         .and_then(|base| Path::new(base).extension())
         .and_then(|s| s.to_str());
-    let lib_path = crate::create_content_library_path(content_library_dir, hash, disabled_extension);
+    let lib_path = crate::fs::create_content_library_path(content_library_dir, hash, disabled_extension);
     lib_path.exists().then_some(lib_path)
 }
 
@@ -107,8 +107,17 @@ fn duplicate_with_content_library(
             };
             if file_type.is_symlink() {
                 let target = fs::read_link(&path)?;
-                if let Ok(internal) = target.strip_prefix(&from) {
-                    internal_symlinks.push((relative.to_path_buf(), internal.to_path_buf()));
+                // Resolve relative targets against the symlink's parent for classification,
+                // but retain the original target for recreation.
+                let resolved = if target.is_relative() {
+                    path.parent().unwrap_or(&from).join(&target)
+                } else {
+                    target.clone()
+                };
+                let normalized = crate::fs::normalize_lexically(&resolved);
+                if let Ok(rel) = normalized.strip_prefix(&from) {
+                    let stored = if target.is_absolute() { to.join(rel) } else { target };
+                    internal_symlinks.push((relative.to_path_buf(), stored));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
                 }
@@ -161,15 +170,22 @@ fn duplicate_with_content_library(
 
         // If the source_path was hard linked from the content library
         // We will make the duplicated file also hard linked
-        if crate::has_multiple_hard_links(source_path).unwrap_or(true)
-            && let Ok(hash) = hash_file(source_path, &mut buf, check_cancel)
-            && let Some(lib_path) = find_content_library_path(content_library_dir, hash, source_path)
-            && crate::are_files_hard_linked(source_path, &lib_path).unwrap_or(false)
-            && crate::hard_link_or_copy(&lib_path, &dest).is_ok()
+        if let Ok(source_metadata) = crate::fs::FileMetadata::new(source_path)
+            && source_metadata.number_of_links() > 1
         {
-            files_done += 1;
-            progress(files_done, total_files);
-            continue;
+            if let Ok(hash) = hash_file(source_path, &mut buf, check_cancel) {
+                if let Some(lib_path) = find_content_library_path(content_library_dir, hash, source_path) {
+                    if let Ok(lib_metadata) = crate::fs::FileMetadata::new(&lib_path)
+                        && source_metadata.is_same(&lib_metadata)
+                    {
+                        if crate::fs::fastcopy(&lib_path, &dest, false, true).is_ok() {
+                            files_done += 1;
+                            progress(files_done, total_files);
+                            continue;
+                        }
+                    }
+                }
+            }
         }
 
         copy_file(source_path, &dest, &mut buf, check_cancel)?;
@@ -177,16 +193,27 @@ fn duplicate_with_content_library(
         progress(files_done, total_files);
     }
 
-    for (relative, internal) in &internal_symlinks {
+    for (relative, original_target) in &internal_symlinks {
         let dest = to.join(relative);
-        let target = to.join(internal);
-        if let Err(err) = crate::symlink_dir_or_file(&target, &dest) {
+        let probe = if original_target.is_relative() {
+            let raw = dest.parent().unwrap_or(to).join(original_target);
+            crate::fs::normalize_lexically(&raw)
+        } else {
+            crate::fs::normalize_lexically(original_target)
+        };
+        if let Err(err) = crate::fs::symlink_with_probe(original_target, &dest, &probe) {
             return Err(err);
         }
     }
     for (relative, target) in &external_symlinks {
         let dest = to.join(relative);
-        if let Err(err) = crate::symlink_dir_or_file(&target, &dest) {
+        let probe = if target.is_relative() {
+            let raw = dest.parent().unwrap_or(to).join(target);
+            crate::fs::normalize_lexically(&raw)
+        } else {
+            crate::fs::normalize_lexically(target)
+        };
+        if let Err(err) = crate::fs::symlink_with_probe(target, &dest, &probe) {
             return Err(err);
         }
     }
@@ -210,9 +237,8 @@ fn duplicate_with_content_library(
 }
 
 pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name: &str, modal_action: ModalAction) {
-    if !crate::is_single_component_path_str(name) {
-        modal_action.set_error_message(t::instance::duplicate::error_path(name).into());
-        modal_action.set_finished();
+    if !crate::fs::is_single_component_path_str(name) {
+        modal_action.set_finished_with_error(t::instance::duplicate::error_path(name).into());
         return;
     }
     if !sanitize_filename::is_sanitized_with_options(
@@ -222,61 +248,54 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
             ..Default::default()
         },
     ) {
-        modal_action.set_error_message(t::instance::duplicate::error_invalid(name).into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(t::instance::duplicate::error_invalid(name).into());
         return;
     }
     if backend.instance_state.read().instances.iter().any(|i| i.name == name) {
-        modal_action.set_error_message(t::instance::duplicate::error_exists().into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(t::instance::duplicate::error_exists().into());
         return;
     }
 
     let source = {
         let state = backend.instance_state.read();
         let Some(instance) = state.instances.get(id) else {
-            modal_action.set_error_message(t::instance::duplicate::error_unknown_id().into());
-            modal_action.set_finished();
+            modal_action.set_finished_with_error(t::instance::duplicate::error_unknown_id().into());
             return;
         };
         instance.root_path.clone()
     };
 
     let Some(safe_name) = SafePath::new(name) else {
-        modal_action.set_error_message(t::instance::duplicate::error_path(name).into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(t::instance::duplicate::error_path(name).into());
         return;
     };
     let dest = safe_name.to_path(&backend.directories.instances_dir);
 
     if let Err(err) = fs::create_dir(&dest) {
-        modal_action.set_error_message(t::instance::duplicate::error_create_dir(&err.to_string()).into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(t::instance::duplicate::error_create_dir(&err.to_string()).into());
         return;
     }
 
-    let tracker = ProgressTracker::new(t::instance::duplicate::copying_files().into(), backend.send.clone());
-    modal_action.trackers.push(tracker.clone());
+    let tracker = modal_action.push_tracker(t::instance::duplicate::copying_files().into());
 
-    let source_clone = source.clone();
-    let dest_clone = dest.clone();
-    let content_library_dir = backend.directories.content_library_dir.clone();
     let tracker_clone = tracker.clone();
     let modal_action_clone = modal_action.clone();
+    let source_clone = source.clone();
+    let dest_clone = dest.clone();
+    let content_library_dir_clone = backend.directories.content_library_dir.clone();
+
     let result = tokio::task::spawn_blocking(move || {
         duplicate_with_content_library(
             &source_clone,
             &dest_clone,
-            &content_library_dir,
+            &content_library_dir_clone,
             &|current, total| {
                 tracker_clone.set_count(current as usize);
                 tracker_clone.set_total(total as usize);
-                tracker_clone.notify();
             },
             &|| {
                 if modal_action_clone.has_requested_cancel() {
                     tracker_clone.set_title(t::instance::duplicate::cancelling().into());
-                    tracker_clone.notify();
                     Err(Error::new(ErrorKind::Interrupted, "Operation cancelled"))
                 } else {
                     Ok(())
@@ -284,24 +303,25 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
             },
         )
     })
-    .await
-    .unwrap_or_else(|err| Err(Error::new(ErrorKind::Other, format!("Join error: {err}"))));
+    .await;
 
     match result {
-        Ok(()) => {
+        Ok(Ok(())) => {
             tracker.set_finished(ProgressTrackerFinishType::Normal);
-            tracker.notify();
         },
-        Err(error) => {
+        Ok(Err(error)) => {
             let _ = fs::remove_dir_all(&dest);
             if modal_action.has_requested_cancel() {
                 tracker.set_finished(ProgressTrackerFinishType::Fast);
-                tracker.notify();
             } else {
                 tracker.set_finished(ProgressTrackerFinishType::Error);
-                tracker.notify();
-                modal_action.set_error_message(error.to_string().into());
+                modal_action.set_finished_with_error(error.to_string().into());
             }
+        },
+        Err(join_error) => {
+            let _ = fs::remove_dir_all(&dest);
+            tracker.set_finished(ProgressTrackerFinishType::Error);
+            modal_action.set_finished_with_error(format!("Duplication task failed: {join_error}").into());
         },
     }
 

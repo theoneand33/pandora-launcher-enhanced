@@ -148,8 +148,7 @@ pub async fn export_instance(
     };
 
     let Some(instance) = instance_data else {
-        modal_action.set_error_message("Unable to export instance, unknown id".into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error("Unable to export instance, unknown id".into());
         return;
     };
 
@@ -161,15 +160,8 @@ pub async fn export_instance(
 
     if let Err(error) = result {
         match error {
-            ExportError::Cancelled => {
-                for tracker in modal_action.trackers.trackers.read().iter() {
-                    if tracker.get_finished_at().is_none() {
-                        tracker.set_finished(ProgressTrackerFinishType::Fast);
-                        tracker.notify();
-                    }
-                }
-            },
-            ExportError::Other(error) => modal_action.set_error_message(error.into()),
+            ExportError::Cancelled => modal_action.clear_trackers(),
+            ExportError::Other(error) => modal_action.set_finished_with_error(error.into()),
         }
     }
     modal_action.set_finished();
@@ -183,8 +175,7 @@ async fn export_instance_zip(
     modal_action: &ModalAction,
 ) -> Result<(), ExportError> {
     check_cancel(modal_action)?;
-    let tracker = ProgressTracker::new("Collecting files...".into(), backend.send.clone());
-    modal_action.trackers.push(tracker.clone());
+    let collect_tracker = modal_action.push_tracker("Collecting files...".into());
 
     let files = collect_files(
         &instance.root_path,
@@ -194,13 +185,10 @@ async fn export_instance_zip(
         &backend.directories.synced_dir,
         modal_action,
     )?;
-    tracker.notify();
-    tracker.set_finished(ProgressTrackerFinishType::Normal);
+    collect_tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    let write_tracker = ProgressTracker::new("Writing zip".into(), backend.send.clone());
-    modal_action.trackers.push(write_tracker.clone());
+    let write_tracker = modal_action.push_tracker("Writing zip".into());
     write_tracker.set_total(files.len());
-    write_tracker.notify();
 
     write_zip(output, &files, &[], &HashSet::new(), None, modal_action, &write_tracker)?;
     write_tracker.set_finished(ProgressTrackerFinishType::Normal);
@@ -215,8 +203,7 @@ async fn export_modrinth_pack(
     modal_action: &ModalAction,
 ) -> Result<(), ExportError> {
     check_cancel(modal_action)?;
-    let collect_tracker = ProgressTracker::new("Collecting files...".into(), backend.send.clone());
-    modal_action.trackers.push(collect_tracker.clone());
+    let collect_tracker = modal_action.push_tracker("Collecting files...".into());
 
     let files = collect_files(
         &instance.dot_minecraft_path,
@@ -226,11 +213,9 @@ async fn export_modrinth_pack(
         &backend.directories.synced_dir,
         modal_action,
     )?;
-    collect_tracker.notify();
     collect_tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    let hash_tracker = ProgressTracker::new("Hashing mods".into(), backend.send.clone());
-    modal_action.trackers.push(hash_tracker.clone());
+    let hash_tracker = modal_action.push_tracker("Hashing mods".into());
 
     let resolved = resolve_modrinth_files(backend, instance, options, &files, modal_action, &hash_tracker).await?;
     hash_tracker.set_finished(ProgressTrackerFinishType::Normal);
@@ -244,10 +229,8 @@ async fn export_modrinth_pack(
     let index_json = build_modrinth_index(instance, loader_version, options, &resolved)?;
     let extra_files = vec![("modrinth.index.json".to_string(), index_json)];
 
-    let write_tracker = ProgressTracker::new("Writing zip".into(), backend.send.clone());
-    modal_action.trackers.push(write_tracker.clone());
+    let write_tracker = modal_action.push_tracker("Writing zip".into());
     write_tracker.set_total(files.len());
-    write_tracker.notify();
 
     write_zip(
         output,
@@ -270,8 +253,7 @@ async fn export_curseforge_pack(
     modal_action: &ModalAction,
 ) -> Result<(), ExportError> {
     check_cancel(modal_action)?;
-    let collect_tracker = ProgressTracker::new("Collecting files...".into(), backend.send.clone());
-    modal_action.trackers.push(collect_tracker.clone());
+    let collect_tracker = modal_action.push_tracker("Collecting files...".into());
 
     let files = collect_files(
         &instance.dot_minecraft_path,
@@ -281,11 +263,9 @@ async fn export_curseforge_pack(
         &backend.directories.synced_dir,
         modal_action,
     )?;
-    collect_tracker.notify();
     collect_tracker.set_finished(ProgressTrackerFinishType::Normal);
 
-    let hash_tracker = ProgressTracker::new("Hashing mods".into(), backend.send.clone());
-    modal_action.trackers.push(hash_tracker.clone());
+    let hash_tracker = modal_action.push_tracker("Hashing mods".into());
 
     let resolved = resolve_curseforge_files(backend, instance, options, &files, modal_action, &hash_tracker).await?;
     hash_tracker.set_finished(ProgressTrackerFinishType::Normal);
@@ -299,10 +279,8 @@ async fn export_curseforge_pack(
     let manifest_json = build_curseforge_manifest(instance, loader_version, options, &resolved)?;
     let extra_files = vec![("manifest.json".to_string(), manifest_json)];
 
-    let write_tracker = ProgressTracker::new("Writing zip".into(), backend.send.clone());
-    modal_action.trackers.push(write_tracker.clone());
+    let write_tracker = modal_action.push_tracker("Writing zip".into());
     write_tracker.set_total(files.len());
-    write_tracker.notify();
 
     write_zip(
         output,
@@ -543,7 +521,6 @@ async fn resolve_modrinth_files(
     }
 
     tracker.set_total(candidates.len());
-    tracker.notify();
 
     let mut buf = vec![0_u8; 128 * 1024];
 
@@ -557,7 +534,6 @@ async fn resolve_modrinth_files(
     for file in candidates {
         check_cancel(modal_action)?;
         tracker.add_count(1);
-        tracker.notify();
 
         let (_sha1_hex, sha512_hex, _size) = compute_hashes(&file.abs, modal_action, &mut buf)?;
 
@@ -671,7 +647,6 @@ async fn resolve_curseforge_files(
     }
 
     tracker.set_total(candidates.len());
-    tracker.notify();
 
     let mut fingerprint_to_candidate: HashMap<u32, (SafePath, bool)> = HashMap::new();
     let mut fingerprints = Vec::new();
@@ -679,7 +654,6 @@ async fn resolve_curseforge_files(
     for (rel, abs, enabled) in candidates {
         check_cancel(modal_action)?;
         tracker.add_count(1);
-        tracker.notify();
         let fingerprint = compute_murmur2(&abs)?;
         fingerprint_to_candidate.insert(fingerprint, (rel, enabled));
         fingerprints.push(fingerprint);
@@ -885,7 +859,6 @@ fn write_zip(
                 zip.write_all(&buffer[..read]).map_err(|e| e.to_string())?;
             }
             tracker.add_count(1);
-            tracker.notify();
         }
 
         check_cancel(modal_action)?;

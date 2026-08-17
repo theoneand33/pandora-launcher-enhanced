@@ -13,7 +13,7 @@ use std::{
 use bridge::{
     handle::FrontendHandle,
     message::{MessageToFrontend, QuickPlayLaunch},
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType, ProgressTrackers},
+    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 #[cfg(windows)]
@@ -140,7 +140,7 @@ impl Launcher {
         log::debug!("Creating launch version");
 
         let (version_info, add_vanilla_jar) = tokio::select! {
-            result = self.create_launch_version(http_client, &modal_action.trackers, launch_tracker, &instance_info) => result?,
+            result = self.create_launch_version(http_client, modal_action, launch_tracker, &instance_info) => result?,
             _ = modal_action.request_cancel.cancelled() => {
                 self.sender.send(MessageToFrontend::CloseModal);
                 return Err(LaunchError::CancelledByUser);
@@ -148,7 +148,6 @@ impl Launcher {
         };
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         let _ = std::fs::create_dir_all(&dot_minecraft_path);
 
@@ -185,19 +184,12 @@ impl Launcher {
             http_client,
             &instance_info,
             &version_info,
-            &modal_action.trackers,
+            modal_action,
             launch_tracker,
         );
-        let load_assets_future = self.load_assets(
-            &self.meta,
-            http_client,
-            &dot_minecraft_path,
-            &version_info,
-            &modal_action.trackers,
-            launch_tracker,
-        );
-        let load_libraries_future =
-            self.load_libraries(http_client, &artifacts, &modal_action.trackers, launch_tracker);
+        let load_assets_future =
+            self.load_assets(&self.meta, http_client, &dot_minecraft_path, &version_info, modal_action, launch_tracker);
+        let load_libraries_future = self.load_libraries(http_client, &artifacts, modal_action, launch_tracker);
         let load_log_configuration = self.load_log_configuration(http_client, version_info.logging.as_ref());
 
         log::debug!("Loading java, assets, libraries and log configuration");
@@ -218,7 +210,6 @@ impl Launcher {
         };
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         let mut classpath = Vec::new();
         for (raw_path, library_path) in library_paths {
@@ -334,19 +325,17 @@ impl Launcher {
     async fn create_launch_version(
         &self,
         http_client: &reqwest::Client,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
         instance_info: &InstanceConfiguration,
     ) -> Result<(Arc<MinecraftVersion>, AddVanillaJar), LaunchError> {
         match instance_info.loader {
             Loader::Vanilla => {
                 launch_tracker.add_total(1);
-                launch_tracker.notify();
 
                 let versions = self.meta.fetch(&MinecraftVersionManifestMetadataItem).await?;
 
                 launch_tracker.add_count(1);
-                launch_tracker.notify();
 
                 let Some(version) = versions.versions.iter().find(|v| v.id == instance_info.minecraft_version) else {
                     return Err(LaunchError::CantFindVersion(instance_info.minecraft_version.as_str()));
@@ -356,7 +345,6 @@ impl Launcher {
             },
             Loader::Fabric => {
                 launch_tracker.add_total(4);
-                launch_tracker.notify();
 
                 let fabric_launch = {
                     let launch_tracker = launch_tracker.clone();
@@ -385,7 +373,6 @@ impl Launcher {
                         }?;
 
                         launch_tracker.add_count(1);
-                        launch_tracker.notify();
 
                         let value = meta
                             .fetch(&FabricLaunchMetadataItem {
@@ -395,7 +382,6 @@ impl Launcher {
                             .await?;
 
                         launch_tracker.add_count(1);
-                        launch_tracker.notify();
 
                         Ok(value)
                     }
@@ -411,7 +397,6 @@ impl Launcher {
                             meta.fetch(&MinecraftVersionManifestMetadataItem).await.map_err(LaunchError::from)?;
 
                         launch_tracker.add_count(1);
-                        launch_tracker.notify();
 
                         let Some(version) = versions.versions.iter().find(|v| v.id == minecraft_version) else {
                             return Err(LaunchError::CantFindVersion(minecraft_version.as_str()));
@@ -420,7 +405,6 @@ impl Launcher {
                         let value = meta.fetch(&MinecraftVersionMetadataItem(version)).await?;
 
                         launch_tracker.add_count(1);
-                        launch_tracker.notify();
 
                         Ok(value)
                     }
@@ -498,7 +482,6 @@ impl Launcher {
             },
             Loader::Forge => {
                 launch_tracker.add_total(7);
-                launch_tracker.notify();
 
                 // Download Minecraft manifest and neoforge installer maven
                 let (minecraft_versions, manifest) = futures::future::try_join(
@@ -516,7 +499,7 @@ impl Launcher {
 
                 self.create_forgelike_launch_version(
                     http_client,
-                    progress_trackers,
+                    modal_action,
                     launch_tracker,
                     instance_info,
                     minecraft_versions,
@@ -530,7 +513,6 @@ impl Launcher {
             },
             Loader::NeoForge => {
                 launch_tracker.add_total(7);
-                launch_tracker.notify();
 
                 // Download Minecraft manifest and neoforge installer maven
                 let (minecraft_versions, manifest) = futures::future::try_join(
@@ -548,7 +530,7 @@ impl Launcher {
 
                 self.create_forgelike_launch_version(
                     http_client,
-                    progress_trackers,
+                    modal_action,
                     launch_tracker,
                     instance_info,
                     minecraft_versions,
@@ -566,7 +548,7 @@ impl Launcher {
     async fn create_forgelike_launch_version(
         &self,
         http_client: &reqwest::Client,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
         instance_info: &InstanceConfiguration,
         minecraft_versions: Arc<MinecraftVersionManifest>,
@@ -577,7 +559,6 @@ impl Launcher {
         check_mirrors: bool,
     ) -> Result<(Arc<MinecraftVersion>, AddVanillaJar), LaunchError> {
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         let Some(version_link) = minecraft_versions.versions.iter().find(|v| v.id == instance_info.minecraft_version)
         else {
@@ -594,7 +575,6 @@ impl Launcher {
         let base_version = base_version?;
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         // Download installer jar as an artifact
         let artifacts = &[
@@ -617,11 +597,10 @@ impl Launcher {
             http_client,
             instance_info,
             &base_version,
-            progress_trackers,
+            modal_action,
             launch_tracker,
         );
-        let load_installer_library_future =
-            self.load_libraries(http_client, artifacts, progress_trackers, launch_tracker);
+        let load_installer_library_future = self.load_libraries(http_client, artifacts, modal_action, launch_tracker);
 
         let (artifact_load_result, java_load_result) = futures::future::try_join(
             load_installer_library_future.map_err(LaunchError::from),
@@ -653,7 +632,7 @@ impl Launcher {
                         installer_zip,
                         base_version,
                         http_client,
-                        progress_trackers,
+                        modal_action,
                         launch_tracker,
                         instance_info,
                         check_mirrors,
@@ -671,7 +650,7 @@ impl Launcher {
             &java_load_result,
             base_version,
             http_client,
-            progress_trackers,
+            modal_action,
             launch_tracker,
             instance_info,
             check_mirrors,
@@ -688,7 +667,7 @@ impl Launcher {
         java_path: &PathBuf,
         base_version: Arc<MinecraftVersion>,
         http_client: &reqwest::Client,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
         instance_info: &InstanceConfiguration,
         check_mirrors: bool,
@@ -727,7 +706,7 @@ impl Launcher {
                     _ = std::fs::create_dir_all(parent);
                 }
 
-                _ = crate::write_safe(&path_in_library, &bytes);
+                _ = crate::fs::write_safe(&path_in_library, &bytes);
             }
         }
 
@@ -739,7 +718,6 @@ impl Launcher {
         };
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         // Download libraries
         let libraries = install_profile
@@ -758,14 +736,14 @@ impl Launcher {
                     if let Some(sha1) = &artifact.sha1 {
                         let mut expected_hash = [0u8; 20];
                         if hex::decode_to_slice(sha1.as_str(), &mut expected_hash).is_ok() {
-                            if crate::check_sha1_hash(&path, expected_hash).unwrap_or(false) {
+                            if crate::fs::check_sha1_hash(&path, expected_hash).unwrap_or(false) {
                                 return None;
                             }
                         };
                     }
 
                     if let Ok(bytes) = builtin.bytes() {
-                        _ = crate::write_safe(&path, &bytes);
+                        _ = crate::fs::write_safe(&path, &bytes);
                     } else {
                         log::warn!("Unable to copy {} from zip", artifact.path);
                     }
@@ -785,7 +763,7 @@ impl Launcher {
             })
             .collect::<Vec<_>>();
 
-        self.load_libraries(http_client, &libraries, progress_trackers, launch_tracker).await?;
+        self.load_libraries(http_client, &libraries, modal_action, launch_tracker).await?;
 
         let forge_temp = self.directories.temp_dir.join("forge_installer");
 
@@ -818,7 +796,7 @@ impl Launcher {
                 };
                 if let Some(target) = SafePath::new(file_name) {
                     let target = target.to_path(&forge_temp);
-                    crate::write_safe(&target, &file.bytes()?)?;
+                    crate::fs::write_safe(&target, &file.bytes()?)?;
                     data.insert(key, target.into_os_string());
                 } else {
                     log::error!("Unable to extract {}", file_name);
@@ -835,17 +813,13 @@ impl Launcher {
         data.insert("INSTALLER".into(), installer_path.as_os_str().to_os_string());
         data.insert("LIBRARY_DIR".into(), self.directories.libraries_dir.as_os_str().to_os_string());
 
-        let processor_tracker = ProgressTracker::new("Forge Post Processors".into(), self.sender.clone());
-        progress_trackers.push(processor_tracker.clone());
-
+        let processor_tracker = modal_action.push_tracker("Forge Post Processors".into());
         processor_tracker.set_total(install_profile.processors.len());
-        processor_tracker.notify();
 
         for processor in install_profile.processors.iter() {
             if let Some(sides) = &processor.sides {
                 if !sides.iter().any(|side| *side == ForgeSide::Client) {
                     processor_tracker.add_count(1);
-                    processor_tracker.notify();
 
                     continue;
                 }
@@ -857,7 +831,6 @@ impl Launcher {
             let skip = self.can_skip_forge_processor(&jar, processor, &data);
             if skip {
                 processor_tracker.add_count(1);
-                processor_tracker.notify();
                 continue;
             }
 
@@ -866,7 +839,6 @@ impl Launcher {
             let Some(safe_jar_path) = SafePath::new(&relative_jar_path) else {
                 log::error!("Unable to run processor, invalid path: {}", relative_jar_path);
                 processor_tracker.add_count(1);
-                processor_tracker.notify();
                 continue;
             };
 
@@ -886,7 +858,6 @@ impl Launcher {
             let Ok(manifest_str) = str::from_utf8(&manifest_bytes) else {
                 log::error!("Unable to run processor, MANIFEST.MF is not utf8 encoded");
                 processor_tracker.add_count(1);
-                processor_tracker.notify();
                 continue;
             };
 
@@ -895,7 +866,6 @@ impl Launcher {
             let Some(main_class) = manifest_map.get("Main-Class") else {
                 log::error!("Unable to run processor, can't find Main-Class in MANIFEST.MF");
                 processor_tracker.add_count(1);
-                processor_tracker.notify();
                 continue;
             };
 
@@ -950,13 +920,11 @@ impl Launcher {
             }
 
             processor_tracker.add_count(1);
-            processor_tracker.notify();
         }
 
         processor_tracker.set_finished(ProgressTrackerFinishType::Normal);
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         let add_vanilla_jar = if install_profile.processors.is_empty() {
             AddVanillaJar::Yes
@@ -973,7 +941,7 @@ impl Launcher {
         installer_zip: ArchiveHandle<'_, File>,
         base_version: Arc<MinecraftVersion>,
         http_client: &reqwest::Client,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
         instance_info: &InstanceConfiguration,
         check_mirrors: bool,
@@ -993,7 +961,7 @@ impl Launcher {
             return Err(LoadLibrariesError::IllegalLibraryPath(forge_path.into()).into());
         }
         let forge_artifact_path = self.directories.libraries_dir.join(forge_path.as_str());
-        crate::write_safe(&forge_artifact_path, &file.bytes()?)?;
+        crate::fs::write_safe(&forge_artifact_path, &file.bytes()?)?;
 
         // Read partial minecraft version
         let version: PartialMinecraftVersion = install_profile.version_info.into_partial_version(ForgeSide::Client);
@@ -1006,7 +974,6 @@ impl Launcher {
         };
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         // Download libraries with mirror
         if let Some(libraries) = &version.libraries {
@@ -1026,7 +993,7 @@ impl Launcher {
                 })
                 .collect::<Vec<_>>();
 
-            self.load_libraries(http_client, &libraries, progress_trackers, launch_tracker).await?;
+            self.load_libraries(http_client, &libraries, modal_action, launch_tracker).await?;
         }
 
         Ok((Arc::new(version.apply_to(&base_version)), AddVanillaJar::Yes))
@@ -1071,7 +1038,7 @@ impl Launcher {
         http_client: &reqwest::Client,
         configuration: &InstanceConfiguration,
         version_info: &MinecraftVersion,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
     ) -> Result<PathBuf, LoadJavaRuntimeError> {
         if let Some(jvm_binary) = &configuration.jvm_binary {
@@ -1153,10 +1120,10 @@ impl Launcher {
         };
         let runtime_component = runtime_components.first().ok_or(LoadJavaRuntimeError::UnknownComponentForPlatform)?;
 
-        if !crate::is_single_component_path_str(jre_component.as_str()) {
+        if !crate::fs::is_single_component_path_str(jre_component.as_str()) {
             return Err(LoadJavaRuntimeError::InvalidComponentPath);
         }
-        if !crate::is_single_component_path_str(&platform) {
+        if !crate::fs::is_single_component_path_str(&platform) {
             return Err(LoadJavaRuntimeError::InvalidComponentPath);
         }
 
@@ -1182,19 +1149,15 @@ impl Launcher {
             "Verifying integrity of Java Runtime"
         };
 
-        let java_runtime_tracker = ProgressTracker::new(initial_title.into(), self.sender.clone());
-        progress_trackers.push(java_runtime_tracker.clone());
-        java_runtime_tracker.notify();
+        let java_runtime_tracker = modal_action.push_tracker(initial_title.into());
 
         let result =
             do_java_runtime_load(http_client, runtime_component_dir, fresh_install, runtime, &java_runtime_tracker)
                 .await;
 
         java_runtime_tracker.set_finished(ProgressTrackerFinishType::from_err(result.is_err()));
-        java_runtime_tracker.notify();
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         result
     }
@@ -1205,7 +1168,7 @@ impl Launcher {
         http_client: &reqwest::Client,
         game_dir: &Arc<Path>,
         version_info: &MinecraftVersion,
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
     ) -> Result<String, LoadAssetObjectsError> {
         let asset_index = format!("{}", version_info.assets);
@@ -1219,9 +1182,7 @@ impl Launcher {
             .await?;
 
         let initial_title = Arc::from("Verifying integrity of game assets");
-        let assets_tracker = ProgressTracker::new(initial_title, self.sender.clone());
-        progress_trackers.push(assets_tracker.clone());
-        assets_tracker.notify();
+        let assets_tracker = modal_action.push_tracker(initial_title);
 
         let assets_dir = if assets_index.map_to_resources == Some(true) {
             game_dir.join("resources").into()
@@ -1234,10 +1195,8 @@ impl Launcher {
         let result = do_asset_objects_load(http_client, assets_index, assets_dir, &assets_tracker).await;
 
         assets_tracker.set_finished(ProgressTrackerFinishType::from_err(result.is_err()));
-        assets_tracker.notify();
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         result?;
 
@@ -1248,22 +1207,18 @@ impl Launcher {
         &self,
         http_client: &reqwest::Client,
         artifacts: &[GameLibraryArtifact],
-        progress_trackers: &ProgressTrackers,
+        modal_action: &ModalAction,
         launch_tracker: &ProgressTracker,
     ) -> Result<Vec<(Ustr, PathBuf)>, LoadLibrariesError> {
         let initial_title = Arc::from("Verifying integrity of game libraries");
-        let libraries_tracker = ProgressTracker::new(initial_title, self.sender.clone());
-        progress_trackers.push(libraries_tracker.clone());
-        libraries_tracker.notify();
+        let libraries_tracker = modal_action.push_tracker(initial_title);
 
         let result =
             do_libraries_load(http_client, artifacts, self.directories.libraries_dir.clone(), &libraries_tracker).await;
 
         libraries_tracker.set_finished(ProgressTrackerFinishType::from_err(result.is_err()));
-        libraries_tracker.notify();
 
         launch_tracker.add_count(1);
-        launch_tracker.notify();
 
         result
     }
@@ -1296,7 +1251,7 @@ impl Launcher {
 
         let valid_hash_on_disk = {
             let path = path.clone();
-            tokio::task::spawn_blocking(move || crate::check_sha1_hash(&path, expected_hash).unwrap_or(false))
+            tokio::task::spawn_blocking(move || crate::fs::check_sha1_hash(&path, expected_hash).unwrap_or(false))
                 .await
                 .unwrap()
         };
@@ -1370,7 +1325,7 @@ impl Launcher {
                     return false;
                 };
 
-                if !crate::check_sha1_hash(Path::new(&key), expected_hash).unwrap_or(false) {
+                if !crate::fs::check_sha1_hash(Path::new(&key), expected_hash).unwrap_or(false) {
                     return false;
                 }
             }
@@ -1658,7 +1613,7 @@ async fn do_java_runtime_load(
                         let path = path.clone();
                         let permit = disk_semaphore.acquire().await.unwrap();
                         let result = tokio::task::spawn_blocking(move || {
-                            crate::check_sha1_hash(&path, expected_hash).unwrap_or(false)
+                            crate::fs::check_sha1_hash(&path, expected_hash).unwrap_or(false)
                         })
                         .await
                         .unwrap();
@@ -1668,7 +1623,6 @@ async fn do_java_runtime_load(
 
                     if valid_hash_on_disk {
                         java_runtime_tracker.add_count(downloads.raw.size as usize);
-                        java_runtime_tracker.notify();
                         return Ok(());
                     }
 
@@ -1756,7 +1710,6 @@ async fn do_java_runtime_load(
                     }
 
                     java_runtime_tracker.add_count(downloads.raw.size as usize);
-                    java_runtime_tracker.notify();
                     Ok(())
                 };
                 tasks.push(task);
@@ -1767,7 +1720,6 @@ async fn do_java_runtime_load(
         }
     }
     java_runtime_tracker.set_total(total_size as usize);
-    java_runtime_tracker.notify();
 
     futures::future::try_join_all(tasks).await?;
 
@@ -1866,17 +1818,17 @@ async fn do_asset_objects_load(
             let valid_hash_on_disk = {
                 let path = path.clone();
                 let permit = disk_semaphore.acquire().await.unwrap();
-                let result =
-                    tokio::task::spawn_blocking(move || crate::check_sha1_hash(&path, expected_hash).unwrap_or(false))
-                        .await
-                        .unwrap();
+                let result = tokio::task::spawn_blocking(move || {
+                    crate::fs::check_sha1_hash(&path, expected_hash).unwrap_or(false)
+                })
+                .await
+                .unwrap();
                 drop(permit);
                 result
             };
 
             if valid_hash_on_disk {
                 assets_tracker.add_count(asset.size as usize);
-                assets_tracker.notify();
                 return Ok(());
             }
 
@@ -1914,14 +1866,12 @@ async fn do_asset_objects_load(
 
             tokio::fs::write(path.clone(), &*bytes).await?;
             assets_tracker.add_count(asset.size as usize);
-            assets_tracker.notify();
             Ok(())
         };
         tasks.push(task);
     }
 
     assets_tracker.set_total(total_size as usize);
-    assets_tracker.notify();
 
     futures::future::try_join_all(tasks).await?;
 
@@ -1994,7 +1944,7 @@ async fn do_libraries_load(
                 let artifact_path = artifact_path.clone();
                 let permit = disk_semaphore.acquire().await.unwrap();
                 let result = tokio::task::spawn_blocking(move || {
-                    crate::check_sha1_hash(&artifact_path, expected_hash).unwrap_or(false)
+                    crate::fs::check_sha1_hash(&artifact_path, expected_hash).unwrap_or(false)
                 })
                 .await
                 .unwrap();
@@ -2006,7 +1956,6 @@ async fn do_libraries_load(
 
             if valid_hash_on_disk {
                 libraries_tracker.add_count(tracker_size as usize);
-                libraries_tracker.notify();
                 return Ok((artifact.path, artifact_path));
             }
 
@@ -2050,14 +1999,12 @@ async fn do_libraries_load(
 
             tokio::fs::write(artifact_path.clone(), &*bytes).await?;
             libraries_tracker.add_count(tracker_size as usize);
-            libraries_tracker.notify();
             Ok((artifact.path, artifact_path))
         };
         tasks.push(task);
     }
 
     libraries_tracker.set_total(total_size as usize);
-    libraries_tracker.notify();
 
     futures::future::try_join_all(tasks).await
 }
@@ -2082,7 +2029,7 @@ impl Launcher {
         };
         if needs_write {
             let _ = std::fs::create_dir_all(&directories.temp_dir);
-            if crate::write_safe(&path, BYTES).is_err() {
+            if crate::fs::write_safe(&path, BYTES).is_err() {
                 log::error!("Failed to write authlib-injector jar");
                 return None;
             }

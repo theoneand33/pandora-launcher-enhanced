@@ -9,11 +9,7 @@ use std::{
 };
 
 use base64::Engine;
-use bridge::{
-    handle::FrontendHandle,
-    message::MessageToFrontend,
-    modal_action::{ModalAction, ProgressTracker},
-};
+use bridge::{handle::FrontendHandle, message::MessageToFrontend, modal_action::ModalAction};
 use reqwest::StatusCode;
 use schema::pandora_update::{UpdateInstallType, UpdateManifest, UpdatePrompt};
 use sha1::{Digest, Sha1};
@@ -236,8 +232,7 @@ pub async fn install_update(
 ) {
     if !try_acquire_update_lock() {
         let msg: Arc<str> = "Update already in progress".into();
-        modal_action.set_error_message(msg.clone());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(msg.clone());
         send.send(MessageToFrontend::Refresh);
         if modal_action.refcnt() <= 2 {
             send.send_warning(msg);
@@ -251,7 +246,7 @@ pub async fn install_update(
 
     let result = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await;
     if let Err(error) = result {
-        modal_action.set_error_message(error.clone());
+        modal_action.set_finished_with_error(error.clone());
         // Manual path's error is visible via show_notification reading modal_action.error;
         // auto path's ModalAction is orphaned (refcnt <=2), so surface via toast.
         if modal_action.refcnt() <= 2 {
@@ -272,8 +267,7 @@ async fn install_update_inner(
     modal_action: ModalAction,
 ) -> Result<(), Arc<str>> {
     let title = format!("Downloading Pandora {}", update.new_version);
-    let tracker = ProgressTracker::new(title.into(), send.clone());
-    modal_action.trackers.push(tracker.clone());
+    let tracker = modal_action.push_tracker(title.into());
 
     let mut expected_hash = [0u8; 20];
     let Ok(_) = hex::decode_to_slice(&*update.exe.sha1, &mut expected_hash) else {
@@ -289,7 +283,6 @@ async fn install_update_inner(
     }
 
     tracker.set_total(update.exe.size);
-    tracker.notify();
 
     use futures::StreamExt;
     let mut stream = response.bytes_stream();
@@ -303,7 +296,6 @@ async fn install_update_inner(
 
         bytes.extend_from_slice(&*item);
         tracker.add_count(item.len());
-        tracker.notify();
     }
 
     let mut hasher = Sha1::new();
