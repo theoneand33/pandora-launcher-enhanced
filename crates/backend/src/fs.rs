@@ -234,7 +234,7 @@ pub fn copy_content_recursive(
         return Err(ErrorKind::NotADirectory.into());
     }
     if !to.is_dir() {
-        return Err(ErrorKind::AlreadyExists.into());
+        return Err(ErrorKind::NotADirectory.into());
     }
 
     let mut directories = Vec::new();
@@ -262,7 +262,14 @@ pub fn copy_content_recursive(
             };
             if file_type.is_symlink() {
                 let target = std::fs::read_link(&path)?;
-                if let Ok(internal) = target.strip_prefix(&from) {
+                // Resolve relative targets against the symlink's parent for classification,
+                // but retain the original target for recreation.
+                let resolved = if target.is_relative() {
+                    path.parent().unwrap_or(&from).join(&target)
+                } else {
+                    target.clone()
+                };
+                if let Ok(internal) = resolved.strip_prefix(&from) {
                     internal_symlinks.push((relative.to_path_buf(), internal.to_path_buf()));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
@@ -484,7 +491,11 @@ impl FileMetadata {
         use std::os::windows::io::AsRawHandle;
         use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, FILE_ID_INFO};
 
-        let file = std::fs::OpenOptions::new().open(path)?;
+        // Detect directories before opening to match Unix IsADirectory behavior.
+        if std::fs::metadata(path).is_ok_and(|m| m.is_dir()) {
+            return Err(std::io::Error::new(std::io::ErrorKind::IsADirectory, "is a directory"));
+        }
+        let file = std::fs::OpenOptions::new().read(true).open(path)?;
         let handle = windows::Win32::Foundation::HANDLE(file.as_raw_handle());
 
         let mut file_info: BY_HANDLE_FILE_INFORMATION = Default::default();

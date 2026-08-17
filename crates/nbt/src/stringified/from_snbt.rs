@@ -48,6 +48,7 @@ fn read_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result<(usiz
         '"' => (NBTNode::String(read_string(snbt)?), TAG_STRING_ID),
         't' => {
             if snbt.len() >= 4 && &snbt[..4] == "true" {
+                *snbt = &snbt[4..];
                 (NBTNode::Byte(1), TAG_BYTE_ID)
             } else {
                 bail!("unknown start of type: t");
@@ -55,6 +56,7 @@ fn read_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result<(usiz
         },
         'f' => {
             if snbt.len() >= 5 && &snbt[..5] == "false" {
+                *snbt = &snbt[5..];
                 (NBTNode::Byte(0), TAG_BYTE_ID)
             } else {
                 bail!("unknown start of type: f");
@@ -259,7 +261,7 @@ fn read_array_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result
                 _ => bail!("read_array_node: expect semicolon (;) after B"),
             }
 
-            Ok((NBTNode::ByteArray(read_primitive_array(snbt)?), TAG_BYTE_ARRAY_ID))
+            Ok((NBTNode::ByteArray(read_primitive_array(snbt, 'B')?), TAG_BYTE_ARRAY_ID))
         },
         // Primitive IntArray
         'I' => {
@@ -269,7 +271,7 @@ fn read_array_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result
                 _ => bail!("read_array_node: expect semicolon (;) after I"),
             }
 
-            Ok((NBTNode::IntArray(read_primitive_array(snbt)?), TAG_INT_ARRAY_ID))
+            Ok((NBTNode::IntArray(read_primitive_array(snbt, 'I')?), TAG_INT_ARRAY_ID))
         },
         // Primitive LongArray
         'L' => {
@@ -279,7 +281,7 @@ fn read_array_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result
                 _ => bail!("read_array_node: expect semicolon (;) after L"),
             }
 
-            Ok((NBTNode::LongArray(read_primitive_array(snbt)?), TAG_LONG_ARRAY_ID))
+            Ok((NBTNode::LongArray(read_primitive_array(snbt, 'L')?), TAG_LONG_ARRAY_ID))
         },
         // Special case for empty list `[]`
         ']' => {
@@ -326,7 +328,7 @@ fn read_array_node(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result
     }
 }
 
-fn read_primitive_array<T: FromStr>(snbt: &mut &str) -> anyhow::Result<Vec<T>> {
+fn read_primitive_array<T: FromStr>(snbt: &mut &str, kind: char) -> anyhow::Result<Vec<T>> {
     let mut values = Vec::new();
     let mut state = PrimArrParseState::WaitingForNumber;
     for (index, c) in snbt.char_indices() {
@@ -335,7 +337,9 @@ fn read_primitive_array<T: FromStr>(snbt: &mut &str) -> anyhow::Result<Vec<T>> {
                 match state {
                     PrimArrParseState::WaitingForComma => (),
                     PrimArrParseState::WaitingForNumber => {
-                        bail!("read_primitive_array: expected numeric character, got ]")
+                        if !values.is_empty() {
+                            bail!("read_primitive_array: expected numeric character, got ]")
+                        }
                     },
                     PrimArrParseState::InNumber { start } => {
                         let value: T = snbt[start..index]
@@ -372,8 +376,6 @@ fn read_primitive_array<T: FromStr>(snbt: &mut &str) -> anyhow::Result<Vec<T>> {
             },
             ' ' => continue,
             c => {
-                // todo: this is very permissive
-                // this should only allow b/B (for byte arrays), l/L (for long arrays) and nothing for int arrays
                 match state {
                     PrimArrParseState::WaitingForComma => {
                         bail!("read_primitive_array: expected comma, got `{}`", c)
@@ -382,6 +384,15 @@ fn read_primitive_array<T: FromStr>(snbt: &mut &str) -> anyhow::Result<Vec<T>> {
                         bail!("read_primitive_array: expected numeric character, got `{}`", c)
                     },
                     PrimArrParseState::InNumber { start } => {
+                        let allowed = match kind {
+                            'B' => c == 'b' || c == 'B',
+                            'L' => c == 'l' || c == 'L',
+                            'I' => false,
+                            _ => false,
+                        };
+                        if !allowed {
+                            bail!("read_primitive_array: invalid suffix `{}` for array type {}", c, kind)
+                        }
                         let value: T = snbt[start..index]
                             .parse()
                             .map_err(|_| anyhow::anyhow!("read_primitive_array: failed to parse"))?;

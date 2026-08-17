@@ -44,8 +44,20 @@ pub fn spawn(mut command: PandoraCommand) -> std::io::Result<PandoraChild> {
         return Err(Error::new(ErrorKind::Other, format!("unable to execute with privileges: {status}")));
     }
 
-    let fileno = unsafe { cvt_r(|| libc::fileno(stdout)) }?;
+    let fileno = unsafe { cvt_r(|| libc::fileno(stdout)) };
+    let fileno = match fileno {
+        Ok(fd) => fd,
+        Err(e) => {
+            unsafe { libc::fclose(stdout) };
+            return Err(e);
+        },
+    };
     let pid = unsafe { libc::fcntl(fileno, libc::F_GETOWN, 0) };
+    if pid <= 0 {
+        unsafe { libc::fclose(stdout) };
+        return Err(Error::new(ErrorKind::Other, format!("invalid pid from F_GETOWN: {pid}")));
+    }
+    unsafe { libc::fclose(stdout) };
 
     return Ok(PandoraChild {
         process: PandoraProcess::new(pid),
@@ -59,7 +71,7 @@ struct OwnedAuthorization(AuthorizationRef);
 
 impl Drop for OwnedAuthorization {
     fn drop(&mut self) {
-        if self.0.is_null() {
+        if !self.0.is_null() {
             unsafe { AuthorizationFree(self.0, kAuthorizationFlagDefaults) };
         }
     }

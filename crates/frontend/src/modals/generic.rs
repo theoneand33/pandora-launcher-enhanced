@@ -223,66 +223,78 @@ impl ModalRoot {
 }
 
 fn render_progress_trackers(modal_action: &ModalAction, elapsed_modal: f32) -> (Vec<Div>, bool) {
+    // Cleanup finished trackers without holding lock during element creation.
+    // Single owner for retain: keep it here but release write lock before building elements.
     modal_action.write_trackers(|trackers| {
-        let mut progress_entries = Vec::with_capacity(trackers.len());
-        let mut needs_animation = false;
-
-        let mut finishing_tracker_slots = 8;
+        let mut finishing_slots = 8;
         trackers.retain(|tracker| {
             if let Some(finished_at) = tracker.get_finished_at() {
                 let finish_type = tracker.finish_type();
                 if finish_type == ProgressTrackerFinishType::Fast {
                     return false;
                 }
-
                 let elapsed = (finished_at.elapsed().as_secs_f32() - elapsed_modal).max(0.0);
                 if elapsed >= 2.0 {
                     return false;
                 }
             } else {
-                finishing_tracker_slots -= 1;
+                finishing_slots -= 1;
             }
             true
         });
+    });
 
-        for tracker in &*trackers {
-            let mut opacity = 1.0;
-
+    // Snapshot trackers under read lock, then build elements without holding lock.
+    let snapshot = modal_action.read_trackers(|trackers| trackers.clone());
+    let mut progress_entries = Vec::with_capacity(snapshot.len());
+    let mut needs_animation = false;
+    let mut finishing_tracker_slots = 8;
+    // Re-count unfinished to mirror original slot logic.
+    for tracker in &snapshot {
+        if tracker.get_finished_at().is_none() {
+            finishing_tracker_slots -= 1;
+        }
+    }
+    for tracker in &snapshot {
+        // Skip already-cleaned Fast trackers that would have been retained? They are already removed above.
+        if let Some(finished_at) = tracker.get_finished_at() {
+            if finishing_tracker_slots <= 0 {
+                continue;
+            }
+            finishing_tracker_slots -= 1;
+            needs_animation = true;
+            let elapsed = finished_at.elapsed().as_secs_f32();
+            let elapsed_fade = (elapsed - elapsed_modal).max(0.0);
+            let opacity = if elapsed_fade >= 1.0 {
+                (2.0 - elapsed_fade).max(0.0)
+            } else {
+                1.0
+            };
             let mut progress_bar = ProgressBar::new();
             if let Some(progress_amount) = tracker.get_float() {
                 progress_bar.amount = progress_amount;
             }
-
-            if let Some(finished_at) = tracker.get_finished_at() {
-                if finishing_tracker_slots <= 0 {
-                    continue;
-                }
-                finishing_tracker_slots -= 1;
-
-                let elapsed = finished_at.elapsed().as_secs_f32();
-                let elapsed_fade = (elapsed - elapsed_modal).max(0.0);
-                if elapsed_fade >= 1.0 {
-                    opacity = (2.0 - elapsed_fade).max(0.0);
-                }
-
-                let finish_type = tracker.finish_type();
-                if finish_type == ProgressTrackerFinishType::Error {
-                    progress_bar.color = ProgressBarColor::Error;
-                } else {
-                    progress_bar.color = ProgressBarColor::Success;
-                }
-                if elapsed <= 0.5 {
-                    progress_bar.color_scale = elapsed * 2.0;
-                }
-
-                needs_animation = true;
+            let finish_type = tracker.finish_type();
+            if finish_type == ProgressTrackerFinishType::Error {
+                progress_bar.color = ProgressBarColor::Error;
+            } else {
+                progress_bar.color = ProgressBarColor::Success;
             }
-
+            if elapsed <= 0.5 {
+                progress_bar.color_scale = elapsed * 2.0;
+            }
             let title = tracker.get_title();
             progress_entries.push(div().gap_3().child(SharedString::from(title)).child(progress_bar).opacity(opacity));
+        } else {
+            let mut progress_bar = ProgressBar::new();
+            if let Some(progress_amount) = tracker.get_float() {
+                progress_bar.amount = progress_amount;
+            }
+            let title = tracker.get_title();
+            progress_entries.push(div().gap_3().child(SharedString::from(title)).child(progress_bar).opacity(1.0));
         }
-        (progress_entries, needs_animation)
-    })
+    }
+    (progress_entries, needs_animation)
 }
 
 impl Render for ModalRoot {

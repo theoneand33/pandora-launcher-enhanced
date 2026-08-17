@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use bridge::{
     instance::InstanceID,
     message::{ExportOptions, MessageToFrontend},
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 use parking_lot::RwLock;

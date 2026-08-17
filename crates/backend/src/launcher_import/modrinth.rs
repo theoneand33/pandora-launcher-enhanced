@@ -101,7 +101,7 @@ pub fn import_instances_from_modrinth(
         let target_dot_minecraft = to_import.pandora_path.join(".minecraft");
 
         _ = std::fs::create_dir_all(&target_dot_minecraft);
-        _ = crate::fs::copy_content_recursive(
+        if let Err(err) = crate::fs::copy_content_recursive(
             &to_import.minecraft_folder,
             &target_dot_minecraft,
             false,
@@ -109,7 +109,12 @@ pub fn import_instances_from_modrinth(
                 tracker.set_total(total as usize);
                 tracker.set_count(copied as usize);
             },
-        );
+        ) {
+            log::error!("Failed to copy Modrinth instance {:?}: {err:?}", to_import.minecraft_folder);
+            backend.send.send_error(format!("Failed to copy instance: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            continue;
+        }
 
         // Copy icon
         if let Some(icon_path) = to_import.icon_path {

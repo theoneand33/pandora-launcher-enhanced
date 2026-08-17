@@ -144,10 +144,12 @@ async fn import_accounts_from_atlauncher(
 
     let accounts_path = import_job.root.join("configs/accounts.json");
     let Ok(accounts_bytes) = std::fs::read(&accounts_path) else {
+        tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
         return None;
     };
 
     let Ok(accounts_json) = serde_json::from_slice::<Vec<AtLauncherAccount>>(&accounts_bytes) else {
+        tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
         return None;
     };
 
@@ -155,11 +157,13 @@ async fn import_accounts_from_atlauncher(
         Ok(secret_storage) => secret_storage,
         Err(error) => {
             log::error!("Error initializing secret storage: {error}");
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
             return None;
         },
     };
 
     tracker.set_count(1);
+    tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Normal);
 
     let num_accounts = accounts_json.len();
     let tracker = modal_action.push_tracker("Importing accounts".into());
@@ -187,6 +191,7 @@ async fn import_accounts_from_atlauncher(
         }
         accounts.selected_account = last_account_username;
     });
+    tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Normal);
 
     let tracker = modal_action.push_tracker("Importing credentials".into());
     tracker.set_total(num_accounts);

@@ -7,6 +7,7 @@ default-members = ["crates/pandora_launcher"]
 [workspace.package]
 edition = "2024"
 version = "5.3.1"
+rust-version = "1.91"
 
 # Fast dev builds: no LTO, many codegen units, incremental, no heavy opt.
 # Release keeps thin LTO but uses more codegen units in dependencies where profitable.

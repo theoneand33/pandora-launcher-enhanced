@@ -54,7 +54,7 @@ impl ModalActionInner {
         let _ = self
             .finished_at
             .compare_exchange(None, Some(Instant::now()), Ordering::SeqCst, Ordering::Relaxed);
-        self.notify.notify_one();
+        self.notify.notify_waiters();
     }
 
     pub fn get_finished_at(&self) -> Option<Instant> {
@@ -69,6 +69,7 @@ impl ModalActionInner {
     // ponytail: keep fork compatibility
     pub fn set_error_message(&self, error: Arc<str>) {
         *self.error.write() = Some(error);
+        self.notify.notify_waiters();
     }
 
     pub fn get_error_message(&self) -> Option<Arc<str>> {
@@ -117,6 +118,11 @@ impl ModalActionInner {
     pub fn write_trackers<R>(&self, f: impl FnOnce(&mut Vec<ProgressTracker>) -> R) -> R {
         let mut guard = self.trackers.write();
         (f)(&mut *guard)
+    }
+
+    pub fn read_trackers<R>(&self, f: impl FnOnce(&Vec<ProgressTracker>) -> R) -> R {
+        let guard = self.trackers.read();
+        (f)(&*guard)
     }
 }
 

@@ -152,5 +152,6 @@ pub fn join_windows_shell_os(args: &[&OsStr]) -> OsString {
         }
     }
 
+    // SAFETY: string contains arguments' encoded bytes in order and inserted ASCII bytes (' ', '"', '\\') cannot split multibyte sequences.
     unsafe { OsString::from_encoded_bytes_unchecked(string) }
 }

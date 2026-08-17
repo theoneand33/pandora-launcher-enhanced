@@ -8,7 +8,7 @@ use std::{
 
 use bridge::{
     instance::InstanceID,
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 
@@ -246,8 +246,7 @@ pub async fn duplicate_instance(backend: Arc<BackendState>, id: InstanceID, name
     };
 
     let Some(safe_name) = SafePath::new(name) else {
-        modal_action.set_error_message(t::instance::duplicate::error_path(name).into());
-        modal_action.set_finished();
+        modal_action.set_finished_with_error(t::instance::duplicate::error_path(name).into());
         return;
     };
     let dest = safe_name.to_path(&backend.directories.instances_dir);

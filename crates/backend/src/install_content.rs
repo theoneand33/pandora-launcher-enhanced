@@ -8,7 +8,7 @@ use std::{
 use bridge::{
     install::{ContentDownload, ContentInstall, ContentInstallFile, ContentInstallPath, InstallTarget},
     instance::{ContentFolder, ContentSummary, ContentType, ModpackFileSource},
-    modal_action::{ModalAction, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ProgressTrackerFinishType},
     safe_path::SafePath,
 };
 use parking_lot::Mutex;
@@ -296,6 +296,7 @@ impl BackendState {
                 None
             };
 
+            let mut first_error: Option<Arc<str>> = None;
             for install in files {
                 let Some(install_path) = install.install_path else {
                     self.send
@@ -354,8 +355,10 @@ impl BackendState {
                     },
                     Err(err) => {
                         log::error!("Failed to install content to {:?}: {err}", target_path);
-                        let message = format!("Failed to install content to {}: {err}", target_path.display());
-                        modal_action.set_finished_with_error(Arc::from(message.as_str()));
+                        if first_error.is_none() {
+                            let message = format!("Failed to install content to {}: {err}", target_path.display());
+                            first_error = Some(Arc::from(message.as_str()));
+                        }
                     },
                 }
             }
@@ -368,6 +371,10 @@ impl BackendState {
                 && let Some(instance) = guard.instances.get_mut(instance_id)
             {
                 instance.reload_frozen_mods_from_backup(self);
+            }
+
+            if let Some(err) = first_error {
+                modal_action.set_finished_with_error(err);
             }
 
             if cannot_modify_while_running {

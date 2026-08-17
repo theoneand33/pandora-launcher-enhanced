@@ -10,13 +10,12 @@ use auth::{credentials::AccountCredentials, models::MinecraftAccessToken, secret
 use bridge::{
     install::{ContentDownload, ContentInstall, ContentInstallFile, ContentInstallPath, InstallTarget},
     instance::{ContentFolder, ContentSummary, ContentType, InstanceContentID, InstanceID},
-    keep_alive::KeepAlive,
     message::{
         AccountCapesResult, AccountSkinResult, BackendConfigWithPassword, EmbeddedOrRaw, GameOutputMsg, LogFiles,
         MessageToBackend, MessageToFrontend, QuickPlayLaunch,
     },
     meta::MetadataResult,
-    modal_action::{ModalAction, ModalActionVisitUrl, ProgressTracker, ProgressTrackerFinishType},
+    modal_action::{ModalAction, ModalActionVisitUrl, ProgressTrackerFinishType},
     serial::AtomicOptionSerial,
 };
 use futures::TryFutureExt;
@@ -42,7 +41,6 @@ use uuid::Uuid;
 use crate::{
     BackendState, CachedMinecraftProfile, LoginError,
     account::BackendAccount,
-    arcfactory::ArcStrFactory,
     fs::FolderChanges,
     instance::Instance,
     launch::{ArgumentExpansionKey, LaunchError},
