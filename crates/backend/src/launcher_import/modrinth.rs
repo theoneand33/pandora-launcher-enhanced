@@ -113,6 +113,7 @@ pub fn import_instances_from_modrinth(
             log::error!("Failed to copy Modrinth instance {:?}: {err:?}", to_import.minecraft_folder);
             backend.send.send_error(format!("Failed to copy instance: {err}"));
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
             continue;
         }
 
@@ -141,7 +142,13 @@ pub fn import_instances_from_modrinth(
 
         // Write info_v1.json
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
+        if let Err(err) = crate::fs::write_safe(&info_path, &configuration_bytes) {
+            log::error!("Failed to write Modrinth instance config {:?}: {err:?}", info_path);
+            backend.send.send_error(format!("Failed to write instance config: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
+            continue;
+        }
 
         all_tracker.add_count(1);
 

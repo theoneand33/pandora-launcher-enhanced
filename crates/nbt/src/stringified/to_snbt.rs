@@ -52,6 +52,9 @@ fn write_compound<T: Write>(writer: &mut T, nodes: &Slab<NBTNode>, children: &NB
 }
 
 fn write_key<T: Write>(writer: &mut T, value: &str) -> std::fmt::Result {
+    if value.is_empty() {
+        return write_string(writer, value);
+    }
     // String must match `[A-Za-z0-9._+-]+` to be unquoted
     for c in value.chars() {
         if !matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | '.' | '_' | '+' | '-') {

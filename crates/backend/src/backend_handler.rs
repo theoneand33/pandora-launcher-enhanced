@@ -2533,7 +2533,9 @@ impl BackendState {
         }
 
         let Some(login_info) = self.get_login_info(&modal_action, configuration.preferred_account).await else {
-            modal_action.set_finished_with_error("Unable to log in to Minecraft account".into());
+            if modal_action.get_finished_at().is_none() {
+                modal_action.set_finished_with_error("Unable to log in to Minecraft account".into());
+            }
             return;
         };
 

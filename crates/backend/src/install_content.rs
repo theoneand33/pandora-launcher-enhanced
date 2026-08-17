@@ -259,8 +259,6 @@ impl BackendState {
                 .map(|v| v.join(".minecraft").into());
         }
 
-        let mut instance_lock_guard = None;
-
         if let bridge::install::InstallTarget::Instance(instance_id) = content.target {
             let mut instance_state = self.instance_state.write();
             if let Some(instance) = instance_state.instances.get_mut(instance_id) {
@@ -274,15 +272,10 @@ impl BackendState {
 
                 dot_minecraft_dir = Some(instance.dot_minecraft_path.clone());
             }
-            instance_lock_guard = Some(instance_state);
-        } else if dot_minecraft_dir.is_some() {
-            instance_lock_guard = Some(self.instance_state.write());
         }
 
         if let Some(dot_minecraft_dir) = dot_minecraft_dir {
             let mods_dir = dot_minecraft_dir.join("mods");
-            let mut cannot_modify_while_running = false;
-            let mut installed_into_frozen_backup = false;
 
             // While the instance is running the live mods folder is a throwaway copy that gets
             // restored from `original_mods/` on stop, so installs into it must be mirrored to the
@@ -296,70 +289,93 @@ impl BackendState {
                 None
             };
 
-            let mut first_error: Option<Arc<str>> = None;
+            let allow_modify_while_running = self.config.write().get().allow_modify_while_running;
+
+            let mut to_install = Vec::new();
             for install in files {
-                let Some(install_path) = install.install_path else {
+                if install.install_path.is_none() {
                     self.send
                         .send_warning(format!("Unable to determine install path for {}", install.filename));
                     continue;
-                };
-
-                let target_path = dot_minecraft_dir.join(&install_path);
-
-                if instance_running
-                    && target_path.starts_with(&mods_dir)
-                    && !self.config.write().get().allow_modify_while_running
-                {
-                    cannot_modify_while_running = true;
-                    continue;
                 }
+                to_install.push(install);
+            }
 
-                let _ = std::fs::create_dir_all(target_path.parent().unwrap());
+            let dot_minecraft_for_copy = dot_minecraft_dir.clone();
+            let mods_dir_for_copy = mods_dir.clone();
+            let original_mods_for_copy = original_mods_dir.clone();
 
-                // Check if this is a reinstall (file already exists)
-                let is_reinstall = target_path.exists();
+            let (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes) =
+                tokio::task::spawn_blocking(move || {
+                    let mut first_error: Option<String> = None;
+                    let mut cannot_modify_while_running = false;
+                    let mut installed_into_frozen_backup = false;
+                    let mut successes: Vec<(InstallFromContentLibrary, bool, PathBuf)> = Vec::new();
 
-                match crate::fs::fastcopy(&install.from, &target_path, true, true) {
-                    Ok(()) => {
-                        // Mirror the install into the backup mods folder so it persists past stop.
-                        if let Some(original_mods_dir) = &original_mods_dir
-                            && let Ok(relative) = target_path.strip_prefix(&mods_dir)
+                    for install in to_install {
+                        let install_path = install.install_path.clone().unwrap();
+                        let target_path = dot_minecraft_for_copy.join(&*install_path);
+
+                        if instance_running
+                            && target_path.starts_with(&mods_dir_for_copy)
+                            && !allow_modify_while_running
                         {
-                            let backup_target = original_mods_dir.join(relative);
-                            if let Some(parent) = backup_target.parent() {
-                                let _ = std::fs::create_dir_all(parent);
-                            }
-                            if let Err(err) = crate::fs::fastcopy(&install.from, &backup_target, true, true) {
-                                log::error!("Failed to mirror install into {:?}: {err}", backup_target);
-                            } else {
-                                installed_into_frozen_backup = true;
-                            }
+                            cannot_modify_while_running = true;
+                            continue;
                         }
 
-                        if let Some(replace) = install.replace {
-                            self.replace_aux_path(&replace, &install.mod_summary, &target_path);
-                            let replace_path: &Path = &replace;
-                            if replace_path != target_path.as_path() {
-                                let _ = std::fs::remove_file(&replace);
-                                // Mirror the replacement removal into the backup folder too.
-                                if let Some(original_mods_dir) = &original_mods_dir
-                                    && let Ok(relative) = replace_path.strip_prefix(&mods_dir)
+                        let _ = std::fs::create_dir_all(target_path.parent().unwrap());
+
+                        let is_reinstall = target_path.exists();
+
+                        match crate::fs::fastcopy(&install.from, &target_path, true, true) {
+                            Ok(()) => {
+                                if let Some(original_mods_dir) = &original_mods_for_copy
+                                    && let Ok(relative) = target_path.strip_prefix(&mods_dir_for_copy)
                                 {
-                                    let _ = std::fs::remove_file(original_mods_dir.join(relative));
+                                    let backup_target = original_mods_dir.join(relative);
+                                    if let Some(parent) = backup_target.parent() {
+                                        let _ = std::fs::create_dir_all(parent);
+                                    }
+                                    if let Err(err) = crate::fs::fastcopy(&install.from, &backup_target, true, true) {
+                                        log::error!("Failed to mirror install into {:?}: {err}", backup_target);
+                                    } else {
+                                        installed_into_frozen_backup = true;
+                                    }
                                 }
-                            }
-                        } else if is_reinstall && install.mod_summary.extra.is_modpack() {
-                            // Reinstall case: clear aux file to restore deleted mods
-                            self.clear_aux_for_modpack_reinstall(&install.mod_summary, &target_path);
+
+                                successes.push((install, is_reinstall, target_path));
+                            },
+                            Err(err) => {
+                                log::error!("Failed to install content to {:?}: {err}", target_path);
+                                if first_error.is_none() {
+                                    let message =
+                                        format!("Failed to install content to {}: {err}", target_path.display());
+                                    first_error = Some(message);
+                                }
+                            },
                         }
-                    },
-                    Err(err) => {
-                        log::error!("Failed to install content to {:?}: {err}", target_path);
-                        if first_error.is_none() {
-                            let message = format!("Failed to install content to {}: {err}", target_path.display());
-                            first_error = Some(Arc::from(message.as_str()));
+                    }
+
+                    (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes)
+                })
+                .await
+                .unwrap();
+
+            for (install, is_reinstall, target_path) in successes {
+                if let Some(replace) = install.replace {
+                    self.replace_aux_path(&replace, &install.mod_summary, &target_path);
+                    let replace_path: &Path = &replace;
+                    if replace_path != target_path.as_path() {
+                        let _ = std::fs::remove_file(&replace);
+                        if let Some(original_mods_dir) = &original_mods_dir
+                            && let Ok(relative) = replace_path.strip_prefix(&mods_dir)
+                        {
+                            let _ = std::fs::remove_file(original_mods_dir.join(relative));
                         }
-                    },
+                    }
+                } else if is_reinstall && install.mod_summary.extra.is_modpack() {
+                    self.clear_aux_for_modpack_reinstall(&install.mod_summary, &target_path);
                 }
             }
 
@@ -367,22 +383,20 @@ impl BackendState {
             // backup we just mirrored into, making the newly installed mod appear immediately.
             if installed_into_frozen_backup
                 && let bridge::install::InstallTarget::Instance(instance_id) = content.target
-                && let Some(guard) = instance_lock_guard.as_mut()
-                && let Some(instance) = guard.instances.get_mut(instance_id)
             {
-                instance.reload_frozen_mods_from_backup(self);
+                if let Some(instance) = self.instance_state.write().instances.get_mut(instance_id) {
+                    instance.reload_frozen_mods_from_backup(self);
+                }
             }
 
             if let Some(err) = first_error {
-                modal_action.set_finished_with_error(err);
+                modal_action.set_finished_with_error(Arc::from(err.as_str()));
             }
 
             if cannot_modify_while_running {
                 self.send.send_warning("Cannot modify mods folder while instance is running");
             }
         }
-
-        drop(instance_lock_guard);
     }
 
     async fn install_into_content_library(

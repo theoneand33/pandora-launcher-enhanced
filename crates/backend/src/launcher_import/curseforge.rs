@@ -172,6 +172,7 @@ pub fn import_instances_from_curseforge(
             log::error!("Failed to copy CurseForge instance {:?}: {err:?}", to_import.folder);
             backend.send.send_error(format!("Failed to copy instance: {err}"));
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
             continue;
         }
 
@@ -185,7 +186,13 @@ pub fn import_instances_from_curseforge(
         _ = std::fs::remove_file(&target_dot_minecraft.join("minecraftinstance.json"));
 
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
+        if let Err(err) = crate::fs::write_safe(&info_path, &configuration_bytes) {
+            log::error!("Failed to write CurseForge instance config {:?}: {err:?}", info_path);
+            backend.send.send_error(format!("Failed to write instance config: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
+            continue;
+        }
 
         all_tracker.add_count(1);
 

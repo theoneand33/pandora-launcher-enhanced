@@ -269,8 +269,8 @@ pub fn copy_content_recursive(
                 } else {
                     target.clone()
                 };
-                if let Ok(internal) = resolved.strip_prefix(&from) {
-                    internal_symlinks.push((relative.to_path_buf(), internal.to_path_buf()));
+                if resolved.strip_prefix(&from).is_ok() {
+                    internal_symlinks.push((relative.to_path_buf(), target));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
                 }
@@ -324,10 +324,38 @@ pub fn copy_content_recursive(
             ),
         ));
     }
-    for (relative, internal) in internal_symlinks {
-        let dest = to.join(relative);
-        let target = to.join(internal);
-        if let Err(err) = symlink_dir_or_file(&target, &dest)
+    for (relative, original_target) in internal_symlinks {
+        let dest = to.join(&relative);
+        let probe = if original_target.is_relative() {
+            dest.parent().unwrap_or(to).join(&original_target)
+        } else {
+            original_target.clone()
+        };
+        let result = {
+            #[cfg(unix)]
+            {
+                if !probe.exists() {
+                    Err(Error::new(ErrorKind::NotFound, format!("{probe:?} not found")))
+                } else {
+                    std::os::unix::fs::symlink(&original_target, &dest)
+                }
+            }
+            #[cfg(windows)]
+            {
+                let metadata = probe.metadata();
+                match metadata {
+                    Ok(meta) if meta.is_dir() => std::os::windows::fs::symlink_dir(&original_target, &dest),
+                    Ok(meta) if meta.is_file() => std::os::windows::fs::symlink_file(&original_target, &dest),
+                    Ok(_) => Err(Error::new(ErrorKind::NotFound, format!("{probe:?} is not file or dir"))),
+                    Err(e) => Err(e),
+                }
+            }
+            #[cfg(not(any(windows, unix)))]
+            {
+                compile_error!("Unsupported platform: can't symlink");
+            }
+        };
+        if let Err(err) = result
             && strict
         {
             return Err(err);
