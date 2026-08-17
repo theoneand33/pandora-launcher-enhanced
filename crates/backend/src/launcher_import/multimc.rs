@@ -513,23 +513,29 @@ fn import_instances_from_multimc(
         let mmc_dot_minecraft = to_import.folder.join(".minecraft");
         let mmc_minecraft = to_import.folder.join("minecraft");
         let target_dot_minecraft = to_import.pandora_path.join(".minecraft");
-        if mmc_minecraft.exists() {
+        let copy_result = if mmc_minecraft.exists() {
             _ = std::fs::create_dir_all(&target_dot_minecraft);
-            _ = crate::fs::copy_content_recursive(&mmc_minecraft, &target_dot_minecraft, false, &|copied, total| {
+            crate::fs::copy_content_recursive(&mmc_minecraft, &target_dot_minecraft, false, &|copied, total| {
                 tracker.set_total(total as usize);
                 tracker.set_count(copied as usize);
-            });
+            })
         } else if mmc_dot_minecraft.exists() {
             _ = std::fs::create_dir_all(&target_dot_minecraft);
-            _ = crate::fs::copy_content_recursive(
-                &mmc_dot_minecraft,
-                &target_dot_minecraft,
-                false,
-                &|copied, total| {
-                    tracker.set_total(total as usize);
-                    tracker.set_count(copied as usize);
-                },
-            );
+            crate::fs::copy_content_recursive(&mmc_dot_minecraft, &target_dot_minecraft, false, &|copied, total| {
+                tracker.set_total(total as usize);
+                tracker.set_count(copied as usize);
+            })
+        } else {
+            Ok(())
+        };
+        if let Err(err) = copy_result {
+            log::error!("Failed to copy MultiMC instance {:?}: {err:?}", to_import.folder);
+            backend.send.send_error(format!("Failed to copy instance: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!("Failed to clean up partial MultiMC import {:?}: {cleanup_err:?}", to_import.pandora_path);
+            }
+            continue;
         }
 
         // Copy icon
@@ -542,7 +548,15 @@ fn import_instances_from_multimc(
 
         // Write info_v1.json
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
+        if let Err(err) = crate::fs::write_safe(&info_path, &configuration_bytes) {
+            log::error!("Failed to write MultiMC instance config {:?}: {err:?}", info_path);
+            backend.send.send_error(format!("Failed to write instance config: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!("Failed to clean up partial MultiMC import {:?}: {cleanup_err:?}", to_import.pandora_path);
+            }
+            continue;
+        }
 
         // Write stats_v1.json if we have some stats
         if stats != InstanceStats::default() {

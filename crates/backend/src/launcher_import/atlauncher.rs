@@ -369,10 +369,23 @@ fn import_instances_from_atlauncher(
         let target_dot_minecraft = to_import.pandora_path.join(".minecraft");
 
         _ = std::fs::create_dir_all(&target_dot_minecraft);
-        _ = crate::fs::copy_content_recursive(&to_import.folder, &target_dot_minecraft, false, &|copied, total| {
-            tracker.set_total(total as usize);
-            tracker.set_count(copied as usize);
-        });
+        if let Err(err) =
+            crate::fs::copy_content_recursive(&to_import.folder, &target_dot_minecraft, false, &|copied, total| {
+                tracker.set_total(total as usize);
+                tracker.set_count(copied as usize);
+            })
+        {
+            log::error!("Failed to copy ATLauncher instance {:?}: {err:?}", to_import.folder);
+            backend.send.send_error(format!("Failed to copy instance: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!(
+                    "Failed to clean up partial ATLauncher import {:?}: {cleanup_err:?}",
+                    to_import.pandora_path
+                );
+            }
+            continue;
+        }
 
         // remove old configuration, rename icon path.
         _ = std::fs::rename(&target_dot_minecraft.join("instance.png"), &to_import.pandora_path.join("icon.png"));
@@ -411,7 +424,18 @@ fn import_instances_from_atlauncher(
         }
 
         let info_path = to_import.pandora_path.join("info_v1.json");
-        _ = crate::fs::write_safe(&info_path, &configuration_bytes);
+        if let Err(err) = crate::fs::write_safe(&info_path, &configuration_bytes) {
+            log::error!("Failed to write ATLauncher instance config {:?}: {err:?}", info_path);
+            backend.send.send_error(format!("Failed to write instance config: {err}"));
+            tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!(
+                    "Failed to clean up partial ATLauncher import {:?}: {cleanup_err:?}",
+                    to_import.pandora_path
+                );
+            }
+            continue;
+        }
 
         all_tracker.add_count(1);
 

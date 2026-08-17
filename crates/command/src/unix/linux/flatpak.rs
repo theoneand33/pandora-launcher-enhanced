@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+// ponytail: flatpak host-spawn stub — wired via pkexec, general spawn awaits launch integration
 use std::{ffi::OsStr, io::Error};
 
 use crate::{PandoraChild, PandoraCommand, spawner::SpawnContext};

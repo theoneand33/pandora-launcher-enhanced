@@ -6,7 +6,6 @@ mod backend;
 pub use backend::*;
 
 mod account;
-mod arcfactory;
 mod backend_filesystem;
 mod backend_handler;
 mod directories;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+// ponytail: pkexec spawn stub — awaits wiring into launch flow
 use std::{ffi::OsStr, io::Error, path::Path};
 
 use crate::{PandoraChild, PandoraCommand, spawner::SpawnContext};
