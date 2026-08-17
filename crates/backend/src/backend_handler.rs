@@ -817,7 +817,9 @@ impl BackendState {
                 let mut content = Vec::new();
                 for folder in ContentFolder::iter() {
                     let Some(summaries) = Instance::load_content(self.clone(), id, folder).await else {
-                        modal_action.set_finished();
+                        log::error!("Failed to load content for instance {id:?} folder {folder:?}");
+                        modal_action
+                            .set_finished_with_error(format!("Failed to load content for folder {folder:?}").into());
                         return;
                     };
                     content.extend_from_slice(&*summaries);
@@ -1688,14 +1690,19 @@ impl BackendState {
                 tracker.set_total(4);
 
                 let mut reader = std::io::BufReader::new(file);
-                let Ok(buffer) = reader.fill_buf() else {
-                    tracker.set_finished(ProgressTrackerFinishType::Error);
-                    return;
+                let is_gzip = match reader.fill_buf() {
+                    Ok(buffer) => buffer.len() >= 2 && buffer[0] == 0x1F && buffer[1] == 0x8B,
+                    Err(err) => {
+                        log::error!("Failed to read log file: {err:?}");
+                        tracker.set_finished(ProgressTrackerFinishType::Error);
+                        modal_action.set_finished_with_error(format!("Failed to read log file: {err}").into());
+                        return;
+                    },
                 };
 
                 let mut content = String::new();
 
-                if buffer.len() >= 2 && buffer[0] == 0x1F && buffer[1] == 0x8B {
+                if is_gzip {
                     let mut gz_decoder = flate2::bufread::GzDecoder::new(reader);
                     if let Err(e) = gz_decoder.read_to_string(&mut content) {
                         let error = format!("Error while reading file: {e}");
@@ -1951,6 +1958,7 @@ impl BackendState {
                                 return;
                             }
                         }
+                        return;
                     };
 
                     if let Ok(target) = std::fs::read_link(&instance.root_path) {

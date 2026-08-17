@@ -113,7 +113,9 @@ pub fn import_instances_from_modrinth(
             log::error!("Failed to copy Modrinth instance {:?}: {err:?}", to_import.minecraft_folder);
             backend.send.send_error(format!("Failed to copy instance: {err}"));
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
-            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!("Failed to clean up partial Modrinth import {:?}: {cleanup_err:?}", to_import.pandora_path);
+            }
             continue;
         }
 
@@ -146,7 +148,9 @@ pub fn import_instances_from_modrinth(
             log::error!("Failed to write Modrinth instance config {:?}: {err:?}", info_path);
             backend.send.send_error(format!("Failed to write instance config: {err}"));
             tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
-            let _ = std::fs::remove_dir_all(&to_import.pandora_path);
+            if let Err(cleanup_err) = std::fs::remove_dir_all(&to_import.pandora_path) {
+                log::error!("Failed to clean up partial Modrinth import {:?}: {cleanup_err:?}", to_import.pandora_path);
+            }
             continue;
         }
 

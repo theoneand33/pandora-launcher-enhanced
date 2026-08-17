@@ -163,6 +163,22 @@ pub(crate) fn create_content_library_path_osstrext(
     path
 }
 
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut buf = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => buf.push(prefix.as_os_str()),
+            std::path::Component::RootDir => buf.push(component.as_os_str()),
+            std::path::Component::CurDir => {},
+            std::path::Component::ParentDir => {
+                buf.pop();
+            },
+            std::path::Component::Normal(c) => buf.push(c),
+        }
+    }
+    buf
+}
+
 #[derive(Debug)]
 pub struct FolderChanges {
     all_dirty: bool,
@@ -269,7 +285,8 @@ pub fn copy_content_recursive(
                 } else {
                     target.clone()
                 };
-                if resolved.strip_prefix(&from).is_ok() {
+                let normalized = normalize_lexically(&resolved);
+                if normalized.strip_prefix(&from).is_ok() {
                     internal_symlinks.push((relative.to_path_buf(), target));
                 } else {
                     external_symlinks.push((relative.to_path_buf(), target));
@@ -327,46 +344,33 @@ pub fn copy_content_recursive(
     for (relative, original_target) in internal_symlinks {
         let dest = to.join(&relative);
         let probe = if original_target.is_relative() {
-            dest.parent().unwrap_or(to).join(&original_target)
+            let raw = dest.parent().unwrap_or(to).join(&original_target);
+            normalize_lexically(&raw)
         } else {
-            original_target.clone()
+            normalize_lexically(&original_target)
         };
-        let result = {
-            #[cfg(unix)]
-            {
-                if !probe.exists() {
-                    Err(Error::new(ErrorKind::NotFound, format!("{probe:?} not found")))
-                } else {
-                    std::os::unix::fs::symlink(&original_target, &dest)
-                }
+        if let Err(err) = symlink_with_probe(&original_target, &dest, &probe) {
+            if strict {
+                return Err(err);
+            } else {
+                log::error!("Failed to create symlink {:?} -> {:?}: {err}", dest, original_target);
             }
-            #[cfg(windows)]
-            {
-                let metadata = probe.metadata();
-                match metadata {
-                    Ok(meta) if meta.is_dir() => std::os::windows::fs::symlink_dir(&original_target, &dest),
-                    Ok(meta) if meta.is_file() => std::os::windows::fs::symlink_file(&original_target, &dest),
-                    Ok(_) => Err(Error::new(ErrorKind::NotFound, format!("{probe:?} is not file or dir"))),
-                    Err(e) => Err(e),
-                }
-            }
-            #[cfg(not(any(windows, unix)))]
-            {
-                compile_error!("Unsupported platform: can't symlink");
-            }
-        };
-        if let Err(err) = result
-            && strict
-        {
-            return Err(err);
         }
     }
     for (relative, target) in external_symlinks {
-        let dest = to.join(relative);
-        if let Err(err) = symlink_dir_or_file(&target, &dest)
-            && strict
-        {
-            return Err(err);
+        let dest = to.join(&relative);
+        let probe = if target.is_relative() {
+            let raw = dest.parent().unwrap_or(to).join(&target);
+            normalize_lexically(&raw)
+        } else {
+            normalize_lexically(&target)
+        };
+        if let Err(err) = symlink_with_probe(&target, &dest, &probe) {
+            if strict {
+                return Err(err);
+            } else {
+                log::error!("Failed to create symlink {:?} -> {:?}: {err}", dest, target);
+            }
         }
     }
     #[cfg(windows)]
@@ -389,6 +393,30 @@ pub fn copy_content_recursive(
         }
     }
     Ok(())
+}
+
+fn symlink_with_probe(target: &Path, link: &Path, probe: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        if !probe.exists() {
+            return Err(Error::new(ErrorKind::NotFound, format!("{probe:?} not found")));
+        }
+        std::os::unix::fs::symlink(target, link)
+    }
+    #[cfg(windows)]
+    {
+        let metadata = probe.metadata();
+        match metadata {
+            Ok(meta) if meta.is_dir() => std::os::windows::fs::symlink_dir(target, link),
+            Ok(meta) if meta.is_file() => std::os::windows::fs::symlink_file(target, link),
+            Ok(_) => Err(Error::new(ErrorKind::NotFound, format!("{probe:?} is not file or dir"))),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        compile_error!("Unsupported platform: can't symlink");
+    }
 }
 
 pub fn symlink_dir_or_file(original: &Path, link: &Path) -> std::io::Result<()> {

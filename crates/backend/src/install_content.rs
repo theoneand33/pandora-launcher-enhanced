@@ -305,62 +305,75 @@ impl BackendState {
             let mods_dir_for_copy = mods_dir.clone();
             let original_mods_for_copy = original_mods_dir.clone();
 
-            let (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes) =
-                tokio::task::spawn_blocking(move || {
-                    let mut first_error: Option<String> = None;
-                    let mut cannot_modify_while_running = false;
-                    let mut installed_into_frozen_backup = false;
-                    let mut successes: Vec<(InstallFromContentLibrary, bool, PathBuf)> = Vec::new();
+            let spawn_result = tokio::task::spawn_blocking(move || {
+                let mut first_error: Option<String> = None;
+                let mut cannot_modify_while_running = false;
+                let mut installed_into_frozen_backup = false;
+                let mut successes: Vec<(InstallFromContentLibrary, bool, PathBuf)> = Vec::new();
 
-                    for install in to_install {
-                        let install_path = install.install_path.clone().unwrap();
-                        let target_path = dot_minecraft_for_copy.join(&*install_path);
-
-                        if instance_running
-                            && target_path.starts_with(&mods_dir_for_copy)
-                            && !allow_modify_while_running
-                        {
-                            cannot_modify_while_running = true;
-                            continue;
+                for install in to_install {
+                    let raw_path = install.install_path.clone().unwrap();
+                    let Some(safe_path) = SafePath::from_std_path(&raw_path) else {
+                        let msg = format!("Rejected invalid install path: {}", raw_path.display());
+                        log::error!("{}", msg);
+                        if first_error.is_none() {
+                            first_error = Some(msg);
                         }
+                        continue;
+                    };
+                    let target_path = safe_path.to_path(&dot_minecraft_for_copy);
 
-                        let _ = std::fs::create_dir_all(target_path.parent().unwrap());
-
-                        let is_reinstall = target_path.exists();
-
-                        match crate::fs::fastcopy(&install.from, &target_path, true, true) {
-                            Ok(()) => {
-                                if let Some(original_mods_dir) = &original_mods_for_copy
-                                    && let Ok(relative) = target_path.strip_prefix(&mods_dir_for_copy)
-                                {
-                                    let backup_target = original_mods_dir.join(relative);
-                                    if let Some(parent) = backup_target.parent() {
-                                        let _ = std::fs::create_dir_all(parent);
-                                    }
-                                    if let Err(err) = crate::fs::fastcopy(&install.from, &backup_target, true, true) {
-                                        log::error!("Failed to mirror install into {:?}: {err}", backup_target);
-                                    } else {
-                                        installed_into_frozen_backup = true;
-                                    }
-                                }
-
-                                successes.push((install, is_reinstall, target_path));
-                            },
-                            Err(err) => {
-                                log::error!("Failed to install content to {:?}: {err}", target_path);
-                                if first_error.is_none() {
-                                    let message =
-                                        format!("Failed to install content to {}: {err}", target_path.display());
-                                    first_error = Some(message);
-                                }
-                            },
-                        }
+                    if instance_running && target_path.starts_with(&mods_dir_for_copy) && !allow_modify_while_running {
+                        cannot_modify_while_running = true;
+                        continue;
                     }
 
-                    (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes)
-                })
-                .await
-                .unwrap();
+                    let _ = std::fs::create_dir_all(target_path.parent().unwrap());
+
+                    let is_reinstall = target_path.exists();
+
+                    match crate::fs::fastcopy(&install.from, &target_path, true, true) {
+                        Ok(()) => {
+                            if let Some(original_mods_dir) = &original_mods_for_copy
+                                && let Ok(relative) = target_path.strip_prefix(&mods_dir_for_copy)
+                            {
+                                let backup_target = original_mods_dir.join(relative);
+                                if let Some(parent) = backup_target.parent() {
+                                    let _ = std::fs::create_dir_all(parent);
+                                }
+                                if let Err(err) = crate::fs::fastcopy(&install.from, &backup_target, true, true) {
+                                    log::error!("Failed to mirror install into {:?}: {err}", backup_target);
+                                } else {
+                                    installed_into_frozen_backup = true;
+                                }
+                            }
+
+                            successes.push((install, is_reinstall, target_path));
+                        },
+                        Err(err) => {
+                            log::error!("Failed to install content to {:?}: {err}", target_path);
+                            if first_error.is_none() {
+                                let message = format!("Failed to install content to {}: {err}", target_path.display());
+                                first_error = Some(message);
+                            }
+                        },
+                    }
+                }
+
+                (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes)
+            })
+            .await;
+
+            let (first_error, cannot_modify_while_running, installed_into_frozen_backup, successes) = match spawn_result
+            {
+                Ok(tuple) => tuple,
+                Err(join_err) => {
+                    log::error!("spawn_blocking join failed in install_content: {join_err:?}");
+                    modal_action
+                        .set_finished_with_error(format!("Internal error: blocking task failed: {join_err}").into());
+                    return;
+                },
+            };
 
             for (install, is_reinstall, target_path) in successes {
                 if let Some(replace) = install.replace {
