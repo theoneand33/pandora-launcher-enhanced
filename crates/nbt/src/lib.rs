@@ -1,4 +1,4 @@
-pub use reference::{CompoundRef, CompoundRefMut, ListRef, ListRefMut, NBTRef, NBTRefMut};
+pub use reference::{CompoundRef, CompoundRefMut, ListRef, ListRefMut, NBTRef};
 use slab::Slab;
 use std::{fmt::Debug, result};
 

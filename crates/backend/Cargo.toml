@@ -72,5 +72,3 @@ rusqlite = { workspace = true, features = ["bundled"] }
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 # System sqlite via pkg-config (requires libsqlite3-dev). No bundled feature.
 rusqlite.workspace = true
-
-
