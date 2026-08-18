@@ -6,24 +6,6 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 
 const DECODE_CAPACITY: usize = 2_097_152;
 
-pub fn read_protocol(bytes: &mut &[u8]) -> anyhow::Result<NBT> {
-    let type_id: u8 = bytes.read_u8()?;
-    if type_id == TAG_END_ID.0 {
-        return Ok(NBT::new());
-    }
-
-    let mut size = 0;
-
-    let mut nodes = Slab::new();
-    let root_index = read_node(bytes, &mut nodes, type_id, 0, &mut size)?;
-
-    Ok(NBT {
-        root_name: String::new(),
-        root_index,
-        nodes,
-    })
-}
-
 pub fn read_named(bytes: &mut &[u8]) -> anyhow::Result<NBT> {
     let type_id: u8 = bytes.read_u8()?;
     if type_id == TAG_END_ID.0 {

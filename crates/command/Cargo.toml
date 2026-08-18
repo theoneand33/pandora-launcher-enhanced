@@ -18,5 +18,4 @@ libseccomp.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
-junction.workspace = true
 scopeguard.workspace = true

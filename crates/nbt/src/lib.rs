@@ -1,6 +1,6 @@
 pub use reference::{CompoundRef, CompoundRefMut, ListRef, ListRefMut, NBTRef, NBTRefMut};
 use slab::Slab;
-use std::{fmt::Debug, ptr::NonNull, result};
+use std::{fmt::Debug, result};
 
 pub mod decode;
 pub mod encode;
@@ -134,10 +134,6 @@ impl NBT {
         self.get_reference(self.root_index)
     }
 
-    pub fn as_reference_mut(&mut self) -> NBTRefMut<'_> {
-        self.get_reference_mut(self.root_index)
-    }
-
     pub(crate) fn remove_node(&mut self, idx: usize) {
         if idx == self.root_index {
             panic!("Cannot remove root node");
@@ -174,35 +170,6 @@ impl NBT {
             NBTNode::Compound(_) => NBTRef::Compound(CompoundRef { nbt: self, node_idx }),
             NBTNode::IntArray(value) => NBTRef::IntArray(value),
             NBTNode::LongArray(value) => NBTRef::LongArray(value),
-        }
-    }
-
-    fn get_reference_mut(&mut self, node_idx: usize) -> NBTRefMut<'_> {
-        // Ptr shenanigans because https://github.com/rust-lang/rust/issues/54663
-        let mut nbt_ptr: NonNull<NBT> = self.into();
-
-        match &mut self.nodes[node_idx] {
-            NBTNode::Byte(value) => NBTRefMut::Byte(value),
-            NBTNode::Short(value) => NBTRefMut::Short(value),
-            NBTNode::Int(value) => NBTRefMut::Int(value),
-            NBTNode::Long(value) => NBTRefMut::Long(value),
-            NBTNode::Float(value) => NBTRefMut::Float(value),
-            NBTNode::Double(value) => NBTRefMut::Double(value),
-            NBTNode::ByteArray(value) => NBTRefMut::ByteArray(value),
-            NBTNode::String(value) => NBTRefMut::String(value),
-            NBTNode::List {
-                type_id: _,
-                children: _,
-            } => NBTRefMut::List(ListRefMut {
-                nbt: unsafe { nbt_ptr.as_mut() },
-                node_idx,
-            }),
-            NBTNode::Compound(_) => NBTRefMut::Compound(CompoundRefMut {
-                nbt: unsafe { nbt_ptr.as_mut() },
-                node_idx,
-            }),
-            NBTNode::IntArray(value) => NBTRefMut::IntArray(value),
-            NBTNode::LongArray(value) => NBTRefMut::LongArray(value),
         }
     }
 }

@@ -421,9 +421,6 @@ pub enum MessageToFrontend {
         content_folder: ContentFolder,
         content: Arc<[InstanceContentSummary]>,
     },
-    CreateGameOutputWindow {
-        receiver: tokio::sync::mpsc::UnboundedReceiver<GameOutputMsg>,
-    },
     AddNotification {
         notification_type: BridgeNotificationType,
         message: Arc<str>,

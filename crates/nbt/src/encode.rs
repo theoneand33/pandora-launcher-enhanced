@@ -12,17 +12,6 @@ pub fn write_named_into(nbt: &NBT, vec: &mut Vec<u8>) {
     write_node(vec, &nbt.nodes, Some(&nbt.root_name), &nbt.nodes[nbt.root_index]);
 }
 
-pub fn write_protocol(nbt: &NBT) -> Vec<u8> {
-    let mut vec = Vec::new();
-    write_protocol_into(nbt, &mut vec);
-    vec
-}
-
-pub fn write_protocol_into(nbt: &NBT, vec: &mut Vec<u8>) {
-    vec.push(TAG_COMPOUND_ID.0);
-    write_node(vec, &nbt.nodes, None, &nbt.nodes[nbt.root_index]);
-}
-
 fn write_node(vec: &mut Vec<u8>, nodes: &Slab<NBTNode>, name: Option<&str>, node: &NBTNode) {
     match node {
         NBTNode::Byte(value) => {
