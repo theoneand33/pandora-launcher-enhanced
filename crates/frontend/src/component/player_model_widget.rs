@@ -75,11 +75,6 @@ impl PlayerModelWidget {
         self.player_model_state.as_mut(cx).cape = cape;
     }
 
-    pub fn set_variant(&mut self, cx: &mut App, variant: SkinVariant) {
-        self.variant = variant;
-        self.player_model_state.as_mut(cx).variant = variant;
-    }
-
     pub fn get_variant(&self) -> SkinVariant {
         self.variant
     }

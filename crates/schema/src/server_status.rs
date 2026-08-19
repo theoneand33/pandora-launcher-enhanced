@@ -33,9 +33,3 @@ pub struct StatusPlayers {
     pub max: i32,
     pub online: i32,
 }
-
-#[derive(Deserialize, Debug)]
-pub struct StatusPlayer {
-    pub name: Arc<str>,
-    pub id: Arc<str>,
-}

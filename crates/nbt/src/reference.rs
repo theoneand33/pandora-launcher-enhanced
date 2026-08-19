@@ -47,22 +47,6 @@ impl<'a> NBTRef<'a> {
     }
 }
 
-#[derive(Debug)]
-pub enum NBTRefMut<'a> {
-    Byte(&'a mut i8),
-    Short(&'a mut i16),
-    Int(&'a mut i32),
-    Long(&'a mut i64),
-    Float(&'a mut f32),
-    Double(&'a mut f64),
-    ByteArray(&'a mut Vec<i8>),
-    String(&'a mut String),
-    List(ListRefMut<'a>),
-    Compound(CompoundRefMut<'a>),
-    IntArray(&'a mut Vec<i32>),
-    LongArray(&'a mut Vec<i64>),
-}
-
 #[derive(Copy, Clone)]
 pub struct CompoundRef<'a> {
     pub(crate) nbt: &'a NBT,

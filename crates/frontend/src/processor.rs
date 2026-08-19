@@ -41,11 +41,6 @@ impl Processor {
         }
     }
 
-    pub fn set_main_window_handle(&mut self, window: AnyWindowHandle, cx: &mut App) {
-        self.main_window_handle = Some(window);
-        self.process_messages_waiting_for_window(cx);
-    }
-
     pub fn process_messages_waiting_for_window(&mut self, cx: &mut App) {
         for message in std::mem::take(&mut self.waiting_for_window) {
             self.process(message, cx);
@@ -220,10 +215,6 @@ impl Processor {
             },
             MessageToFrontend::SkinLibraryUpdated { skin_library } => {
                 self.data.set_skin_library(skin_library, cx);
-            },
-            MessageToFrontend::CreateGameOutputWindow { .. } => {
-                // Legacy window handling — now handled via live_game_output tab
-                // Keep arm to satisfy exhaustive match
             },
             MessageToFrontend::P2pShareCreated { .. } => {
                 let backend_handle = self.data.backend_handle.clone();

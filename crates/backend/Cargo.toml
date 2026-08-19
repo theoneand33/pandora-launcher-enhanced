@@ -37,9 +37,6 @@ parking_lot.workspace = true
 lzma-rs.workspace = true
 enum-map.workspace = true
 strum.workspace = true
-rand.workspace = true
-once_cell.workspace = true
-serde_with.workspace = true
 rayon.workspace = true
 rc-zip-sync.workspace = true
 relative-path.workspace = true
@@ -55,7 +52,6 @@ walkdir.workspace = true
 zip.workspace = true
 url.workspace = true
 httparse.workspace = true
-tokio-util.workspace = true
 crc32fast.workspace = true
 scopeguard.workspace = true
 hickory-resolver.workspace = true
@@ -76,7 +72,3 @@ rusqlite = { workspace = true, features = ["bundled"] }
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 # System sqlite via pkg-config (requires libsqlite3-dev). No bundled feature.
 rusqlite.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-libseccomp.workspace = true
-libc.workspace = true

@@ -409,26 +409,6 @@ impl SkinRenderer {
         }
     }
 
-    pub fn update_image(&mut self, image_bytes: Option<Arc<[u8]>>, slim: bool) {
-        if let Some(new_bytes) = &image_bytes {
-            let should_update = if let Some(old_bytes) = &self.image_bytes {
-                !Arc::ptr_eq(old_bytes, new_bytes)
-            } else {
-                true
-            };
-            if should_update {
-                self.image_bytes = Some(new_bytes.clone());
-                if let Ok(img) = image::load_from_memory(new_bytes) {
-                    self.parsed_image = Some(img.to_rgba8());
-                }
-            }
-            self.slim = slim;
-        } else {
-            self.image_bytes = None;
-            self.parsed_image = None;
-        }
-    }
-
     pub fn update_cape(&mut self, cape_bytes: Option<Arc<[u8]>>) {
         if let Some(new_bytes) = &cape_bytes {
             let should_update = if let Some(old_bytes) = &self.cape_bytes {
@@ -448,11 +428,6 @@ impl SkinRenderer {
             self.cape_is_optifine_hd = false;
         }
         self.cape_bytes = cape_bytes;
-    }
-
-    pub fn stop_drag(&mut self) {
-        self.is_dragging = false;
-        self.last_mouse = None;
     }
 
     pub fn render_to_buffer(&self, width: u32, height: u32) -> Option<Arc<RenderImage>> {
