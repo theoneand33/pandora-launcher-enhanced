@@ -34,10 +34,19 @@ use crate::{
     notify_signal::KeepAliveNotifySignalHandle,
 };
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct BackendConfigWithPassword {
     pub config: BackendConfig,
     pub proxy_password: Option<String>,
+}
+
+impl std::fmt::Debug for BackendConfigWithPassword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackendConfigWithPassword")
+            .field("config", &self.config)
+            .field("proxy_password", &self.proxy_password.as_ref().map(|_| "••••••••"))
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
